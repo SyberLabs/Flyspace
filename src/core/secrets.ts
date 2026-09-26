@@ -19,6 +19,7 @@ export const SECRET_ENV_VARS = [
     // LLM providers
     'ANTHROPIC_API_KEY',
     'GOOGLE_API_KEY',
+    'OPENROUTER_API_KEY',
     // Keyed data providers (proxied through /api/data)
     'NEWSAPI_KEY',
     'FRED_API_KEY',

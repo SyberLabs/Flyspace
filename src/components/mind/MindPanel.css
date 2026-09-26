@@ -194,6 +194,51 @@
    PERSONAS - Compact Grid
    ============================================ */
 
+.persona-suggest {
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--citadel-border);
+    border-radius: 6px;
+}
+
+.persona-suggest label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.persona-suggest-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.persona-suggest input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.5rem;
+    color: var(--text-primary);
+    background: var(--citadel-elevated);
+    border: 1px solid var(--citadel-border);
+    border-radius: 4px;
+}
+
+.persona-suggest button {
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    background: var(--cyan-glow);
+    color: #001018;
+}
+
+.persona-suggest button:disabled {
+    opacity: 0.5;
+}
+
+.persona-suggest p {
+    margin: 0.5rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
 .personas-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

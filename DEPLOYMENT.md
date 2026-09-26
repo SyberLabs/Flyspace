@@ -1,6 +1,6 @@
 # Deployment
 
-**Status: CI is production-grade. CD is deliberately not built yet.**
+**Status: CI exists. CD and a public deployment are not built yet.**
 
 This records the decision so it does not get re-argued from scratch, and lists
 what has to be true before OmniOS is reachable from anywhere but your own
@@ -8,8 +8,10 @@ machine.
 
 ## The decision
 
-When OmniOS is deployed, it goes on a **private network** - Tailscale,
-WireGuard, or an IP allowlist - not on a public URL.
+The full OmniOS app goes on a **private network** - Tailscale, WireGuard, or
+an IP allowlist - until the controls below are implemented. A limited public
+preview is possible with `OMNI_PUBLIC_DEMO=1`: server routes then disable
+paid text generation, keyed data, and shared inference ledger reads.
 
 That is not caution for its own sake. OmniOS has **no application
 authentication**. The only `Authorization` headers in the codebase are outbound
@@ -31,7 +33,34 @@ here rather than left as a footnote.
 deployment binds `0.0.0.0` inside the container and is exposed only on the
 private network - the app's own posture does not change.
 
-## Before any public URL
+## Limited public preview
+
+The preview is a local browser canvas with keyless public data and an optional
+Jev persona suggestion. Jev receives only the question the visitor enters and
+submits in the Personas tab. Its answer only suggests one of four existing
+perspectives; the visitor chooses whether to use it. It does not answer the
+question or send the canvas to OpenRouter.
+
+Deploy the preview only after all of these are true:
+
+- Set `OMNI_PUBLIC_DEMO=1` and `NEXT_PUBLIC_OMNI_PUBLIC_DEMO=1`. Verify
+  `/api/llm` and `/api/data` return 503, and both inference ledger routes
+  report `configured:false` on the deployed host. Do not set `DATABASE_URL`,
+  Anthropic/Google keys, or keyed data provider keys on the public Worker.
+- If enabling Jev, set `OMNI_JEV_ENABLED=1` and
+  `NEXT_PUBLIC_OMNI_JEV_ENABLED=1`; store `OPENROUTER_API_KEY` as a server
+  secret with a separate spend cap. Rate-limit `/api/jev-persona` at the edge
+  before enabling the feature. The app's same-origin check and 500-character
+  limit prevent accidental misuse, but do not stop automated direct requests.
+- Validate the Next-to-Cloudflare runtime build and smoke-test the deployed
+  routes before attaching `omni.syberlabs.io`. The existing local Next server
+  is not a Cloudflare deployment.
+
+This preview does not satisfy the controls for the full app. Keep the private
+deployment requirements below for any deployment that enables paid LLMs,
+keyed data, or the inference ledger.
+
+## Before the full app is publicly accessible
 
 All four, not three:
 
