@@ -35,7 +35,7 @@ export async function GET(
     }
     const depth = rawDepth === null ? DEFAULT_LINEAGE_DEPTH : clampDepth(Number(rawDepth));
 
-    if (!isDatabaseConfigured()) {
+    if (process.env.OMNI_PUBLIC_DEMO === '1' || !isDatabaseConfigured()) {
         return NextResponse.json(
             { configured: false, depth, root: null, nodes: [], hadCycle: false, truncated: false },
             { headers: { 'cache-control': 'no-store' } }

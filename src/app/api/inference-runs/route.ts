@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
     const limit = rawLimit === null ? DEFAULT_RUN_LIMIT : clampLimit(Number(rawLimit));
 
-    if (!isDatabaseConfigured()) {
+    if (process.env.OMNI_PUBLIC_DEMO === '1' || !isDatabaseConfigured()) {
         return NextResponse.json(
             { configured: false, limit, runs: [] },
             { headers: { 'cache-control': 'no-store' } }

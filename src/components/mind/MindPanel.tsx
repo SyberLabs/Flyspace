@@ -6,7 +6,7 @@
 // ============================================
 
 import { useState, useCallback } from 'react';
-import { useMindStore, useBlockStore } from '@/core/stores';
+import { useMindStore } from '@/core/stores';
 import { getMindEngine } from '@/core/services';
 import { LLMProvider, PersonaConfig, ContextPool, ContextEntry } from '@/core/schemas/mind.schema';
 import { MemoryConfirmModal } from './MemoryConfirmModal';
@@ -203,7 +203,7 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                             <button
                                 className={`think-button ${isThinking ? 'thinking' : ''}`}
                                 onClick={handleThink}
-                                disabled={isThinking}
+                                disabled={isThinking || process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1'}
                             >
                                 {isThinking ? (
                                     <>
@@ -242,9 +242,63 @@ interface PersonasViewProps {
 }
 
 function PersonasView({ personas, activePersonaId, onSelect }: PersonasViewProps) {
+    const [question, setQuestion] = useState('');
+    const [suggestion, setSuggestion] = useState<string | null>(null);
+    const [suggestError, setSuggestError] = useState<string | null>(null);
+    const [isSuggesting, setIsSuggesting] = useState(false);
+
+    const suggestPersona = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!question.trim() || isSuggesting) return;
+        setIsSuggesting(true);
+        setSuggestion(null);
+        setSuggestError(null);
+        try {
+            const response = await fetch('/api/jev-persona', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: question.trim() })
+            });
+            const result: unknown = await response.json();
+            const persona = result && typeof result === 'object'
+                ? (result as Record<string, unknown>).persona : null;
+            if (!response.ok || typeof persona !== 'string' || !personas.some(p => p.id === persona)) {
+                throw new Error('Persona suggestion is unavailable.');
+            }
+            setSuggestion(persona);
+        } catch {
+            setSuggestError('Persona suggestion is unavailable.');
+        } finally {
+            setIsSuggesting(false);
+        }
+    };
+
     return (
-        <div className="personas-grid">
-            {personas.map(persona => (
+        <div>
+            {process.env.NEXT_PUBLIC_OMNI_JEV_ENABLED === '1' && <form className="persona-suggest" onSubmit={suggestPersona}>
+                <label htmlFor="persona-question">Find a perspective for your question</label>
+                <div className="persona-suggest-controls">
+                    <input
+                        id="persona-question"
+                        value={question}
+                        onChange={event => { setQuestion(event.target.value); setSuggestion(null); }}
+                        maxLength={500}
+                        placeholder="What are you trying to understand?"
+                    />
+                    <button type="submit" disabled={isSuggesting || !question.trim()}>
+                        {isSuggesting ? 'Asking Jev…' : 'Ask Jev'}
+                    </button>
+                </div>
+                <p>Only this question is sent to OpenRouter. Your canvas and saved data stay in this browser.</p>
+                {suggestion && (
+                    <p role="status">
+                        Jev suggests {personas.find(p => p.id === suggestion)?.name}. Select its card below if you agree.
+                    </p>
+                )}
+                {suggestError && <p role="alert">{suggestError}</p>}
+            </form>}
+            <div className="personas-grid">
+                {personas.map(persona => (
                 <button
                     key={persona.id}
                     className={`persona-card ${persona.id === activePersonaId ? 'active' : ''}`}
@@ -274,7 +328,8 @@ function PersonasView({ personas, activePersonaId, onSelect }: PersonasViewProps
                         <div className="persona-active-badge">✓ Active</div>
                     )}
                 </button>
-            ))}
+                ))}
+            </div>
         </div>
     );
 }

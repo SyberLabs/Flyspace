@@ -27,6 +27,10 @@ function collectParams(request: NextRequest): Record<string, string | undefined>
 }
 
 export async function GET(request: NextRequest) {
+    if (process.env.OMNI_PUBLIC_DEMO === '1') {
+        return NextResponse.json({ error: 'Keyed data is unavailable in the public preview.' }, { status: 503 });
+    }
+
     const provider = request.nextUrl.searchParams.get('provider') || '';
 
     if (!isKeyedProvider(provider)) {

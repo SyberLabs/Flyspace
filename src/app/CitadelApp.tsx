@@ -69,6 +69,12 @@ export default function CitadelApp() {
                 onOpenShells={() => setIsShellsOpen(true)}
             />
 
+            {process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1' && (
+                <div className="px-3 py-2 text-xs text-center text-white bg-slate-800">
+                    Public preview: your canvas stays in this browser. AI answers and keyed data sources are disabled.
+                </div>
+            )}
+
             {/* Main Content */}
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar / Armory */}

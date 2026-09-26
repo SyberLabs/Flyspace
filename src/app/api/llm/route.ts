@@ -179,6 +179,10 @@ function runIdHeader(id: string | null): Record<string, string> {
 }
 
 export async function POST(request: NextRequest) {
+    if (process.env.OMNI_PUBLIC_DEMO === '1') {
+        return NextResponse.json({ error: 'AI answers are unavailable in the public preview.' }, { status: 503 });
+    }
+
     let raw: unknown;
     try {
         raw = await request.json();
