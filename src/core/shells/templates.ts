@@ -25,9 +25,7 @@ export interface TemplateBlock {
 /** A wire between two template blocks, by their local `ref`s. */
 export interface TemplateConnection {
     sourceRef: string;
-    sourcePort: string;
     targetRef: string;
-    targetPort: string;
 }
 
 /** A built-in shell template. */
@@ -71,11 +69,11 @@ const INVESTOR_SHELL: ShellTemplate = {
         { ref: 'strategist', blockId: 'persona_strategist', position: { x: 800, y: 560 } },
     ],
     connections: [
-        { sourceRef: 'polymarket', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
-        { sourceRef: 'crypto', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
-        { sourceRef: 'worldbank', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
-        { sourceRef: 'hn', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
-        { sourceRef: 'analyst', sourcePort: 'out', targetRef: 'strategist', targetPort: 'in' },
+        { sourceRef: 'polymarket', targetRef: 'analyst' },
+        { sourceRef: 'crypto', targetRef: 'analyst' },
+        { sourceRef: 'worldbank', targetRef: 'analyst' },
+        { sourceRef: 'hn', targetRef: 'analyst' },
+        { sourceRef: 'analyst', targetRef: 'strategist' },
     ],
 };
 
@@ -103,10 +101,10 @@ const RESEARCHER_SHELL: ShellTemplate = {
         { ref: 'researcher', blockId: 'persona_researcher', position: { x: 800, y: 180 } },
     ],
     connections: [
-        { sourceRef: 'openalex', sourcePort: 'out', targetRef: 'researcher', targetPort: 'in' },
-        { sourceRef: 'hn', sourcePort: 'out', targetRef: 'researcher', targetPort: 'in' },
-        { sourceRef: 'polymarket', sourcePort: 'out', targetRef: 'researcher', targetPort: 'in' },
-        { sourceRef: 'memory', sourcePort: 'out', targetRef: 'researcher', targetPort: 'in' },
+        { sourceRef: 'openalex', targetRef: 'researcher' },
+        { sourceRef: 'hn', targetRef: 'researcher' },
+        { sourceRef: 'polymarket', targetRef: 'researcher' },
+        { sourceRef: 'memory', targetRef: 'researcher' },
     ],
 };
 
@@ -135,11 +133,11 @@ const WORLD_WATCH_SHELL: ShellTemplate = {
         { ref: 'analyst', blockId: 'persona_analyst', position: { x: 800, y: 360 } },
     ],
     connections: [
-        { sourceRef: 'weather', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
-        { sourceRef: 'quakes', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
-        { sourceRef: 'wiki', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
-        { sourceRef: 'fx', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
-        { sourceRef: 'github', sourcePort: 'out', targetRef: 'analyst', targetPort: 'in' },
+        { sourceRef: 'weather', targetRef: 'analyst' },
+        { sourceRef: 'quakes', targetRef: 'analyst' },
+        { sourceRef: 'wiki', targetRef: 'analyst' },
+        { sourceRef: 'fx', targetRef: 'analyst' },
+        { sourceRef: 'github', targetRef: 'analyst' },
     ],
 };
 

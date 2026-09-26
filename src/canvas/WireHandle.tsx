@@ -8,7 +8,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plug } from 'lucide-react';
-import { useBlockStore } from '@/core/stores';
 import { wireService } from '@/core/services/wire.service';
 import { PortSchema, PortDataType } from '@/core/schemas/block.schema';
 import { cn } from '@/lib/utils';
@@ -57,8 +56,6 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
     const [dragState, setDragState] = useState<DragState | null>(null);
     const [isHovering, setIsHovering] = useState(false);
     const handleRef = useRef<HTMLDivElement>(null);
-
-    const getBlock = useBlockStore(state => state.getBlock);
 
     // Get primary port for this side (first port, or fallback to generic)
     const primaryPort = ports[0];
@@ -238,9 +235,6 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
                                 {primaryPort.label && <div>• {primaryPort.label}</div>}
                                 {primaryPort.description && <div>• {primaryPort.description}</div>}
                                 <div>• Type: <span className="font-mono">{primaryPort.dataType}</span></div>
-                                {primaryPort.accepts && primaryPort.accepts.length > 1 && (
-                                    <div>• Accepts: {primaryPort.accepts.join(', ')}</div>
-                                )}
                                 {isConnected && (
                                     <div className="mt-1 font-medium" style={{ color: typeConfig!.color }}>
                                         ✓ {connectionCount} connection{connectionCount !== 1 ? 's' : ''}

@@ -53,9 +53,7 @@ export type ConnectionStatus =
  */
 export type BlockExpandMode = 'resize' | 'portal' | 'fullscreen';
 
-/**
- * Port data types for typed wiring
- */
+/** Data types shown as visual hints on block wire handles. */
 export type PortDataType = 'json' | 'text' | 'media' | 'any';
 
 /**
@@ -73,29 +71,14 @@ export interface PortSchema {
   /** Port direction */
   direction: PortDirection;
 
-  /** Data type this port handles */
+  /** Displayed data type; wires do not enforce or convert it. */
   dataType: PortDataType;
 
   /** Human-readable label */
   label?: string;
 
-  /** For input ports: which types can be accepted (defaults to same as dataType) */
-  accepts?: PortDataType[];
-
-  /** Whether this port is required for block operation */
-  required?: boolean;
-
   /** Description for tooltip */
   description?: string;
-}
-
-/**
- * Type conversion result
- */
-export interface ConversionResult {
-  success: boolean;
-  data?: unknown;
-  error?: string;
 }
 
 /**
@@ -124,7 +107,7 @@ export interface OmniBlockSchema {
   /** Logic for wiring to AI personas */
   wiring_logic: string;
 
-  /** Port definitions for typed wiring */
+  /** Port metadata shown on wire handles; compatibility is not enforced. */
   ports?: PortSchema[];
 
   /** Optional icon identifier */
@@ -247,7 +230,8 @@ export interface NewsFeed {
 }
 
 /**
- * Canvas wiring between blocks
+ * Legacy shell connection shape. Port IDs remain here only so saved shells
+ * from the old connection store can be converted to block-ID DataWires.
  */
 export interface BlockConnection {
   id: string;

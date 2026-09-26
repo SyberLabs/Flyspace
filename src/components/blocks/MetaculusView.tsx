@@ -14,7 +14,6 @@ import {
 import type { OmniItem } from '@/core/gateway';
 import type { ConnectionStatus } from '@/core/schemas/block.schema';
 import { cn } from '@/lib/utils';
-import { PortBadge } from './PortBadge';
 import { BlockBodyState } from './BlockSetupCard';
 
 interface MetaculusViewProps {
@@ -61,15 +60,6 @@ export function MetaculusView({ questions, status, lastUpdated, onRefresh, error
                     >
                         <RefreshCw className="w-4 h-4" />
                     </button>
-                    <PortBadge
-                        port={{
-                            id: 'forecasts',
-                            direction: 'output',
-                            dataType: 'json',
-                            label: 'Forecasts'
-                        }}
-                        connectionCount={1}
-                    />
                 </div>
             </div>
 

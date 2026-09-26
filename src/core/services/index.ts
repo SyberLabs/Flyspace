@@ -20,17 +20,8 @@ export { captureShellSnapshot, formatSnapshotForLLM } from './shell.snapshot';
 export type { ShellSnapshot, BlockSnapshotData } from './shell.snapshot';
 
 export {
-    arePortsCompatible,
-    isTypeCompatible,
-    getCompatibilityError,
-    convertData,
-    convertWireData,
-    findPort,
     getInputPorts,
     getOutputPorts,
-    getDefaultInputPort,
-    getDefaultOutputPort,
-    validateWire,
     createJsonOutputPort,
     createTextOutputPort,
     createMediaOutputPort,
@@ -38,5 +29,4 @@ export {
     createJsonInputPort,
     createTextInputPort
 } from './port.service';
-export type { WireValidation } from './port.service';
 
