@@ -29,7 +29,6 @@ export interface ServerLLMRequest {
     model: string;
     messages: LLMMessage[];
     options?: LLMOptions;
-    baseUrl?: string; // local/Ollama only
 }
 
 const DEFAULT_TEMPERATURE = 0.7;
@@ -40,7 +39,7 @@ const DEFAULT_MAX_TOKENS = 1024;
 // ============================================
 
 async function ollamaComplete(req: ServerLLMRequest): Promise<LLMResponse> {
-    const baseUrl = req.baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -68,7 +67,7 @@ async function ollamaComplete(req: ServerLLMRequest): Promise<LLMResponse> {
 }
 
 async function ollamaStream(req: ServerLLMRequest): Promise<ReadableStream<Uint8Array>> {
-    const baseUrl = req.baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -211,7 +210,7 @@ export async function checkProviderAvailable(req: ServerLLMRequest): Promise<boo
     if (req.provider !== 'local') {
         return isProviderConfigured(req.provider);
     }
-    const baseUrl = req.baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     try {
         const response = await fetch(`${baseUrl}/api/tags`, {
             method: 'GET',
