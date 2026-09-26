@@ -43,9 +43,6 @@ describe('instantiateTemplate', () => {
             // Both endpoints point at real, newly-created block instances.
             expect(blockIds.has(w.sourceBlockId)).toBe(true);
             expect(blockIds.has(w.targetBlockId)).toBe(true);
-            // Ports are preserved from the template; wires are live.
-            expect(typeof w.sourcePort).toBe('string');
-            expect(typeof w.targetPort).toBe('string');
             expect(w.status).toBe('active');
             expect(w.shellId).toBe(shellId);
         }

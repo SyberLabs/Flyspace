@@ -132,7 +132,6 @@ describe('shell workflow — wire cleanup (A1 orphan-wire regressions)', () => {
         expect(wires).toHaveLength(1);
         expect(wires[0].sourceBlockId).toBe('pm_1');
         expect(wires[0].targetBlockId).toBe('an_1');
-        expect(wires[0].sourcePort).toBe('out');
         expect(wires[0].status).toBe('active');
     });
 });

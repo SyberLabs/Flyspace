@@ -68,7 +68,7 @@ describe('validateTemplate — catches authoring mistakes', () => {
             { ref: 'a', blockId: 'persona_analyst', position: { x: 0, y: 0 } },
             { ref: 'b', blockId: 'newsapi_feed', position: { x: 0, y: 0 } },
         ],
-        connections: [{ sourceRef: 'b', sourcePort: 'out', targetRef: 'a', targetPort: 'in' }],
+        connections: [{ sourceRef: 'b', targetRef: 'a' }],
     };
 
     it('passes a well-formed template', () => {
@@ -82,7 +82,7 @@ describe('validateTemplate — catches authoring mistakes', () => {
     });
 
     it('flags a connection referencing a missing block', () => {
-        const bad = { ...base, connections: [{ sourceRef: 'ghost', sourcePort: 'out', targetRef: 'a', targetPort: 'in' }] };
+        const bad = { ...base, connections: [{ sourceRef: 'ghost', targetRef: 'a' }] };
         const problems = validateTemplate(bad, isRegistered);
         expect(problems.some(p => p.includes("sourceRef 'ghost'"))).toBe(true);
     });
