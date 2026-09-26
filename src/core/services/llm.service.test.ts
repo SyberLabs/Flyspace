@@ -80,6 +80,29 @@ describe('LLMService.complete', () => {
             createLLMService(LLM_DEFAULTS.anthropic).complete([{ role: 'user', content: 'Hi' }])
         ).rejects.toThrow('anthropic is not configured on the server.');
     });
+
+    it('passes the caller cancellation signal to complete fetch', async () => {
+        const controller = new AbortController();
+        vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse({ content: 'ok' }));
+        await createLLMService(LLM_DEFAULTS.local).complete(
+            [{ role: 'user', content: 'Hi' }], { signal: controller.signal }
+        );
+        expect((vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).signal)
+            .toBe(controller.signal);
+    });
+
+    it('reuses the caller key for retries of one logical operation', async () => {
+        vi.mocked(globalThis.fetch).mockImplementation(async () => jsonResponse({ content: 'ok' }));
+        const llm = createLLMService(LLM_DEFAULTS.local);
+        const operation = { idempotencyKey: 'stable-operation-key' };
+        await llm.complete([{ role: 'user', content: 'Hi' }], operation);
+        await llm.complete([{ role: 'user', content: 'Hi' }], operation);
+        expect(vi.mocked(globalThis.fetch).mock.calls.map(([, init]) => (init as RequestInit).headers))
+            .toEqual([
+                expect.objectContaining({ 'Idempotency-Key': 'stable-operation-key' }),
+                expect.objectContaining({ 'Idempotency-Key': 'stable-operation-key' })
+            ]);
+    });
 });
 
 describe('LLMService.stream', () => {
@@ -125,6 +148,18 @@ describe('LLMService.stream', () => {
         const init = vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit;
         expect(init.signal).toBe(controller.signal);
         expect(JSON.parse(String(init.body))).not.toHaveProperty('signal');
+    });
+
+    it('cancels the response reader when the consumer stops early', async () => {
+        let canceled = false;
+        vi.mocked(globalThis.fetch).mockResolvedValue(new Response(new ReadableStream({
+            pull(controller) { controller.enqueue(new TextEncoder().encode('first')); },
+            cancel() { canceled = true; }
+        }), { status: 200 }));
+        const gen = createLLMService(LLM_DEFAULTS.local).stream([{ role: 'user', content: 'Hi' }]);
+        await gen.next();
+        await gen.return(undefined);
+        expect(canceled).toBe(true);
     });
 });
 

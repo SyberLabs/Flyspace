@@ -25,7 +25,8 @@ export default defineConfig({
         reuseExistingServer: false,
         timeout: 120_000,
         env: {
-            OMNI_E2E: '1'
+            OMNI_E2E: '1',
+            OMNI_DEPLOYMENT_MODE: 'local'
         }
     }
 });

@@ -24,6 +24,8 @@ export interface TurnOptions {
     temperature?: number;
     maxTokens?: number;
     signal?: AbortSignal;
+    /** Reuse the same value when retrying this logical turn after an ambiguous transport failure. */
+    idempotencyKey?: string;
     /**
      * What fed this turn. Passed through to the server for the inference
      * ledger; it does not change the prompt. Only callers that know their
@@ -69,6 +71,7 @@ function effectiveOptions(config: LLMConfig, options?: TurnOptions): LLMOptions 
             minOutputTokensFor(config.model)
         ),
         signal: options?.signal,
+        idempotencyKey: options?.idempotencyKey,
         sources: options?.sources
     };
 }

@@ -18,6 +18,7 @@ import path from 'node:path';
 const MIGRATIONS_DIR = path.join(process.cwd(), 'db', 'migrations');
 const sql = readFileSync(path.join(MIGRATIONS_DIR, '001_inference_ledger.sql'), 'utf8');
 const lineageSql = readFileSync(path.join(MIGRATIONS_DIR, '002_run_lineage.sql'), 'utf8');
+const hostedSql = readFileSync(path.join(MIGRATIONS_DIR, '003_hosted_ownership_idempotency.sql'), 'utf8');
 
 const flat = (s: string) => s.replace(/\s+/g, ' ').toLowerCase();
 
@@ -41,11 +42,18 @@ describe('migration files', () => {
     });
 
     it('are re-runnable, so a half-applied database can be repaired', () => {
-        for (const text of [sql, lineageSql]) {
+        for (const text of [sql, lineageSql, hostedSql]) {
             expect(text).not.toMatch(/CREATE TABLE(?! IF NOT EXISTS)/i);
             expect(text).not.toMatch(/CREATE INDEX(?! IF NOT EXISTS)/i);
             expect(text).not.toMatch(/ADD COLUMN(?! IF NOT EXISTS)/i);
         }
+    });
+
+    it('guards every added constraint in the hosted migration', () => {
+        const constraintAdds = (hostedSql.match(/ADD CONSTRAINT/gi) ?? []).length;
+        const guards = (hostedSql.match(/FROM pg_constraint/gi) ?? []).length;
+        expect(constraintAdds).toBeGreaterThan(0);
+        expect(guards).toBeGreaterThanOrEqual(constraintAdds);
     });
 
     it('guard added constraints, which have no IF NOT EXISTS', () => {
@@ -83,6 +91,21 @@ describe('002 — run lineage', () => {
     it('indexes the column the recursive walk joins on every iteration', () => {
         expect(declaresInLineage('ON inference_source (parent_run_id)')).toBe(true);
         expect(declaresInLineage('WHERE parent_run_id IS NOT NULL')).toBe(true);
+    });
+});
+
+describe('003 — hosted identity and idempotency', () => {
+    it('keeps historical rows ownerless and adds stable owner/idempotency columns', () => {
+        expect(flat(hostedSql)).toContain('add column if not exists owner_id text');
+        expect(flat(hostedSql)).toContain('add column if not exists idempotency_key text');
+        expect(flat(hostedSql)).toContain('add column if not exists request_digest text');
+        expect(flat(hostedSql)).not.toContain('update inference_run set owner_id');
+    });
+
+    it('enforces unique owner key pairs and permits uncertain terminal outcomes', () => {
+        expect(flat(hostedSql)).toContain('on inference_run (owner_id, idempotency_key)');
+        expect(flat(hostedSql)).toContain("'uncertain'");
+        expect(flat(hostedSql)).toContain("status in ('failed', 'uncertain') or error is null");
     });
 });
 

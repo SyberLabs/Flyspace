@@ -3,9 +3,10 @@
 A durable server-side record of every LLM execution OmniOS performed.
 
 Two tables in Postgres, joined into a DAG of reasoning so a cascade's full
-lineage can be walked. Nothing else moves. The canvas is still local-first and
-Postgres is still optional — without `DATABASE_URL` the app runs exactly as it
-did before, and the ledger is a no-op.
+lineage can be walked. Nothing else moves. The canvas is still local-first.
+In local mode Postgres is optional — without `DATABASE_URL`, inference still
+runs and the ledger is a no-op. Hosted mode requires a durable ledger before
+provider dispatch, so missing or failed admission fails closed.
 
 ## Setup
 
@@ -22,11 +23,16 @@ echo 'DATABASE_URL=postgres://localhost:5432/omni' >> .env
 npm run db:migrate
 ```
 
-That's it. Restart `npm run dev` and every persona turn writes a row.
+That's it. Restart `npm run dev` and every persona turn writes a row when the
+database is enabled.
 
 ```bash
 curl 'http://localhost:3000/api/inference-runs?limit=5'
 ```
+
+The unauthenticated example is for local loopback mode. Hosted reads require a
+verified OIDC bearer token, and hosted inference also requires an owner and an
+`Idempotency-Key`.
 
 To turn it off, remove `DATABASE_URL`. Nothing else changes.
 
@@ -95,6 +101,8 @@ Files:
 |------|------|
 | `db/migrations/001_inference_ledger.sql` | the two tables |
 | `db/migrations/002_run_lineage.sql` | the cascade edge that makes them a DAG |
+| `db/migrations/003_hosted_ownership_idempotency.sql` | hosted owner scope, idempotency and uncertain outcomes |
+| `src/core/services/server/auth.ts` | hosted OIDC bearer-token verification and owner derivation |
 | `scripts/migrate.ts` | the runner (`npm run db:migrate`) |
 | `src/core/db/client.ts` | the only place `DATABASE_URL` is read; pool, `query`, `transaction` |
 | `src/core/services/server/inference.ledger.ts` | write side and read side |
@@ -120,13 +128,15 @@ outcome.
 every chunk straight through and keeps only a running character count and a
 bounded head. The client's streaming behaviour is byte-for-byte unchanged.
 
-The wrapper is also where the three stream endings are told apart:
+The wrapper distinguishes normal completion, user cancellation, and ambiguous
+transport outcomes:
 
 | ending | status | why |
 |--------|--------|-----|
 | stream closes | `succeeded` | the provider finished |
 | consumer cancels | `canceled` | the user pressed **Stop**; the partial answer is theirs and was kept on the canvas |
-| stream errors | `failed` | it broke mid-flight |
+| stream transport/body errors | `uncertain` | after dispatch, a connection break does not prove whether the provider completed |
+| explicit provider HTTP rejection | `failed` | the provider returned a failure response |
 
 `canceled` is a distinct status because the canvas already treats a stopped
 turn as a kept partial rather than an error, and the ledger should not
@@ -217,8 +227,8 @@ Constraints that carry weight:
 
 - `inference_run_terminal_shape` — a `running` row has no `finished_at` and no
   `latency_ms`; every other status has both. A duration cannot go missing.
-- `inference_run_error_only_on_failure` — only a `failed` row may hold an
-  error, so a cancel can never be filed as a failure.
+- `inference_run_error_only_on_failure` — only `failed` or `uncertain` rows may
+  hold an error, so a cancel can never be filed as a failure.
 - `provider` / `status` / `kind` `CHECK`s — the enumerations live next to the
   data, not only in TypeScript that a raw `INSERT` bypasses.
 - `PRIMARY KEY (run_id, source_id)` on `inference_source` — one run cannot
@@ -336,11 +346,15 @@ A cycle at the limit is reported as a cycle, not as truncation.
 
 ## Two rules the write path will not break
 
-**1. A ledger failure never fails an inference.** Every write is wrapped. A
-dead database costs you a record, not an answer. `openRun` returns a no-op
-handle — not `null` — when there is no database or the `INSERT` failed, so the
-route has no `if (ledgerEnabled)` branches and cannot forget one. A stream
-still delivers every byte when the ledger write throws.
+**1. Local ledger failures never fail an inference; hosted admission does.**
+In local mode every write is wrapped. A dead database costs you a record, not
+an answer. `openRun` returns a no-op handle — not `null` — when there is no
+database or the `INSERT` failed, and a stream still delivers every byte when a
+ledger write throws. Hosted mode checks that admission returned a durable row
+before dispatch, so a missing or failed open does not spend provider credits.
+A terminal-write failure after a result has been sent cannot undo that result;
+the row remains `running` and later hosted ledger activity may mark it
+`uncertain`.
 
 A configured-but-unreachable Postgres would otherwise add its connection
 timeout to *every* inference, so a failed open pauses the ledger for 30s
@@ -361,9 +375,9 @@ characters.
   capped at `EXCERPT_LIMIT` (4,000 chars) and marked with an ellipsis so a
   truncation is never mistaken for the whole exchange. The columns are named
   `*_excerpt` for the same reason.
-- **A user, session or workspace id.** OmniOS is single-user and local-first;
-  there is no identity to key on, and inventing one would be a fiction. See
-  *Limitations*.
+- **A workspace id or session id.** Hosted runs are scoped to the verified
+  `iss:sub` owner; local runs remain ownerless. The ledger does not infer a
+  workspace/session identity from caller-supplied data. See *Limitations*.
 - **Cost.** `tokens_used` is what the provider reported. Pricing is not stored,
   because a price recorded at run time is wrong by the next rate change.
 
@@ -371,9 +385,9 @@ characters.
 
 | file | what it proves | needs Postgres |
 |------|----------------|----------------|
-| `src/core/services/server/inference.ledger.test.ts` | the two rules, all four statuses, stream metering, scrubbing, excerpting, parameter binding | no (mocked driver) |
-| `src/core/db/schema.test.ts` | the constraints and indexes the writer relies on are still declared in the SQL, and that both migrations are re-runnable | no |
-| `src/core/services/server/inference.ledger.integration.test.ts` | the `CHECK`s, the foreign keys, the cascade, the indexed read, and the recursive walk over a real chain, diamond and cycle | **yes** |
+| `src/core/services/server/inference.ledger.test.ts` | local no-op behavior, terminal statuses, stream metering, scrubbing, excerpting, parameter binding | no (mocked driver) |
+| `src/core/db/schema.test.ts` | the constraints and indexes the writer relies on are still declared in SQL and all migrations are re-runnable | no |
+| `src/core/services/server/inference.ledger.integration.test.ts` | database constraints, owner scope, concurrent idempotency, foreign-owner lineage isolation, and recursive walks | **yes** |
 
 The integration file skips unless `OMNI_TEST_DATABASE_URL` is set, so `npm
 test` and the main CI job stay dependency-free:
@@ -388,13 +402,14 @@ in its own job against a `postgres:16` service.
 
 ## Limitations
 
-- **One writer, no identity.** Rows record what the server did, not who asked.
-  That is honest for a single-user local app and wrong for a shared one — a
-  hosted OmniOS needs authentication first (see the README's hosting note),
-  and a `user_id` column with a foreign key would go in at the same time,
-  never before.
-- **A crashed process leaves `running` rows.** By design, but nothing reaps
-  them. A `002` migration can age them out once there is a reason to.
+- **Local rows have no owner.** Hosted rows use the verified `iss:sub`, but
+  browser sign-in/token acquisition and the deployed issuer policy are still
+  prerequisites to a usable hosted UI. Ownerless historical rows are not
+  reassigned.
+- **A crashed hosted process can leave `running` rows until ledger activity.**
+  Hosted admission and reads reconcile rows older than three minutes to
+  `uncertain`; there is no independent cleanup worker. A timed-out database can
+  postpone reconciliation until a later request succeeds.
 - **The read API has no pagination.** `limit` is clamped to 200 and there is no
   cursor. `(started_at DESC, id DESC)` is already a stable sort key, so
   keyset pagination drops in when the ledger is big enough to need it.

@@ -5,9 +5,11 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 import {
     runComplete,
     runStream,
+    ProviderResponseError,
     isProviderConfigured,
     checkProviderAvailable,
     type ServerLLMProvider,
@@ -15,7 +17,8 @@ import {
     type LLMMessage
 } from '@/core/services/server/llm.adapters';
 import { resolveModel } from '@/core/models.registry';
-import { openRun, MAX_SOURCES, type RunSource, type SourceKind } from '@/core/services/server/inference.ledger';
+import { openRun, MAX_SOURCES, normalizePostgresBigintId, type RunSource, type SourceKind } from '@/core/services/server/inference.ledger';
+import { authenticateApiRequest, hostedAuthRequired } from '@/core/services/server/auth';
 
 export const runtime = 'nodejs';
 
@@ -29,6 +32,41 @@ export const runtime = 'nodejs';
  * Absent when nothing was recorded — no database, or a failed open.
  */
 export const RUN_ID_HEADER = 'X-Omni-Run-Id';
+const INFERENCE_DEADLINE_MS = 60_000;
+const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
+
+async function readRequestJson(request: Request, signal: AbortSignal): Promise<unknown> {
+    if (!request.body) throw new Error('empty request body');
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    let consumed = false;
+    const abortRead = () => { void reader.cancel(signal.reason).catch(() => undefined); };
+    let rejectAbort!: (reason: unknown) => void;
+    const aborted = new Promise<never>((_, reject) => { rejectAbort = reject; });
+    const failRead = () => rejectAbort(signal.reason);
+    signal.addEventListener('abort', abortRead, { once: true });
+    signal.addEventListener('abort', failRead, { once: true });
+    try {
+        while (true) {
+            if (signal.aborted) throw signal.reason;
+            const result = await Promise.race([reader.read(), aborted]);
+            if (result.done) { consumed = true; break; }
+            size += result.value.byteLength;
+            if (size > MAX_REQUEST_BYTES) throw new Error('request body too large');
+            chunks.push(result.value);
+        }
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        return JSON.parse(new TextDecoder().decode(bytes));
+    } finally {
+        signal.removeEventListener('abort', abortRead);
+        signal.removeEventListener('abort', failRead);
+        if (!consumed) await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+    }
+}
 
 const VALID_PROVIDERS: ServerLLMProvider[] = ['local', 'anthropic', 'google'];
 const VALID_ROLES = new Set(['system', 'user', 'assistant']);
@@ -68,10 +106,9 @@ function parseSources(raw: unknown): RunSource[] {
         const label = typeof s.label === 'string' && s.label.trim() ? s.label : s.id;
         // A parent run id is a bigint key, so only digits can be one. Anything
         // else is dropped rather than handed to the driver to reject.
-        const parentRunId =
-            typeof s.parentRunId === 'string' && /^\d{1,19}$/.test(s.parentRunId)
-                ? s.parentRunId
-                : undefined;
+        const parentRunId = typeof s.parentRunId === 'string'
+            ? normalizePostgresBigintId(s.parentRunId)
+            : undefined;
         out.push({
             id: s.id.slice(0, MAX_SOURCE_FIELD_CHARS),
             kind: s.kind as SourceKind,
@@ -178,19 +215,45 @@ function runIdHeader(id: string | null): Record<string, string> {
     return id ? { [RUN_ID_HEADER]: id } : {};
 }
 
+async function beforeDeadline<T>(work: Promise<T>, signal: AbortSignal): Promise<T | undefined> {
+    if (signal.aborted) return undefined;
+    let onAbort!: () => void;
+    const aborted = new Promise<undefined>(resolve => {
+        onAbort = () => resolve(undefined);
+        signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+        return await Promise.race([work, aborted]);
+    } finally {
+        signal.removeEventListener('abort', onAbort);
+    }
+}
+
 export async function POST(request: NextRequest) {
     if (process.env.OMNI_PUBLIC_DEMO === '1') {
         return NextResponse.json({ error: 'AI answers are unavailable in the public preview.' }, { status: 503 });
     }
+    const inferenceAbort = new AbortController();
+    const inferenceSignal = AbortSignal.any([
+        request.signal,
+        inferenceAbort.signal,
+        AbortSignal.timeout(INFERENCE_DEADLINE_MS)
+    ]);
+    const auth = await beforeDeadline(authenticateApiRequest(request), inferenceSignal);
+    if (!auth) return new Response(null, { status: request.signal.aborted ? 499 : 504 });
+    if (auth.response) return auth.response;
+    const ownerId = auth.identity.ownerId;
+    const hosted = hostedAuthRequired();
 
     let raw: unknown;
     try {
-        raw = await request.json();
+        raw = await readRequestJson(request, inferenceSignal);
     } catch {
-        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+        if (inferenceSignal.aborted) return new Response(null, { status: request.signal.aborted ? 499 : 504 });
+        return NextResponse.json({ error: 'Invalid JSON or request body exceeds 2 MiB' }, { status: 400 });
     }
 
-    if (process.env.OMNI_E2E === '1') {
+    if (process.env.OMNI_E2E === '1' && process.env.OMNI_DEPLOYMENT_MODE === 'local') {
         const rawObj = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {};
         return e2eDouble(rawObj);
     }
@@ -206,7 +269,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ available: false, error: 'Unsupported provider' }, { status: 200 });
         }
         const available = await checkProviderAvailable({
-            provider, model: '', messages: []
+            provider, model: '', messages: [], signal: inferenceSignal
         });
         return NextResponse.json({ available }, { status: 200 });
     }
@@ -227,12 +290,25 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    const req: ServerLLMRequest = { provider, model, messages, options };
+    const idempotencyKey = request.headers.get('idempotency-key') ?? undefined;
+    if (hosted && (!idempotencyKey || !/^[A-Za-z0-9._~-]{1,128}$/.test(idempotencyKey))) {
+        return NextResponse.json({ error: 'A valid Idempotency-Key header is required' }, { status: 400 });
+    }
+    if (hosted && !ownerId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+
+    const requestDigest = createHash('sha256').update(JSON.stringify({
+        provider, model, messages, options, stream, sources
+    })).digest('hex');
+
+    const req: ServerLLMRequest = {
+        provider, model, messages, options,
+        signal: inferenceSignal
+    };
 
     // The ledger row opens before the provider is called, so an execution that
     // never comes back is still visible as a 'running' row. `openRun` never
     // throws and returns a no-op handle when Postgres is not configured.
-    const run = await openRun({
+    const openingRun = openRun({
         provider,
         model: model || provider,
         streamed: Boolean(stream),
@@ -241,14 +317,45 @@ export async function POST(request: NextRequest) {
         prompt: messages.findLast(m => m.role === 'user')?.content,
         temperature: options?.temperature,
         maxTokens: options?.maxTokens,
-        sources
+        sources,
+        ownerId,
+        idempotencyKey: hosted ? idempotencyKey : undefined,
+        requestDigest: hosted ? requestDigest : undefined
     });
+    const run = await beforeDeadline(openingRun, inferenceSignal);
+    if (!run) return new Response(null, { status: request.signal.aborted ? 499 : 504 });
+
+    if (inferenceSignal.aborted) {
+        if (run.id) await run.uncertain(new Error('Deadline expired before provider dispatch'));
+        return new Response(null, { status: request.signal.aborted ? 499 : 504 });
+    }
+
+    if (run.parentRejected) {
+        return NextResponse.json({ error: 'An inference source is unavailable to this user' }, { status: 403 });
+    }
+    if (hosted && !run.id) {
+        return NextResponse.json({ error: 'Durable inference admission is unavailable' }, { status: 503 });
+    }
+    if (run.idempotencyConflict) {
+        return NextResponse.json({ error: 'Idempotency key was already used for a different request' }, { status: 409 });
+    }
+    if (run.replay) {
+        return NextResponse.json(
+            { runId: run.id, status: run.status, replayed: true },
+            { status: 202, headers: {
+                ...runIdHeader(run.id),
+                'X-Omni-Run-Status': run.status!,
+                'Idempotency-Replayed': 'true',
+                'Cache-Control': 'no-store'
+            } }
+        );
+    }
 
     try {
         if (stream) {
             // `meter` passes chunks straight through and closes the row when
             // the stream ends, is cancelled, or breaks mid-flight.
-            const body = run.meter(await runStream(req));
+            const body = run.meter(await runStream(req), reason => inferenceAbort.abort(reason));
             return new Response(body, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
@@ -268,9 +375,21 @@ export async function POST(request: NextRequest) {
         // Never reflect raw upstream errors to the client (may contain
         // keys/PII). The ledger keeps a scrubbed copy so a 502 is diagnosable.
         console.error('[api/llm] provider call failed');
-        await run.failed(err);
+        const uncertain = inferenceSignal.aborted || !(err instanceof ProviderResponseError)
+            || !err.isDefinitiveRejection;
+        if (uncertain) {
+            await run.uncertain(err);
+        } else {
+            await run.failed(err);
+        }
+        if (request.signal.aborted) return new Response(null, { status: 499 });
+        if (inferenceSignal.aborted) {
+            return NextResponse.json({ error: 'Inference deadline exceeded' }, { status: 504 });
+        }
         return NextResponse.json(
-            { error: 'LLM provider request failed. Check server logs.' },
+            { error: uncertain
+                ? 'LLM provider request failed; the provider outcome may be unresolved.'
+                : 'LLM provider request failed. Check server logs.' },
             { status: 502 }
         );
     }
