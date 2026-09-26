@@ -44,7 +44,6 @@ interface ParsedBody {
     model: string;
     messages: LLMMessage[];
     options?: { temperature?: number; maxTokens?: number };
-    baseUrl?: string;
     stream?: boolean;
     /**
      * What fed this turn, as the caller computed it. Recorded in the ledger
@@ -132,13 +131,10 @@ function parseBody(raw: unknown): { ok: true; body: ParsedBody } | { ok: false; 
         options.maxTokens = Math.min(MAX_OUTPUT_TOKENS, Math.max(1, Math.floor(rawOptions.maxTokens)));
     }
 
-    // baseUrl is only honored for the local provider (Ollama).
-    const baseUrl = provider === 'local' && typeof b.baseUrl === 'string' ? b.baseUrl : undefined;
-
     return {
         ok: true,
         body: {
-            provider, model, messages, options, baseUrl,
+            provider, model, messages, options,
             stream: b.stream === true,
             sources: parseSources(b.sources)
         }
@@ -205,9 +201,8 @@ export async function POST(request: NextRequest) {
         if (!VALID_PROVIDERS.includes(provider)) {
             return NextResponse.json({ available: false, error: 'Unsupported provider' }, { status: 200 });
         }
-        const baseUrl = provider === 'local' && typeof rawObj.baseUrl === 'string' ? rawObj.baseUrl : undefined;
         const available = await checkProviderAvailable({
-            provider, model: '', messages: [], baseUrl
+            provider, model: '', messages: []
         });
         return NextResponse.json({ available }, { status: 200 });
     }
@@ -216,7 +211,7 @@ export async function POST(request: NextRequest) {
     if (!parsed.ok) {
         return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
-    const { provider, messages, options, baseUrl, stream, sources } = parsed.body;
+    const { provider, messages, options, stream, sources } = parsed.body;
     // Defense in depth: heal known-deprecated model ids server-side so stale
     // clients (old persisted configs) don't 404 against providers (apex A5).
     const model = resolveModel(provider, parsed.body.model);
@@ -228,7 +223,7 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    const req: ServerLLMRequest = { provider, model, messages, options, baseUrl };
+    const req: ServerLLMRequest = { provider, model, messages, options };
 
     // The ledger row opens before the provider is called, so an execution that
     // never comes back is still visible as a 'running' row. `openRun` never
