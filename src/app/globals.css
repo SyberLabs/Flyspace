@@ -2,43 +2,69 @@
 
 /* ============================================
    PROJECT OMNI: THE CITADEL - DESIGN SYSTEM
+   SyberLabs Design System v2 ("Atlas"): ink ground, vellum text, hairline
+   rules, spectrum as an accent only. The --citadel-* names are the skinnable
+   contract (SkinService + PRESET_THEMES); PRESET_THEMES[0] ("command") must
+   stay identical to the values below.
    ============================================ */
 
 :root {
-  /* Core Palette - Dark Mode Default */
-  --citadel-void: #0a0a0f;
-  --citadel-surface: #12121a;
-  --citadel-elevated: #1a1a24;
-  --citadel-border: #2a2a3a;
+  /* Atlas v2 raw tokens */
+  --ink: #06051a;
+  --ink-2: #0c0a2a;
+  --ink-3: #141238;
+  --vellum: #eef0ff;
+  --body: #dfe2fb;
+  --mist: #b4bbe2;
+  --dim: #8990bb;
+  --rule: rgba(170, 180, 255, 0.16);
+  --rule-2: rgba(170, 180, 255, 0.32);
+  --deep: #0048f0;
+  --blue: #4890f0;
+  --ice: #90d8f0;
+  --violet: #9a6bff;
+  --magenta: #ff58d6;
+  --amber: #ffb54a;
+  --spectrum: linear-gradient(100deg, #90d8f0 0%, #4890f0 30%, #9a6bff 58%, #ff58d6 80%, #ffb54a 100%);
+  --accent-omnios: #f59be0;
+  --cyan-glow: #90d8f0; /* highlighter tool (was referenced but never defined) */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Core Palette - Dark Mode Default (mapped onto Atlas) */
+  --citadel-void: #06051a;
+  --citadel-surface: #0c0a2a;
+  --citadel-elevated: #141238;
+  --citadel-border: rgba(170, 180, 255, 0.16);
 
   /* Accent Colors */
-  --citadel-primary: #6366f1;
-  --citadel-primary-glow: #818cf8;
-  --citadel-secondary: #22d3ee;
-  --citadel-accent: #f472b6;
+  --citadel-primary: #4890f0;
+  --citadel-primary-glow: #9a6bff;
+  --citadel-secondary: #90d8f0;
+  --citadel-accent: #f59be0;
 
-  /* Truth Block Colors */
-  --truth-green: #10b981;
-  --truth-red: #ef4444;
-  --truth-amber: #f59e0b;
+  /* Truth Block Colors (Atlas status: success / danger / warning) */
+  --truth-green: #6ff5a8;
+  --truth-red: #ff7a8a;
+  --truth-amber: #ffc96b;
 
   /* Text */
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
+  --text-primary: #eef0ff;
+  --text-secondary: #b4bbe2;
+  --text-muted: #8990bb;
 
   /* Glassmorphism */
-  --glass-bg: rgba(18, 18, 26, 0.8);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-blur: 16px;
+  --glass-bg: rgba(12, 10, 42, 0.8);
+  --glass-border: rgba(170, 180, 255, 0.16);
+  --glass-blur: 14px;
 
   /* Shadows */
-  --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
-  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 32px -8px rgba(72, 144, 240, 0.45);
+  --shadow-elevated: 0 30px 80px -20px rgba(0, 0, 0, 0.9);
 
-  /* Fonts */
-  --font-display: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* Fonts (next/font sets the real family on <body>; these are fallbacks) */
+  --font-display: 'Instrument Sans', system-ui, sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Spacing */
   --space-1: 0.25rem;
@@ -90,6 +116,7 @@
   --color-background: var(--citadel-void);
   --color-foreground: var(--text-primary);
   --font-sans: var(--font-display);
+  --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
 }
 
@@ -115,15 +142,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Background Noise Texture */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  opacity: 0.03;
-  pointer-events: none;
-  z-index: 9999;
+/* Keyboard focus: 2px ice ring, always visible. */
+:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(144, 216, 240, 0.25);
 }
 
 /* ============================================
@@ -132,16 +158,16 @@ body::before {
 
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
   border: 1px solid var(--glass-border);
 }
 
 .glass-elevated {
-  background: rgba(26, 26, 36, 0.9);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--citadel-surface) 92%, transparent);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid var(--rule-2);
   box-shadow: var(--shadow-elevated);
 }
 
@@ -153,13 +179,13 @@ body::before {
   position: relative;
   background: var(--citadel-elevated);
   border: 1px solid var(--citadel-border);
-  border-radius: 8px;
+  border-radius: 14px;
   overflow: visible;
-  transition: all 0.2s ease;
+  transition: border-color 120ms var(--ease), box-shadow 200ms var(--ease);
 }
 
 .block-card:hover {
-  border-color: var(--citadel-primary);
+  border-color: var(--rule-2);
   box-shadow: var(--shadow-glow);
 }
 
@@ -168,7 +194,7 @@ body::before {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--citadel-border);
   background: transparent;
 }
 
@@ -179,16 +205,22 @@ body::before {
 
 /* ============================================
    CANVAS STYLES
+   Working screens stay calm ink: a sparse starfield (the Atlas page
+   texture) under a hairline grid. No live atmosphere here.
    ============================================ */
 
 .canvas-workspace {
   position: relative;
   width: 100%;
   height: 100%;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
-    linear-gradient(to bottom, var(--citadel-void), var(--citadel-surface));
-  background-size: 100% 100%, var(--grid-size) var(--grid-size);
+  background-color: var(--citadel-void);
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, #fff8 50%, #0000 51%),
+    radial-gradient(1px 1px at 72% 34%, #cfe4ff99 50%, #0000 51%),
+    radial-gradient(1px 1px at 38% 71%, #fff6 50%, #0000 51%),
+    radial-gradient(1px 1px at 88% 82%, #e8c9ff88 50%, #0000 51%),
+    radial-gradient(1px 1px at 55% 9%, #fff5 50%, #0000 51%);
+  background-size: 420px 420px, 530px 530px, 610px 610px, 470px 470px, 700px 700px;
   overflow: auto;
 }
 
@@ -196,10 +228,118 @@ body::before {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(to right, rgba(170, 180, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(170, 180, 255, 0.045) 1px, transparent 1px);
   background-size: var(--grid-size) var(--grid-size);
   pointer-events: none;
+}
+
+/* Empty-state atmosphere: the ambient plate sits under a heavy scrim so the
+   words in front always read. Neither layer ever intercepts clicks. The
+   nebula gradient is also the no-WebGL2 fallback. */
+.canvas-atmosphere {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(50% 60% at 50% 45%, #2a1a7a4d, #0000 70%),
+    radial-gradient(34% 40% at 58% 40%, #0048f033, #0000 70%),
+    radial-gradient(26% 30% at 42% 62%, #ff58d61f, #0000 70%),
+    var(--citadel-void);
+}
+
+.canvas-atmosphere-host,
+.canvas-atmosphere-plate {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Heavy scrim (kit sy-scrim--heavy) plus a darker well behind the copy. */
+.canvas-atmosphere-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 30rem 18rem at 50% 50%, rgba(6, 5, 26, 0.7), rgba(6, 5, 26, 0) 100%),
+    linear-gradient(0deg, rgba(6, 5, 26, 0.92), rgba(6, 5, 26, 0.62) 60%, rgba(6, 5, 26, 0.72));
+}
+
+.empty-state {
+  position: relative;
+  z-index: 1;
+}
+
+.empty-state-title {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 40px;
+  line-height: 44px;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+/* Narrow canvas: serif never goes below 32px, so fall back to the sans
+   heading style instead of shrinking the serif. */
+@media (max-width: 640px) {
+  .empty-state-title {
+    font: 600 22px/30px var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  .empty-state {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .empty-state .btn {
+    white-space: normal;
+    padding: 8px 16px;
+  }
+}
+
+.eyebrow {
+  font: 500 12px/1.4 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Plate frame: rule border + inset rule at 4px + corner registration ticks. */
+.plate-frame {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  outline: 1px solid var(--rule);
+  outline-offset: -5px;
+}
+
+.plate-frame::before,
+.plate-frame::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: solid var(--rule-2);
+}
+
+.plate-frame::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+
+.plate-frame::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
 }
 
 /* ============================================
@@ -241,12 +381,12 @@ body::before {
   border-color: var(--citadel-primary);
   color: var(--citadel-primary);
   transform: scale(1.1);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 0 16px rgba(72, 144, 240, 0.3);
 }
 
 .wire-port-active {
   border-color: var(--citadel-primary);
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(72, 144, 240, 0.1);
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
@@ -256,7 +396,7 @@ body::before {
 
 .wire-port-source:hover {
   border-color: var(--citadel-primary);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 16px rgba(72, 144, 240, 0.4);
 }
 
 .wire-port-target {
@@ -265,7 +405,7 @@ body::before {
 
 .wire-port-target:hover {
   border-color: var(--truth-green);
-  box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 16px rgba(111, 245, 168, 0.4);
 }
 
 /* ============================================
@@ -294,16 +434,73 @@ body::before {
 
 /* ============================================
    TOP BAR
+   64px, ink-2 at 74% + blur, hairline bottom rule.
    ============================================ */
 
 .topbar {
-  height: 56px;
-  background: var(--citadel-surface);
+  position: relative;
+  z-index: 40;
+  height: 64px;
+  flex: none;
+  background: color-mix(in srgb, var(--citadel-surface) 74%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
   border-bottom: 1px solid var(--citadel-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-6);
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+}
+
+/* Product lockup: mark + SYBERLABS / OmniOS + sigil */
+.lockup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.lockup-mark {
+  width: 22px;
+  height: auto;
+  flex: none;
+}
+
+.lockup-name {
+  font: 600 14px/1 var(--font-display);
+  letter-spacing: 0.22em;
+}
+
+.lockup-sep {
+  color: var(--text-muted);
+  font: 400 14px/1 var(--font-display);
+}
+
+.lockup-product {
+  font: 500 15px/1 var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+.lockup-sigil {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* Header control groups: hairline pills */
+.topbar-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 6px;
+  border: 1px solid var(--citadel-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--citadel-void) 40%, transparent);
 }
 
 /* ============================================
@@ -313,33 +510,36 @@ body::before {
 .command-palette-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(6, 5, 26, 0.72);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 20vh;
+  padding: 20vh 16px 0;
   z-index: 1000;
 }
 
 .command-palette {
   width: 100%;
   max-width: 640px;
-  background: var(--citadel-elevated);
-  border: 1px solid var(--citadel-border);
-  border-radius: 16px;
+  background: color-mix(in srgb, var(--citadel-surface) 96%, transparent);
+  border: 1px solid var(--rule-2);
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: var(--shadow-elevated);
+  box-shadow: var(--shadow-elevated), 0 0 60px -30px var(--blue);
 }
 
 .command-palette-input {
   width: 100%;
+  min-height: 56px;
   padding: var(--space-4) var(--space-6);
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--citadel-border);
   color: var(--text-primary);
-  font-size: 1.125rem;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
   outline: none;
 }
 
@@ -353,19 +553,29 @@ body::before {
   padding: var(--space-2);
 }
 
+/* cmdk group headings: the mono "plate caption" layer */
+.command-palette [cmdk-group-heading] {
+  padding: 10px 12px 6px;
+  font: 500 12px/1.4 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .command-item {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 120ms var(--ease);
 }
 
 .command-item:hover,
 .command-item[data-selected="true"] {
-  background: rgba(99, 102, 241, 0.1);
+  background: var(--citadel-elevated);
+  box-shadow: inset 0 0 0 1px var(--citadel-border);
 }
 
 .command-item-icon {
@@ -381,40 +591,89 @@ body::before {
 
 .command-item-shortcut {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
-  background: var(--citadel-surface);
-  padding: 2px 6px;
-  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--citadel-border);
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
 /* ============================================
    BUTTONS
+   .btn is the 46px pill. .btn-primary / .btn-line / .btn-ghost / .btn-skin
+   are colour modifiers (.btn-ghost also rides on small icon buttons that do
+   not carry .btn, so it must not set size or padding).
    ============================================ */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font: 500 15px/1 var(--font-display);
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: none;
+  transition: transform 120ms var(--ease), box-shadow 200ms var(--ease), border-color 120ms var(--ease), background 120ms var(--ease), color 120ms var(--ease);
+  border: 1px solid transparent;
   outline: none;
 }
 
+.btn:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 3px;
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.btn-sm {
+  min-height: 36px;
+  padding: 0 14px;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.btn-sm svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Primary ("solid"): vellum-to-ice gradient, dark text, blue glow. */
 .btn-primary {
-  background: var(--citadel-primary);
-  color: white;
+  color: #07061c;
+  background: linear-gradient(100deg, #c9f0ff, #eef0ff 45%, #e3d4ff);
+  box-shadow: 0 0 0 1px #fff3 inset, 0 10px 40px -12px #4890f0cc;
 }
 
 .btn-primary:hover {
-  background: var(--citadel-primary-glow);
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px #fff6 inset, 0 14px 48px -10px #9a6bffdd;
+}
+
+/* Secondary ("line"): hairline pill on ink. */
+.btn-line {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--citadel-void) 40%, transparent);
+  border-color: var(--rule-2);
+}
+
+.btn-line:hover {
+  border-color: var(--ice);
+  box-shadow: 0 0 24px -6px var(--blue);
 }
 
 .btn-ghost {
@@ -424,20 +683,62 @@ body::before {
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(170, 180, 255, 0.08);
   color: var(--text-primary);
 }
 
 .btn-skin {
   background: linear-gradient(135deg, var(--citadel-accent) 0%, var(--citadel-primary) 100%);
-  color: white;
+  color: #07061c;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .btn-skin:hover {
-  box-shadow: 0 0 30px rgba(244, 114, 182, 0.4);
+  box-shadow: 0 0 30px -6px var(--citadel-accent);
+}
+
+/* Garden shortcut (bottom-right of the canvas): a line pill with the
+   success-green signal, replacing the solid emerald gradient. */
+.garden-pill {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--citadel-surface) 80%, transparent);
+  border-color: color-mix(in srgb, var(--truth-green) 45%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.garden-pill svg {
+  color: var(--truth-green);
+}
+
+.garden-pill:hover {
+  border-color: var(--truth-green);
+  box-shadow: 0 0 26px -8px var(--truth-green);
+}
+
+/* Public-preview notice under the header */
+.demo-banner {
+  padding: 8px 12px;
+  font: 400 12px/1.6 var(--font-mono);
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--citadel-surface) 74%, transparent);
+  border-bottom: 1px solid var(--citadel-border);
+}
+
+.demo-banner::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 10px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--ice);
+  box-shadow: 0 0 10px var(--ice);
 }
 
 /* ============================================
@@ -479,7 +780,7 @@ body::before {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--citadel-border);
+  background: var(--rule-2);
   border-radius: 4px;
 }
 
@@ -495,11 +796,11 @@ body::before {
 
   0%,
   100% {
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 0 20px rgba(72, 144, 240, 0.2);
   }
 
   50% {
-    box-shadow: 0 0 40px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 0 40px rgba(72, 144, 240, 0.4);
   }
 }
 
@@ -543,5 +844,15 @@ body::before {
     animation: none;
     stroke-dasharray: none;
     filter: brightness(1.35);
+  }
+
+  .btn,
+  .block-card,
+  .command-item {
+    transition: none;
+  }
+
+  .btn-primary:hover {
+    transform: none;
   }
 }

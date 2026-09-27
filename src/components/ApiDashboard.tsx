@@ -135,7 +135,7 @@ export function ApiDashboardModal({ isOpen, onClose }: ApiDashboardModalProps) {
                                         className={cn(
                                             "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
                                             activeTab === 'dashboard'
-                                                ? "bg-[var(--citadel-primary)] text-white"
+                                                ? "bg-[var(--citadel-primary)] text-[var(--citadel-void)]"
                                                 : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                                         )}
                                     >
@@ -146,7 +146,7 @@ export function ApiDashboardModal({ isOpen, onClose }: ApiDashboardModalProps) {
                                         className={cn(
                                             "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
                                             activeTab === 'marketplace'
-                                                ? "bg-[var(--citadel-primary)] text-white"
+                                                ? "bg-[var(--citadel-primary)] text-[var(--citadel-void)]"
                                                 : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                                         )}
                                     >
@@ -425,7 +425,7 @@ function MarketplaceView({ searchQuery, setSearchQuery, selectedCategory, setSel
                         className={cn(
                             "px-3 py-1 rounded-full text-xs font-medium transition-colors",
                             selectedCategory === 'all'
-                                ? "bg-[var(--citadel-primary)] text-white"
+                                ? "bg-[var(--citadel-primary)] text-[var(--citadel-void)]"
                                 : "bg-[var(--citadel-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                         )}
                     >
@@ -539,7 +539,7 @@ function ApiMarketplaceCard({ api, isInstalled, onInstall }: ApiMarketplaceCardP
                         isInstalled
                             ? "bg-[var(--truth-green)]/20 text-[var(--truth-green)]"
                             : canInstall
-                                ? "bg-[var(--citadel-primary)] text-white hover:opacity-90"
+                                ? "bg-[var(--citadel-primary)] text-[var(--citadel-void)] hover:opacity-90"
                                 : "bg-[var(--citadel-border)] text-[var(--text-muted)] cursor-not-allowed"
                     )}
                 >
