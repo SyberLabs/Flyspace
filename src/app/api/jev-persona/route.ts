@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
-const API_URL = 'https://openrouter.ai/api/alpha/decisions';
-const MODEL = 'typesafe/jev-1.13';
+const JEV_API_URL = 'https://openrouter.ai/api/alpha/decisions';
+const JEV_MODEL = 'typesafe/jev-1.13';
 const MAX_BODY_BYTES = 2048;
 const MAX_QUESTION_CHARS = 500;
 const PERSONAS = ['analyst', 'strategist', 'oracle', 'devil'] as const;
@@ -54,7 +54,9 @@ async function readQuestion(request: NextRequest): Promise<string | null> {
 }
 
 export async function POST(request: NextRequest) {
-    if (process.env.OMNI_JEV_ENABLED !== '1') {
+    const provider = process.env.DECISION_PROVIDER || 'kev';
+    if ((provider !== 'kev' && provider !== 'jev')
+        || (provider === 'kev' ? process.env.OMNI_KEV_ENABLED !== '1' : process.env.OMNI_JEV_ENABLED !== '1')) {
         return json(503, { error: 'Persona suggestion is unavailable.' });
     }
 
@@ -74,20 +76,36 @@ export async function POST(request: NextRequest) {
     }
     if (!question) return json(400, { error: 'Question must be 1–500 characters.' });
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return json(503, { error: 'Persona suggestion is unavailable.' });
+    const apiKey = provider === 'kev' ? process.env.KEV_API_KEY : process.env.OPENROUTER_API_KEY;
+    const model = provider === 'kev' ? (process.env.KEV_MODEL || 'kev-latest') : JEV_MODEL;
+    const revision = process.env.KEV_REVISION;
+    let apiUrl = JEV_API_URL;
+    if (provider === 'kev') {
+        try {
+            const base = new URL(process.env.KEV_BASE_URL || '');
+            if (base.protocol !== 'https:'
+                || base.pathname !== '/' || base.search || base.hash || base.username || base.password) throw new Error('Invalid Kev URL');
+            apiUrl = new URL('/v1/systemone', base).toString();
+        } catch {
+            return json(503, { error: 'Persona suggestion is unavailable.' });
+        }
+    }
+    if (!apiKey || (provider === 'kev' && (model !== 'kev-latest' || !revision || !/^[a-f0-9]{40}$/.test(revision)))) {
+        return json(503, { error: 'Persona suggestion is unavailable.' });
+    }
 
     try {
-        const upstream = await fetch(API_URL, {
+        const upstream = await fetch(apiUrl, {
             method: 'POST',
+            redirect: 'error',
             headers: {
                 Authorization: `Bearer ${apiKey}`,
                 'Content-Type': 'application/json',
                 Accept: 'application/json'
             },
             body: JSON.stringify({
-                model: MODEL,
-                state: { question },
+                model,
+                state: provider === 'kev' ? question : { question },
                 questions: {
                     persona: {
                         type: 'choice',
@@ -101,22 +119,25 @@ export async function POST(request: NextRequest) {
                     }
                 }
             }),
-            signal: AbortSignal.timeout(8000)
+            signal: AbortSignal.any([request.signal, AbortSignal.timeout(8000)])
         });
         if (!upstream.ok) return json(502, { error: 'Persona suggestion failed.' });
+        if (provider === 'kev' && upstream.headers.get('x-kev-revision') !== revision) {
+            return json(502, { error: 'Persona suggestion failed.' });
+        }
 
         const result: unknown = await upstream.json();
         if (!result || typeof result !== 'object') return json(502, { error: 'Persona suggestion failed.' });
         const value = result as Record<string, unknown>;
         const answer = (value.answers as Record<string, unknown> | undefined)?.persona as Record<string, unknown> | undefined;
-        if (value.provider !== 'TypeSafe'
-            || (value.model !== MODEL && !/^typesafe\/jev-1\.13-\d{8}$/.test(String(value.model)))
+        if ((provider === 'jev' && value.provider !== 'TypeSafe')
+            || (provider === 'kev' ? value.model !== model : (value.model !== JEV_MODEL && !/^typesafe\/jev-1\.13-\d{8}$/.test(String(value.model))))
             || answer?.type !== 'choice'
             || !PERSONAS.includes(answer.choice as typeof PERSONAS[number])) {
             return json(502, { error: 'Persona suggestion failed.' });
         }
 
-        return json(200, { persona: answer.choice, model: value.model });
+        return json(200, { persona: answer.choice, provider, model: value.model, ...(provider === 'kev' ? { revision } : {}) });
     } catch {
         return json(502, { error: 'Persona suggestion failed.' });
     }

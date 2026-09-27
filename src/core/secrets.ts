@@ -20,6 +20,7 @@ export const SECRET_ENV_VARS = [
     'ANTHROPIC_API_KEY',
     'GOOGLE_API_KEY',
     'OPENROUTER_API_KEY',
+    'KEV_API_KEY',
     // Keyed data providers (proxied through /api/data)
     'NEWSAPI_KEY',
     'FRED_API_KEY',
