@@ -315,7 +315,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                     <div className="flex gap-2">
                                         <button
                                             onClick={handleExportData}
-                                            className="flex-1 px-3 py-2 bg-[var(--citadel-primary)] hover:bg-[var(--citadel-primary-glow)] text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                                            className="flex-1 px-3 py-2 bg-[var(--citadel-primary)] hover:bg-[var(--citadel-primary-glow)] text-[var(--citadel-void)] text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
                                         >
                                             <Download className="w-4 h-4" />
                                             Export data
