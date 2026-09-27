@@ -36,10 +36,10 @@ private network - the app's own posture does not change.
 ## Limited public preview
 
 The preview is a local browser canvas with keyless public data and an optional
-Jev persona suggestion. Jev receives only the question the visitor enters and
+Kev persona suggestion. Kev receives only the question the visitor enters and
 submits in the Personas tab. Its answer only suggests one of four existing
 perspectives; the visitor chooses whether to use it. It does not answer the
-question or send the canvas to OpenRouter.
+question or send the canvas to the configured Kev endpoint.
 
 Deploy the preview only after all of these are true:
 
@@ -47,9 +47,18 @@ Deploy the preview only after all of these are true:
   `/api/llm` and `/api/data` return 503, and both inference ledger routes
   report `configured:false` on the deployed host. Do not set `DATABASE_URL`,
   Anthropic/Google keys, or keyed data provider keys on the public Worker.
-- If enabling Jev, set `OMNI_JEV_ENABLED=1` and
-  `NEXT_PUBLIC_OMNI_JEV_ENABLED=1`; store `OPENROUTER_API_KEY` as a server
-  secret with a separate spend cap. Rate-limit `/api/jev-persona` at the edge
+- If enabling Kev persona suggestions, keep `DECISION_PROVIDER=kev` and
+  `NEXT_PUBLIC_DECISION_PROVIDER=kev`. After authorizing question transmission
+  to the selected Kev host, set `OMNI_KEV_ENABLED=1` and
+  `NEXT_PUBLIC_OMNI_KEV_ENABLED=1`. Set `KEV_BASE_URL` to the trusted HTTPS
+  endpoint origin, `KEV_API_KEY` as a
+  server secret, `KEV_MODEL=kev-latest`, and `KEV_REVISION` to the immutable
+  40-character deployment/model commit SHA. The serving endpoint must attest
+  that SHA in the `X-Kev-Revision` response header; mismatches fail closed.
+  The old Jev feature flag alone cannot authorize transmission to Kev.
+  Set both provider variables to `jev`, set `OMNI_JEV_ENABLED=1` and
+  `NEXT_PUBLIC_OMNI_JEV_ENABLED=1`, and store `OPENROUTER_API_KEY` for
+  explicit Jev rollback. Rate-limit `/api/jev-persona` at the edge
   before enabling the feature. The app's same-origin check and 500-character
   limit prevent accidental misuse, but do not stop automated direct requests.
 - Validate the Next-to-Cloudflare runtime build and smoke-test the deployed
