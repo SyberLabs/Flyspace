@@ -231,7 +231,7 @@ export function MediaBlockView({ instanceId }: MediaBlockViewProps) {
                         <button
                             onClick={addMediaFromUrl}
                             disabled={!urlInput.trim()}
-                            className="px-3 py-2 bg-[var(--citadel-primary)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                            className="px-3 py-2 bg-[var(--citadel-primary)] text-[var(--citadel-void)] rounded-lg text-sm font-medium disabled:opacity-50"
                         >
                             Add
                         </button>

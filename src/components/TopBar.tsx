@@ -9,7 +9,6 @@ import {
     Command,
     Palette,
     Settings,
-    Shield,
     Wifi,
     Database,
     Key,
@@ -24,6 +23,7 @@ import { useApiStore } from '@/core/stores/apiStore';
 import { LlmStatusPill } from './LlmStatusPill';
 import { cn } from '@/lib/utils';
 import { useClientMounted } from '@/core/hooks';
+import { Sigil } from './brand/Sigil';
 
 export function TopBar({
     onOpenSkin,
@@ -57,21 +57,14 @@ export function TopBar({
     const renderBreadcrumbs = () => {
         if (isHome) {
             return (
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--citadel-primary)] to-[var(--citadel-accent)] flex items-center justify-center">
-                            <Shield className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-sm font-semibold text-[var(--text-primary)]">
-                                The Citadel
-                            </h1>
-                            <p className="text-[10px] text-[var(--text-muted)] -mt-0.5">
-                                Project Omni
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                <h1 className="lockup" aria-label="SyberLabs OmniOS">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- 22px static brand mark */}
+                    <img src="/syber-mark.png" alt="" width={22} height={24} className="lockup-mark" />
+                    <span className="lockup-name hidden md:inline">SYBERLABS</span>
+                    <span className="lockup-sep hidden md:inline" aria-hidden="true">/</span>
+                    <span className="lockup-product">OmniOS</span>
+                    <Sigil size={16} className="lockup-sigil" />
+                </h1>
             );
         }
 
@@ -81,10 +74,12 @@ export function TopBar({
             <div className="flex items-center gap-1">
                 <button
                     onClick={() => router.push('/')}
-                    className="p-1.5 rounded-md hover:bg-[var(--citadel-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    className="flex items-center gap-2 p-1.5 rounded-full hover:bg-[var(--citadel-elevated)] transition-colors"
                     title="Back to Citadel"
                 >
-                    <Shield className="w-4 h-4" />
+                    {/* eslint-disable-next-line @next/next/no-img-element -- 22px static brand mark */}
+                    <img src="/syber-mark.png" alt="" width={22} height={24} className="lockup-mark" />
+                    <Sigil size={16} className="lockup-sigil" />
                 </button>
 
                 {parts.map((part, index) => {
@@ -121,7 +116,7 @@ export function TopBar({
     };
 
     return (
-        <header className="topbar flex items-center justify-between px-4 py-2 bg-[var(--citadel-surface)] border-b border-[var(--citadel-border)] h-[56px]">
+        <header className="topbar">
             {/* Left: Breadcrumbs / Logo */}
             <div className="flex items-center gap-4">
                 {renderBreadcrumbs()}
@@ -133,7 +128,7 @@ export function TopBar({
                 {isHome && activeShell && (
                     <>
                         <div className="w-px h-6 bg-[var(--citadel-border)]" />
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--citadel-elevated)] rounded-lg border border-[var(--citadel-border)]">
+                        <div className="topbar-pill px-3 gap-2">
                             <span className="text-xs text-[var(--text-muted)]">Shell:</span>
                             <span className="text-xs font-medium text-[var(--text-primary)]">
                                 {activeShell.name}
@@ -148,21 +143,21 @@ export function TopBar({
                         {/* Shell Manager Button */}
                         <button
                             onClick={onOpenShells}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-[var(--citadel-elevated)] rounded-lg border border-[var(--citadel-border)] hover:border-[var(--citadel-primary)] transition-all"
+                            className="btn btn-line btn-sm"
                             title="Shell Manager"
                         >
-                            <Layers className="w-3.5 h-3.5 text-[var(--citadel-primary)]" />
-                            <span className="text-xs font-medium text-[var(--text-primary)]">Shells</span>
+                            <Layers className="text-[var(--citadel-secondary)]" />
+                            <span>Shells</span>
                         </button>
 
                         <div className="w-px h-6 bg-[var(--citadel-border)]" />
 
                         {/* Tool Strip */}
-                        <div className="flex items-center gap-1 px-2 py-1 bg-[var(--citadel-elevated)] rounded-lg border border-[var(--citadel-border)]">
+                        <div className="topbar-pill hidden sm:flex">
                             <button
                                 onClick={() => setTool('navigate')}
                                 className={cn(
-                                    "flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-all",
+                                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs transition-all",
                                     activeTool === 'navigate'
                                         ? "bg-[var(--citadel-primary)]/20 text-[var(--citadel-primary)]"
                                         : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--citadel-surface)]"
@@ -175,7 +170,7 @@ export function TopBar({
                             <button
                                 onClick={() => setTool('highlighter')}
                                 className={cn(
-                                    "flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-all",
+                                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs transition-all",
                                     activeTool === 'highlighter'
                                         ? "bg-[var(--cyan-glow)]/20 text-[var(--cyan-glow)]"
                                         : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--citadel-surface)]"
@@ -195,13 +190,13 @@ export function TopBar({
                 {children || (
                     <button
                         onClick={openCommandPalette}
-                        className="flex items-center gap-2 px-4 py-1.5 bg-[var(--citadel-elevated)] border border-[var(--citadel-border)] rounded-lg hover:border-[var(--citadel-primary)] transition-colors group max-w-sm w-full"
+                        className="hidden md:flex items-center gap-2 px-4 min-h-9 bg-[color-mix(in_srgb,var(--citadel-void)_40%,transparent)] border border-[var(--citadel-border)] rounded-full hover:border-[var(--ice)] transition-colors group max-w-sm w-full"
                     >
-                        <Command className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--citadel-primary)]" />
+                        <Command className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--ice)]" />
                         <span className="text-sm text-[var(--text-muted)] truncate">
                             Search commands...
                         </span>
-                        <kbd className="ml-auto px-1.5 py-0.5 text-[10px] font-mono bg-[var(--citadel-surface)] rounded text-[var(--text-muted)]">
+                        <kbd className="ml-auto px-2 py-0.5 text-xs font-mono border border-[var(--citadel-border)] rounded-full text-[var(--text-secondary)]">
                             ⌘K
                         </kbd>
                     </button>
@@ -213,7 +208,7 @@ export function TopBar({
                 {customRight}
 
                 {/* Status Bar Group (Only on Home or when relevant) */}
-                <div className="flex items-center gap-1 px-2 py-1 bg-[var(--citadel-elevated)] rounded-lg border border-[var(--citadel-border)]">
+                <div className="topbar-pill">
 
                     <div className="w-px h-4 bg-[var(--citadel-border)]" />
 
@@ -226,7 +221,7 @@ export function TopBar({
                     <button
                         onClick={toggleMockData}
                         className={cn(
-                            "flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-colors",
+                            "flex items-center gap-1.5 px-2 py-1.5 rounded-full text-xs transition-colors",
                             useMockData
                                 ? "text-[var(--truth-amber)] hover:bg-[var(--truth-amber)]/10"
                                 : "text-[var(--truth-green)] hover:bg-[var(--truth-green)]/10"
@@ -245,12 +240,12 @@ export function TopBar({
                     {/* API Dashboard */}
                     <button
                         onClick={onOpenApi}
-                        className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs text-[var(--citadel-primary)] hover:bg-[var(--citadel-primary)]/10 transition-colors"
+                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-full text-xs text-[var(--citadel-primary)] hover:bg-[var(--citadel-primary)]/10 transition-colors"
                         title="API Dashboard"
                     >
                         <Key className="w-3.5 h-3.5" />
                         {hasMounted && installedApis.length > 0 && (
-                            <span className="px-1 py-0.5 text-[10px] font-medium bg-[var(--citadel-primary)]/20 rounded ml-1">
+                            <span className="px-1.5 py-0.5 text-xs font-mono bg-[var(--citadel-primary)]/15 rounded-full ml-1">
                                 {installedApis.length}
                             </span>
                         )}
@@ -261,7 +256,7 @@ export function TopBar({
                     {/* SKIN Button */}
                     <button
                         onClick={onOpenSkin}
-                        className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--citadel-surface)] transition-colors"
+                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-full text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--citadel-elevated)] transition-colors"
                         title="Appearance Settings"
                     >
                         <Palette className="w-3.5 h-3.5" />
@@ -271,7 +266,7 @@ export function TopBar({
                 {/* Settings */}
                 <button
                     onClick={onOpenSettings}
-                    className="p-2 rounded-lg hover:bg-[var(--citadel-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    className="p-2 rounded-full border border-transparent hover:border-[var(--citadel-border)] hover:bg-[var(--citadel-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                     title="System Settings"
                 >
                     <Settings className="w-4 h-4" />

@@ -22,18 +22,19 @@ export const PRESET_THEMES: SkinTheme[] = [
         id: 'command',
         name: 'Command Center',
         description: 'High-density tactical interface',
+        // SyberLabs Atlas v2. Must stay identical to :root in globals.css.
         variables: {
-            '--citadel-void': '#0a0a0f',
-            '--citadel-surface': '#12121a',
-            '--citadel-elevated': '#1a1a24',
-            '--citadel-border': '#2a2a3a',
-            '--citadel-primary': '#6366f1',
-            '--citadel-primary-glow': '#818cf8',
-            '--citadel-secondary': '#22d3ee',
-            '--citadel-accent': '#f472b6',
-            '--text-primary': '#f4f4f5',
-            '--text-secondary': '#a1a1aa',
-            '--text-muted': '#71717a'
+            '--citadel-void': '#06051a',
+            '--citadel-surface': '#0c0a2a',
+            '--citadel-elevated': '#141238',
+            '--citadel-border': 'rgba(170, 180, 255, 0.16)',
+            '--citadel-primary': '#4890f0',
+            '--citadel-primary-glow': '#9a6bff',
+            '--citadel-secondary': '#90d8f0',
+            '--citadel-accent': '#f59be0',
+            '--text-primary': '#eef0ff',
+            '--text-secondary': '#b4bbe2',
+            '--text-muted': '#8990bb'
         }
     },
     {
