@@ -242,6 +242,10 @@ interface PersonasViewProps {
 }
 
 function PersonasView({ personas, activePersonaId, onSelect }: PersonasViewProps) {
+    const decisionName = process.env.NEXT_PUBLIC_DECISION_PROVIDER === 'jev' ? 'Jev' : 'Kev';
+    const suggestionsEnabled = decisionName === 'Kev'
+        ? process.env.NEXT_PUBLIC_OMNI_KEV_ENABLED === '1'
+        : process.env.NEXT_PUBLIC_OMNI_JEV_ENABLED === '1';
     const [question, setQuestion] = useState('');
     const [suggestion, setSuggestion] = useState<string | null>(null);
     const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -275,7 +279,7 @@ function PersonasView({ personas, activePersonaId, onSelect }: PersonasViewProps
 
     return (
         <div>
-            {process.env.NEXT_PUBLIC_OMNI_JEV_ENABLED === '1' && <form className="persona-suggest" onSubmit={suggestPersona}>
+            {suggestionsEnabled && <form className="persona-suggest" onSubmit={suggestPersona}>
                 <label htmlFor="persona-question">Find a perspective for your question</label>
                 <div className="persona-suggest-controls">
                     <input
@@ -286,13 +290,13 @@ function PersonasView({ personas, activePersonaId, onSelect }: PersonasViewProps
                         placeholder="What are you trying to understand?"
                     />
                     <button type="submit" disabled={isSuggesting || !question.trim()}>
-                        {isSuggesting ? 'Asking Jev…' : 'Ask Jev'}
+                        {isSuggesting ? `Asking ${decisionName}…` : `Ask ${decisionName}`}
                     </button>
                 </div>
-                <p>Only this question is sent to OpenRouter. Your canvas and saved data stay in this browser.</p>
+                <p>Only this question is sent to {decisionName === 'Kev' ? 'the configured Kev endpoint' : 'OpenRouter'}. Your canvas and saved data stay in this browser.</p>
                 {suggestion && (
                     <p role="status">
-                        Jev suggests {personas.find(p => p.id === suggestion)?.name}. Select its card below if you agree.
+                        {decisionName} suggests {personas.find(p => p.id === suggestion)?.name}. Select its card below if you agree.
                     </p>
                 )}
                 {suggestError && <p role="alert">{suggestError}</p>}
