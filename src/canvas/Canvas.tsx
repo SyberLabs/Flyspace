@@ -23,6 +23,8 @@ import { WireRenderer } from './WireRenderer';
 import { snapToGrid, cn } from '@/lib/utils';
 import { BlockViews } from '@/core/registry/ViewRegistry';
 import { useClientMounted } from '@/core/hooks';
+import { Atmosphere } from '@/components/brand/Atmosphere';
+import { Sigil } from '@/components/brand/Sigil';
 
 interface CanvasProps {
     hideEmptyState?: boolean;
@@ -192,32 +194,39 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
 
                 {/* Empty state - shell-aware */}
                 {shellBlocks.length === 0 && !draggingBlockId && !hideEmptyState && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="text-center pointer-events-auto max-w-md px-6">
-                            <div className="text-[var(--text-primary)] text-lg mb-2">
-                                Start with an environment
+                    <>
+                        {/* Ambient plate: empty state only, never under blocks */}
+                        {hasMounted && <Atmosphere />}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="empty-state text-center pointer-events-auto max-w-md px-6">
+                                <div className="plate-frame mb-6" aria-hidden="true">
+                                    <Sigil size={64} />
+                                </div>
+                                <div className="empty-state-title mb-3">
+                                    Start with an environment
+                                </div>
+                                <p className="text-[var(--text-secondary)] text-base leading-relaxed mb-7">
+                                    A shell arrives pre-wired — live data blocks already connected to
+                                    personas, so you can ask a question immediately.
+                                </p>
+                                {onBrowseShells && (
+                                    <button
+                                        onClick={onBrowseShells}
+                                        className="btn btn-primary"
+                                    >
+                                        Browse shells
+                                    </button>
+                                )}
+                                <p className="text-[var(--text-muted)] text-xs mt-6">
+                                    Or drag a block from the sidebar &middot; press{' '}
+                                    <kbd className="px-2 py-0.5 border border-[var(--citadel-border)] rounded-full text-xs font-mono text-[var(--text-secondary)]">
+                                        &#8984;K
+                                    </kbd>{' '}
+                                    for the command palette
+                                </p>
                             </div>
-                            <p className="text-[var(--text-muted)] text-sm mb-5">
-                                A shell arrives pre-wired — live data blocks already connected to
-                                personas, so you can ask a question immediately.
-                            </p>
-                            {onBrowseShells && (
-                                <button
-                                    onClick={onBrowseShells}
-                                    className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--citadel-primary)] text-white hover:opacity-90 transition-opacity"
-                                >
-                                    Browse shells
-                                </button>
-                            )}
-                            <p className="text-[var(--text-muted)]/70 text-xs mt-5">
-                                Or drag a block from the sidebar &middot; press{' '}
-                                <kbd className="px-1.5 py-0.5 bg-[var(--citadel-surface)] rounded text-[10px] font-mono">
-                                    &#8984;K
-                                </kbd>{' '}
-                                for the command palette
-                            </p>
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
         </DndContext>

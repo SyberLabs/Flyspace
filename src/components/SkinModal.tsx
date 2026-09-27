@@ -212,7 +212,7 @@ export function SkinModal({ isOpen, onClose }: SkinModalProps) {
                                                 <div className={cn(
                                                     "w-10 h-10 rounded-lg flex items-center justify-center",
                                                     activePreset === preset.id
-                                                        ? "bg-[var(--citadel-primary)] text-white"
+                                                        ? "bg-[var(--citadel-primary)] text-[var(--citadel-void)]"
                                                         : "bg-[var(--citadel-surface)] text-[var(--text-secondary)]"
                                                 )}>
                                                     {PRESET_ICONS[preset.id]}
