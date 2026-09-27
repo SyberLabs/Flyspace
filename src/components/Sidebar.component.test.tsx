@@ -9,7 +9,7 @@ describe('Armory — keyless demo blocks are on the shelf', () => {
     it('shows every keyless block without hunting empty life-system folders', () => {
         render(<Sidebar />);
 
-        expect(screen.getByText('The Armory')).toBeTruthy();
+        expect(screen.getByText('Block library')).toBeTruthy();
         expect(screen.queryByText('Health Blocks')).toBeNull();
         expect(screen.queryByText('Career Blocks')).toBeNull();
 

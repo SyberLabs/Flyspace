@@ -318,7 +318,7 @@ export const useApiStore = create<ApiStoreState>()(
 export function getStatusColor(status: ApiStatus): string {
     switch (status) {
         case 'connected': return 'var(--truth-green)';
-        case 'idle': return 'var(--truth-amber)';
+        case 'idle': return 'var(--text-muted)';
         case 'error': return 'var(--truth-red)';
         case 'testing': return 'var(--citadel-primary)';
         case 'not_configured': return 'var(--text-muted)';

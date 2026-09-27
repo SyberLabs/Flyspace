@@ -1,100 +1,123 @@
+/* "sy" holds the SyberLabs component classes; it sits below utilities so
+   Tailwind utilities on the same element (md:hidden, mt-8, ...) still win. */
+@layer theme, base, components, sy, utilities;
 @import "tailwindcss";
 
 /* ============================================
    PROJECT OMNI: THE CITADEL - DESIGN SYSTEM
    ============================================ */
 
+/* SyberLabs Design System v1 tokens. The --citadel-*, --text-*, --truth-*
+   and --mind-* names below are the existing mechanism every component
+   already reads, so they are aliased onto --sy-* rather than renamed. */
 :root {
-  /* Core Palette - Dark Mode Default */
-  --citadel-void: #0a0a0f;
-  --citadel-surface: #12121a;
-  --citadel-elevated: #1a1a24;
-  --citadel-border: #2a2a3a;
+  --sy-bg: #05060A;
+  --sy-surface: #0B0D14;
+  --sy-surface-2: #121521;
+  --sy-line: #1F2433;
+  --sy-line-strong: #545E74;
+  --sy-text: #F2F5FB;
+  --sy-text-2: #AEB8CC;
+  --sy-text-3: #7F8AA3;
+  --sy-on-primary: #05060A;
+  --sy-brand: #4890F0;
+  --sy-ice: #90D8F0;
+  --sy-success: #4CC3A6;
+  --sy-warning: #F2B84B;
+  --sy-danger: #FF7A6B;
+  --sy-accent-omnios: #E99AD3;
+  --sy-focus: 0 0 0 2px var(--sy-bg), 0 0 0 4px var(--sy-brand);
+  --sy-shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --sy-radius-sm: 4px;
+  --sy-radius: 8px;
+  --sy-control: 44px;
+  --sy-ease: cubic-bezier(.2, .8, .2, 1);
 
-  /* Accent Colors */
-  --citadel-primary: #6366f1;
-  --citadel-primary-glow: #818cf8;
-  --citadel-secondary: #22d3ee;
-  --citadel-accent: #f472b6;
+  /* Aliases (existing names) */
+  --citadel-void: var(--sy-bg);
+  --citadel-bg: var(--sy-bg);
+  --citadel-surface: var(--sy-surface);
+  --citadel-elevated: var(--sy-surface-2);
+  --citadel-border: var(--sy-line);
+  --citadel-primary: var(--sy-brand);
+  --citadel-primary-glow: var(--sy-brand);
+  --citadel-secondary: var(--sy-ice);
+  --citadel-accent: var(--sy-accent-omnios);
+  --cyan-glow: var(--sy-ice);
 
-  /* Truth Block Colors */
-  --truth-green: #10b981;
-  --truth-red: #ef4444;
-  --truth-amber: #f59e0b;
+  --truth-green: var(--sy-success);
+  --truth-red: var(--sy-danger);
+  --truth-amber: var(--sy-warning);
 
-  /* Text */
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
+  --text-primary: var(--sy-text);
+  --text-secondary: var(--sy-text-2);
+  --text-muted: var(--sy-text-3);
 
-  /* Glassmorphism */
-  --glass-bg: rgba(18, 18, 26, 0.8);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-blur: 16px;
+  /* Glass and glow are retired: panels are flat surfaces with a hairline. */
+  --glass-bg: var(--sy-surface);
+  --glass-border: var(--sy-line);
+  --glass-blur: 0px;
+  --shadow-glow: none;
+  --shadow-elevated: var(--sy-shadow-overlay);
 
-  /* Shadows */
-  --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
-  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.4);
+  /* Fonts: set by next/font/local in layout.tsx */
+  --font-display: var(--font-sans-face), 'Instrument Sans', system-ui, sans-serif;
+  --font-serif: var(--font-serif-face), 'Instrument Serif', Georgia, serif;
+  --font-mono: var(--font-mono-face), 'JetBrains Mono', ui-monospace, monospace;
 
-  /* Fonts */
-  --font-display: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-
-  /* Spacing */
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
+  /* Spacing (4, 8, 12, 16, 24, 32) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
 
   /* Canvas Grid */
-  --grid-size: 20px;
+  --grid-size: 24px;
   --block-min-width: 280px;
   --block-min-height: 200px;
 
-  /* ========================================
-     MIND PALETTE - Frutiger Aero Solar Aquatic
-     Digital sublime, warm light, flowing water
-     ======================================== */
-
-  /* Solar Warmth */
-  --mind-solar-dawn: #ff9a56;
-  --mind-solar-noon: #ffd93d;
-  --mind-solar-glow: #fff4c4;
-
-  /* Aquatic Depths */
-  --mind-aqua-surface: #4ecdc4;
-  --mind-aqua-mid: #44a3aa;
-  --mind-aqua-deep: #1a535c;
-  --mind-aqua-abyss: #0d2d35;
-
-  /* Sublime Gradients */
-  --mind-gradient-horizon: linear-gradient(180deg, #ff9a56 0%, #ffd93d 25%, #87ceeb 50%, #4ecdc4 75%, #1a535c 100%);
-  --mind-gradient-solar: linear-gradient(135deg, #ffd93d 0%, #ff9a56 50%, #f472b6 100%);
-  --mind-gradient-aqua: linear-gradient(135deg, #4ecdc4 0%, #44a3aa 50%, #1a535c 100%);
-  --mind-gradient-aero: linear-gradient(180deg, rgba(255, 212, 128, 0.15) 0%, rgba(78, 205, 196, 0.1) 100%);
-
-  /* Glossy Glass Effects */
-  --mind-glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 100%);
-  --mind-glass-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 50%);
-  --mind-glass-border: rgba(255, 255, 255, 0.2);
-  --mind-glass-shadow: 0 8px 32px rgba(26, 83, 92, 0.4), 0 0 60px rgba(78, 205, 196, 0.15);
-
-  /* Bubble/Water Effects */
-  --mind-bubble-glow: 0 0 20px rgba(78, 205, 196, 0.4), 0 0 40px rgba(255, 212, 128, 0.2);
-  --mind-ripple-color: rgba(78, 205, 196, 0.3);
+  /* Mind: formerly a solar/aquatic palette; now the neutral system with the
+     brand as its one signal. */
+  --mind-solar-dawn: var(--sy-warning);
+  --mind-solar-noon: var(--sy-warning);
+  --mind-solar-glow: var(--sy-text);
+  --mind-aqua-surface: var(--sy-brand);
+  --mind-aqua-glow: var(--sy-brand);
+  --mind-aqua-mid: var(--sy-brand);
+  --mind-aqua-deep: var(--sy-surface-2);
+  --mind-aqua-abyss: var(--sy-surface);
+  --mind-gradient-horizon: var(--sy-surface);
+  --mind-gradient-solar: var(--sy-surface-2);
+  --mind-gradient-aqua: var(--sy-surface-2);
+  --mind-gradient-aero: var(--sy-surface);
+  --mind-glass-bg: var(--sy-surface);
+  --mind-glass-highlight: transparent;
+  --mind-glass-border: var(--sy-line);
+  --mind-glass-shadow: var(--sy-shadow-overlay);
+  --mind-bubble-glow: none;
+  --mind-ripple-color: rgba(72, 144, 240, 0.2);
 }
 
 @theme inline {
-  --color-background: var(--citadel-void);
-  --color-foreground: var(--text-primary);
+  --color-background: var(--sy-bg);
+  --color-foreground: var(--sy-text);
   --font-sans: var(--font-display);
+  --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
+  /* One radius for controls and panels; 4 for badges. */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-3xl: 8px;
 }
 
 /* ============================================
-   BASE STYLES
+   BASE
    ============================================ */
 
 * {
@@ -103,46 +126,118 @@
 
 html {
   scroll-behavior: smooth;
+  background: var(--sy-bg);
 }
 
 body {
-  background: var(--citadel-void);
-  color: var(--text-primary);
+  background: var(--sy-bg);
+  color: var(--sy-text);
   font-family: var(--font-display);
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.5;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Background Noise Texture */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  opacity: 0.03;
-  pointer-events: none;
-  z-index: 9999;
+::selection {
+  background: rgba(144, 216, 240, 0.2);
 }
 
+/* Focus: 2px brand ring, 2px offset, always visible on keyboard focus. */
+:focus-visible {
+  outline: 2px solid var(--sy-brand);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: var(--sy-brand);
+}
+
+@layer sy {
 /* ============================================
-   GLASSMORPHISM UTILITIES
+   SYBERLABS LOCKUP + LABEL
    ============================================ */
 
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
+.sy-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--sy-control);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  color: var(--sy-text);
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.glass-elevated {
-  background: rgba(26, 26, 36, 0.9);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: var(--shadow-elevated);
+.sy-lockup img {
+  height: 20px;
+  width: auto;
+}
+
+.sy-lockup .sy-lockup-sep {
+  color: var(--sy-text-3);
+}
+
+.sy-lockup .sy-lockup-product {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sy-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.sy-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sy-text-3);
+}
+
+/* Header icon button: 44x44 */
+.sy-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sy-control);
+  height: var(--sy-control);
+  border-radius: var(--sy-radius);
+  color: var(--sy-text-2);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background-color 120ms var(--sy-ease), color 120ms var(--sy-ease);
+}
+
+.sy-icon-btn:hover {
+  background: var(--sy-surface-2);
+  color: var(--sy-text);
+}
+
+.sy-icon-btn[aria-pressed="true"],
+.sy-icon-btn[aria-expanded="true"] {
+  color: var(--sy-text);
+  background: var(--sy-surface-2);
+}
+
+.sy-icon-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.5;
 }
 
 /* ============================================
@@ -151,16 +246,15 @@ body::before {
 
 .block-card {
   position: relative;
-  background: var(--citadel-elevated);
-  border: 1px solid var(--citadel-border);
-  border-radius: 8px;
+  background: var(--sy-surface);
+  border: 1px solid var(--sy-line);
+  border-radius: var(--sy-radius);
   overflow: visible;
-  transition: all 0.2s ease;
+  transition: border-color 120ms var(--sy-ease);
 }
 
 .block-card:hover {
-  border-color: var(--citadel-primary);
-  box-shadow: var(--shadow-glow);
+  border-color: var(--sy-line-strong);
 }
 
 .block-header {
@@ -168,7 +262,7 @@ body::before {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--sy-line);
   background: transparent;
 }
 
@@ -178,26 +272,21 @@ body::before {
 }
 
 /* ============================================
-   CANVAS STYLES
+   CANVAS
    ============================================ */
 
 .canvas-workspace {
   position: relative;
   width: 100%;
   height: 100%;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
-    linear-gradient(to bottom, var(--citadel-void), var(--citadel-surface));
-  background-size: 100% 100%, var(--grid-size) var(--grid-size);
+  background: var(--sy-bg);
   overflow: auto;
 }
 
 .canvas-grid {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--sy-line) 1px, transparent 1px);
   background-size: var(--grid-size) var(--grid-size);
   pointer-events: none;
 }
@@ -207,89 +296,96 @@ body::before {
    ============================================ */
 
 .connection-line {
-  stroke: var(--citadel-primary);
+  stroke: var(--sy-brand);
   stroke-width: 2;
   fill: none;
   stroke-linecap: round;
 }
 
 .connection-line-glow {
-  stroke: var(--citadel-primary-glow);
-  stroke-width: 4;
-  fill: none;
-  opacity: 0.3;
-  filter: blur(4px);
+  display: none;
 }
 
-/* Wire Port Styles */
 .wire-port {
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--citadel-surface);
-  border: 2px solid var(--citadel-border);
+  background: var(--sy-surface);
+  border: 1px solid var(--sy-line-strong);
   border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s ease;
-  color: var(--text-muted);
+  transition: border-color 120ms var(--sy-ease), color 120ms var(--sy-ease);
+  color: var(--sy-text-3);
 }
 
 .wire-port:hover {
-  background: var(--citadel-elevated);
-  border-color: var(--citadel-primary);
-  color: var(--citadel-primary);
-  transform: scale(1.1);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.3);
+  background: var(--sy-surface-2);
+  border-color: var(--sy-brand);
+  color: var(--sy-brand);
 }
 
 .wire-port-active {
-  border-color: var(--citadel-primary);
-  background: rgba(99, 102, 241, 0.1);
-  animation: pulse-glow 2s ease-in-out infinite;
+  border-color: var(--sy-brand);
+  color: var(--sy-brand);
 }
 
 .wire-port-source {
-  border-color: var(--truth-amber);
-}
-
-.wire-port-source:hover {
-  border-color: var(--citadel-primary);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.4);
+  border-color: var(--sy-line-strong);
 }
 
 .wire-port-target {
-  border-color: var(--truth-green);
-}
-
-.wire-port-target:hover {
-  border-color: var(--truth-green);
-  box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+  border-color: var(--sy-line-strong);
 }
 
 /* ============================================
-   SIDEBAR
+   SIDEBAR (block library)
    ============================================ */
 
 .sidebar {
   width: 280px;
-  height: 100vh;
-  background: var(--citadel-surface);
-  border-right: 1px solid var(--citadel-border);
+  height: 100%;
+  background: var(--sy-bg);
+  border-right: 1px solid var(--sy-line);
   display: flex;
   flex-direction: column;
+  flex: none;
 }
 
 .sidebar-header {
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--citadel-border);
+  padding: var(--space-4) var(--space-4) var(--space-2);
 }
 
 .sidebar-content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-4);
+  padding: 0 var(--space-2) var(--space-4);
+}
+
+/* Below 768px the library is a drawer over the canvas, opened from the header. */
+@media (max-width: 767px) {
+  .sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: min(320px, 100%);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 200ms var(--sy-ease), visibility 200ms;
+    box-shadow: var(--sy-shadow-overlay);
+  }
+
+  .sidebar[data-open="true"] {
+    transform: none;
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
 }
 
 /* ============================================
@@ -297,13 +393,15 @@ body::before {
    ============================================ */
 
 .topbar {
-  height: 56px;
-  background: var(--citadel-surface);
-  border-bottom: 1px solid var(--citadel-border);
+  height: 64px;
+  background: var(--sy-bg);
+  border-bottom: 1px solid var(--sy-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-6);
+  padding: 0 var(--space-4);
+  gap: var(--space-4);
+  flex: none;
 }
 
 /* ============================================
@@ -313,38 +411,38 @@ body::before {
 .command-palette-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
+  background: rgba(5, 6, 10, 0.72);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 20vh;
+  padding: 20vh var(--space-4) 0;
   z-index: 1000;
 }
 
 .command-palette {
   width: 100%;
   max-width: 640px;
-  background: var(--citadel-elevated);
-  border: 1px solid var(--citadel-border);
-  border-radius: 16px;
+  background: var(--sy-surface);
+  border: 1px solid var(--sy-line);
+  border-radius: var(--sy-radius);
   overflow: hidden;
-  box-shadow: var(--shadow-elevated);
+  box-shadow: var(--sy-shadow-overlay);
 }
 
 .command-palette-input {
   width: 100%;
-  padding: var(--space-4) var(--space-6);
+  height: 56px;
+  padding: 0 var(--space-4);
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--citadel-border);
-  color: var(--text-primary);
-  font-size: 1.125rem;
+  border-bottom: 1px solid var(--sy-line);
+  color: var(--sy-text);
+  font-size: 18px;
   outline: none;
 }
 
 .command-palette-input::placeholder {
-  color: var(--text-muted);
+  color: var(--sy-text-3);
 }
 
 .command-palette-list {
@@ -353,39 +451,51 @@ body::before {
   padding: var(--space-2);
 }
 
+.command-palette [cmdk-group-heading] {
+  padding: 8px 12px 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sy-text-3);
+}
+
 .command-item {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: 8px;
+  min-height: var(--sy-control);
+  padding: 0 var(--space-3);
+  border-radius: var(--sy-radius);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background-color 120ms var(--sy-ease);
 }
 
 .command-item:hover,
 .command-item[data-selected="true"] {
-  background: rgba(99, 102, 241, 0.1);
+  background: var(--sy-surface-2);
 }
 
 .command-item-icon {
   width: 20px;
   height: 20px;
-  color: var(--text-secondary);
+  color: var(--sy-text-2);
 }
 
 .command-item-label {
   flex: 1;
-  color: var(--text-primary);
+  color: var(--sy-text);
 }
 
 .command-item-shortcut {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  font-size: 12px;
+  color: var(--sy-text-3);
   font-family: var(--font-mono);
-  background: var(--citadel-surface);
+  border: 1px solid var(--sy-line);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--sy-radius-sm);
 }
 
 /* ============================================
@@ -397,72 +507,84 @@ body::before {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-radius: 8px;
-  font-size: 0.875rem;
+  min-height: var(--sy-control);
+  padding: 0 20px;
+  border-radius: var(--sy-radius);
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: none;
-  outline: none;
+  transition: background-color 120ms var(--sy-ease), color 120ms var(--sy-ease);
+  border: 1px solid transparent;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .btn-primary {
-  background: var(--citadel-primary);
-  color: white;
+  background: var(--sy-text);
+  color: var(--sy-on-primary);
 }
 
 .btn-primary:hover {
-  background: var(--citadel-primary-glow);
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+  background: #FFFFFF;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--sy-text);
+  border-color: var(--sy-line-strong);
+}
+
+.btn-secondary:hover {
+  background: var(--sy-surface-2);
 }
 
 .btn-ghost {
   background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid transparent;
+  color: var(--sy-text-2);
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
+  color: var(--sy-text);
 }
 
 .btn-skin {
-  background: linear-gradient(135deg, var(--citadel-accent) 0%, var(--citadel-primary) 100%);
-  color: white;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  background: transparent;
+  color: var(--sy-text);
+  border-color: var(--sy-line-strong);
 }
 
 .btn-skin:hover {
-  box-shadow: 0 0 30px rgba(244, 114, 182, 0.4);
+  background: var(--sy-surface-2);
 }
 
 /* ============================================
-   PROBABILITY BAR (for Polymarket)
+   PROBABILITY BAR (Polymarket)
    ============================================ */
 
 .probability-bar {
-  height: 6px;
-  background: var(--citadel-border);
-  border-radius: 3px;
+  height: 4px;
+  background: var(--sy-line);
+  border-radius: var(--sy-radius-sm);
   overflow: hidden;
 }
 
 .probability-fill {
   height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
+  border-radius: var(--sy-radius-sm);
+  transition: width 200ms var(--sy-ease);
 }
 
 .probability-fill.yes {
-  background: linear-gradient(90deg, var(--truth-green), #34d399);
+  background: var(--sy-success);
 }
 
 .probability-fill.no {
-  background: linear-gradient(90deg, var(--truth-red), #f87171);
+  background: var(--sy-danger);
+}
+
 }
 
 /* ============================================
@@ -479,34 +601,33 @@ body::before {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--citadel-border);
-  border-radius: 4px;
+  background: var(--sy-line);
+  border-radius: var(--sy-radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--sy-line-strong);
 }
 
 /* ============================================
-   ANIMATIONS
+   MOTION
    ============================================ */
 
 @keyframes pulse-glow {
-
   0%,
   100% {
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+    opacity: 1;
   }
 
   50% {
-    box-shadow: 0 0 40px rgba(99, 102, 241, 0.4);
+    opacity: 0.5;
   }
 }
 
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(-8px);
   }
 
   to {
@@ -516,11 +637,22 @@ body::before {
 }
 
 .animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+  animation: pulse-glow 1.2s ease-in-out infinite;
 }
 
 .animate-fade-in {
-  animation: fade-in 0.2s ease-out;
+  animation: fade-in 200ms var(--sy-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-glow,
+  .animate-pulse {
+    animation: none;
+  }
+
+  .animate-fade-in {
+    animation: none;
+  }
 }
 
 /* Source → target flow while a persona is reading this wire.
@@ -542,6 +674,6 @@ body::before {
   .wire-reading {
     animation: none;
     stroke-dasharray: none;
-    filter: brightness(1.35);
+    stroke-width: 3;
   }
 }

@@ -7,7 +7,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plug } from 'lucide-react';
+import { Plug, Braces, Type, Image as ImageIcon, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 import { wireService } from '@/core/services/wire.service';
 import { PortSchema, PortDataType } from '@/core/schemas/block.schema';
 import { cn } from '@/lib/utils';
@@ -28,24 +28,26 @@ interface DragState {
 }
 
 /**
- * Get visual configuration for a port type
+ * Get visual configuration for a port type. One colour (brand) for every
+ * wire; the type is carried by the icon and the word, never by colour alone.
  */
 function getPortTypeConfig(type: PortDataType): {
     color: string;
-    icon: string;
+    Icon: typeof Plug;
     label: string;
 } {
+    const color = 'var(--sy-brand)';
     switch (type) {
         case 'json':
-            return { color: '#3B82F6', icon: '🔷', label: 'JSON' };
+            return { color, Icon: Braces, label: 'JSON' };
         case 'text':
-            return { color: '#10B981', icon: '📝', label: 'Text' };
+            return { color, Icon: Type, label: 'Text' };
         case 'media':
-            return { color: '#8B5CF6', icon: '🎨', label: 'Media' };
+            return { color, Icon: ImageIcon, label: 'Media' };
         case 'any':
-            return { color: '#6B7280', icon: '🔌', label: 'Any' };
+            return { color, Icon: Plug, label: 'Any' };
         default:
-            return { color: '#6B7280', icon: '❓', label: 'Unknown' };
+            return { color, Icon: Plug, label: 'Unknown' };
     }
 }
 
@@ -167,34 +169,20 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
                 data-block-id={side === 'left' ? blockId : undefined}
                 className={cn(
                     "wire-port absolute top-1/2 -translate-y-1/2 z-20",
-                    "flex flex-col items-center gap-0.5 p-1.5 rounded-lg transition-all",
+                    "flex flex-col items-center gap-0.5 p-1.5 rounded-lg transition-colors",
                     side === 'right' ? "wire-port-source -right-4 cursor-grab active:cursor-grabbing" : "wire-port-target -left-4 cursor-crosshair",
-                    isHovering && "scale-110"
+                    (isHovering || isConnected) && "wire-port-active"
                 )}
-                style={{
-                    backgroundColor: isHovering
-                        ? typeConfig ? `${typeConfig.color}30` : 'rgba(99, 102, 241, 0.2)'
-                        : 'rgba(0, 0, 0, 0.6)',
-                    color: typeConfig?.color || 'var(--citadel-primary)',
-                    backdropFilter: 'blur(8px)',
-                    border: `1px solid ${typeConfig?.color || 'var(--citadel-primary)'}40`
-                }}
             >
                 {/* Port Type Icon */}
-                <span className="text-base leading-none">
-                    {typeConfig?.icon || <Plug className="w-4 h-4" />}
-                </span>
+                {typeConfig ? <typeConfig.Icon className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" /> : <Plug className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />}
 
                 {/* Connection Count Badge */}
                 {isConnected && (
                     <motion.span
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] font-bold"
-                        style={{
-                            backgroundColor: typeConfig?.color || 'var(--citadel-primary)',
-                            color: '#000'
-                        }}
+                        className="flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full font-mono text-xs font-medium bg-[var(--sy-brand)] text-[var(--sy-on-primary)]"
                     >
                         {connectionCount}
                     </motion.span>
@@ -219,29 +207,28 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
                         }}
                     >
                         <div
-                            className="px-3 py-2 rounded-lg text-xs backdrop-blur-xl border shadow-xl"
-                            style={{
-                                backgroundColor: 'rgba(0, 0, 0, 0.95)',
-                                borderColor: `${typeConfig!.color}60`
-                            }}
+                            className="px-3 py-2 rounded-lg text-xs border border-[var(--sy-line)] bg-[var(--sy-surface-2)] shadow-[var(--sy-shadow-overlay)]"
                         >
                             <div className="flex items-center gap-2 mb-1.5">
-                                <span className="text-base">{typeConfig!.icon}</span>
-                                <span className="font-semibold text-white">
+                                {typeConfig && <typeConfig.Icon className="w-4 h-4 text-[var(--sy-brand)]" strokeWidth={1.5} aria-hidden="true" />}
+                                <span className="text-sm font-semibold text-[var(--sy-text)]">
                                     {typeConfig!.label} {primaryPort.direction === 'input' ? 'Input' : 'Output'}
                                 </span>
                             </div>
-                            <div className="text-gray-300 text-[11px] space-y-0.5">
-                                {primaryPort.label && <div>• {primaryPort.label}</div>}
-                                {primaryPort.description && <div>• {primaryPort.description}</div>}
-                                <div>• Type: <span className="font-mono">{primaryPort.dataType}</span></div>
+                            <div className="text-[var(--sy-text-2)] text-xs space-y-0.5">
+                                {primaryPort.label && <div>{primaryPort.label}</div>}
+                                {primaryPort.description && <div>{primaryPort.description}</div>}
+                                <div>Type: <span className="font-mono">{primaryPort.dataType}</span></div>
                                 {isConnected && (
-                                    <div className="mt-1 font-medium" style={{ color: typeConfig!.color }}>
-                                        ✓ {connectionCount} connection{connectionCount !== 1 ? 's' : ''}
+                                    <div className="mt-1 flex items-center gap-1 font-medium text-[var(--sy-success)]">
+                                        <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                                        {connectionCount} connection{connectionCount !== 1 ? 's' : ''}
                                     </div>
                                 )}
-                                <div className="mt-1.5 text-blue-400 text-[10px]">
-                                    {side === 'right' ? '→ Drag to connect' : '← Drop wire here'}
+                                <div className="mt-1.5 flex items-center gap-1 text-[var(--sy-brand)]">
+                                    {side === 'right'
+                                        ? <><ArrowRight className="w-3.5 h-3.5" aria-hidden="true" /> Drag to connect</>
+                                        : <><ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" /> Drop wire here</>}
                                 </div>
                             </div>
                         </div>
@@ -255,30 +242,16 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
                     className="fixed inset-0 pointer-events-none z-50"
                     style={{ width: '100vw', height: '100vh' }}
                 >
-                    <defs>
-                        <linearGradient id="drag-wire-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="var(--citadel-primary)" />
-                            <stop offset="100%" stopColor="var(--mind-aqua-surface)" />
-                        </linearGradient>
-                        <filter id="drag-glow" x="-50%" y="-50%" width="200%" height="200%">
-                            <feGaussianBlur stdDeviation="3" result="blur" />
-                            <feMerge>
-                                <feMergeNode in="blur" />
-                                <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                        </filter>
-                    </defs>
                     {/* Bezier curve path */}
                     <motion.path
                         d={getDragPath()}
                         fill="none"
-                        stroke="url(#drag-wire-gradient)"
-                        strokeWidth={3}
+                        stroke="var(--sy-brand)"
+                        strokeWidth={2}
                         strokeDasharray="8,4"
                         strokeLinecap="round"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        style={{ filter: 'url(#drag-glow)' }}
                     />
                     {/* Endpoint circle */}
                     <motion.circle
@@ -288,7 +261,6 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
                         fill="var(--citadel-primary)"
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        style={{ filter: 'url(#drag-glow)' }}
                     />
                     {/* Arrow indicator at cursor */}
                     <motion.polygon

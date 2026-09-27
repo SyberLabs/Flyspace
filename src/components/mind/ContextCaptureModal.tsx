@@ -1,6 +1,7 @@
 import React from 'react';
 import { useMindStore } from '@/core/stores';
 import { ContextEntryType } from '@/core/schemas/mind.schema';
+import { Brain, Eye, Target, TrendingUp, X } from 'lucide-react';
 
 interface ContextCaptureModalProps {
     isOpen: boolean;
@@ -28,67 +29,52 @@ export function ContextCaptureModal({ isOpen, onClose, selectedText }: ContextCa
         onClose();
     };
 
+    const choices: { type: ContextEntryType; pool: string; label: string; hint: string; Icon: typeof Eye }[] = [
+        { type: 'observation', pool: 'observations', label: 'Observation', hint: 'Current reality', Icon: Eye },
+        { type: 'directive', pool: 'directives', label: 'Directive', hint: 'Action item', Icon: Target },
+        { type: 'prediction', pool: 'predictions', label: 'Prediction', hint: 'Future outcome', Icon: TrendingUp },
+        { type: 'memory', pool: 'memory', label: 'Memory', hint: 'Long-term fact', Icon: Brain }
+    ];
+
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[rgba(5,6,10,0.72)]" onClick={onClose}>
             <div
-                className="bg-[#0a0a0a] border border-[var(--cyan-glow)]/30 rounded-lg p-6 w-[500px] max-w-[90vw] shadow-[0_0_30px_rgba(0,0,0,0.5)] flex flex-col gap-4 animate-in fade-in zoom-in duration-200"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="capture-title"
+                className="bg-[var(--sy-surface)] border border-[var(--sy-line)] rounded-lg w-full max-w-[520px] shadow-[var(--sy-shadow-overlay)] flex flex-col animate-fade-in"
                 onClick={e => e.stopPropagation()}
             >
-                <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                    <h3 className="text-lg font-medium text-[var(--cyan-glow)] flex items-center gap-2">
-                        <span>🖊️</span> Capture Context
-                    </h3>
-                    <button onClick={onClose} className="text-white/50 hover:text-white transition-colors">✕</button>
+                <div className="flex justify-between items-center gap-4 pl-6 pr-3 py-3 border-b border-[var(--sy-line)]">
+                    <div>
+                        <p className="sy-label">Highlight</p>
+                        <h3 id="capture-title" className="text-lg leading-7 font-semibold text-[var(--sy-text)]">Capture context</h3>
+                    </div>
+                    <button type="button" onClick={onClose} className="sy-icon-btn" aria-label="Close">
+                        <X />
+                    </button>
                 </div>
 
-                <div className="bg-black/40 rounded p-3 border border-white/5 max-h-[200px] overflow-y-auto text-sm text-gray-300 font-mono italic">
-                    &quot;{selectedText}&quot;
-                </div>
+                <blockquote className="mx-6 mt-6 pl-4 border-l-2 border-[var(--sy-line-strong)] max-h-[200px] overflow-y-auto text-base text-[var(--sy-text-2)]">
+                    {selectedText}
+                </blockquote>
 
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                    <button
-                        className="flex items-center justify-center gap-2 p-3 bg-[var(--cyan-glow)]/10 hover:bg-[var(--cyan-glow)]/20 border border-[var(--cyan-glow)]/30 rounded transition-all group"
-                        onClick={() => handleSave('observation', 'observations')}
-                    >
-                        <span>👁️</span>
-                        <div className="flex flex-col items-start">
-                            <span className="text-sm font-medium text-[var(--cyan-glow)]">Observation</span>
-                            <span className="text-xs text-white/50">Current reality</span>
-                        </div>
-                    </button>
-
-                    <button
-                        className="flex items-center justify-center gap-2 p-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded transition-all"
-                        onClick={() => handleSave('directive', 'directives')}
-                    >
-                        <span>🎯</span>
-                        <div className="flex flex-col items-start">
-                            <span className="text-sm font-medium text-emerald-400">Directive</span>
-                            <span className="text-xs text-white/50">Action item</span>
-                        </div>
-                    </button>
-
-                    <button
-                        className="flex items-center justify-center gap-2 p-3 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded transition-all"
-                        onClick={() => handleSave('prediction', 'predictions')}
-                    >
-                        <span>🔮</span>
-                        <div className="flex flex-col items-start">
-                            <span className="text-sm font-medium text-purple-400">Prediction</span>
-                            <span className="text-xs text-white/50">Future outcome</span>
-                        </div>
-                    </button>
-
-                    <button
-                        className="flex items-center justify-center gap-2 p-3 bg-[var(--truth-amber)]/10 hover:bg-[var(--truth-amber)]/20 border border-[var(--truth-amber)]/30 rounded transition-all"
-                        onClick={() => handleSave('memory', 'memory')}
-                    >
-                        <span>🧠</span>
-                        <div className="flex flex-col items-start">
-                            <span className="text-sm font-medium text-[var(--truth-amber)]">Memory</span>
-                            <span className="text-xs text-white/50">Long-term fact</span>
-                        </div>
-                    </button>
+                <p className="mx-6 mt-6 text-sm font-medium text-[var(--sy-text)]">Save it as</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-6 pt-2">
+                    {choices.map(({ type, pool, label, hint, Icon }) => (
+                        <button
+                            key={type}
+                            type="button"
+                            className="flex items-center gap-3 min-h-11 px-4 py-3 border border-[var(--sy-line-strong)] rounded-lg text-left hover:bg-[var(--sy-surface-2)] transition-colors"
+                            onClick={() => handleSave(type, pool)}
+                        >
+                            <Icon className="w-5 h-5 flex-none text-[var(--sy-text-2)]" strokeWidth={1.5} aria-hidden="true" />
+                            <span className="flex flex-col">
+                                <span className="text-sm font-medium text-[var(--sy-text)]">{label}</span>
+                                <span className="text-xs text-[var(--sy-text-3)]">{hint}</span>
+                            </span>
+                        </button>
+                    ))}
                 </div>
             </div>
         </div>

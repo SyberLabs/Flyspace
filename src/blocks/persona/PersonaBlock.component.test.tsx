@@ -241,7 +241,7 @@ describe('PersonaBlockView — empty states', () => {
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
 
         expect(screen.getByText(/Wire data blocks to me/i)).toBeTruthy();
-        expect(screen.getByText(/Drag from block edge/i)).toBeTruthy();
+        expect(screen.getByText(/right port to this block/i)).toBeTruthy();
     });
 
     it('with wires and no messages, does not ask to wire data blocks', () => {
@@ -270,7 +270,7 @@ describe('PersonaBlockView — empty states', () => {
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
 
         expect(screen.queryByText(/Wire data blocks to me/i)).toBeNull();
-        expect(screen.queryByText(/Drag from block edge/i)).toBeNull();
+        expect(screen.queryByText(/right port to this block/i)).toBeNull();
         expect(screen.getByText(/2 sources connected/i)).toBeTruthy();
         expect(screen.getByText(/Think, or ask a question/i)).toBeTruthy();
     });

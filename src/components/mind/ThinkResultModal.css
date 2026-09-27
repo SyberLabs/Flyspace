@@ -1,189 +1,78 @@
 /* ============================================
-   THINK RESULT MODAL STYLES
-   Glassmorphic overlay for Mind's output
+   THINK RESULT MODAL (SyberLabs DS v1)
+   A flat overlay: surface, hairline, one overlay shadow.
    ============================================ */
 
 .think-modal-overlay {
     position: fixed;
     inset: 0;
-    background: linear-gradient(135deg,
-            rgba(13, 45, 53, 0.85) 0%,
-            rgba(10, 10, 15, 0.95) 100%);
-    backdrop-filter: blur(12px);
+    z-index: 200;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 3000;
-    padding: 2rem;
+    padding: 16px;
+    background: rgba(5, 6, 10, 0.72);
 }
 
 .think-modal {
     position: relative;
-    width: 100%;
-    max-width: 700px;
-    max-height: 80vh;
-    background: linear-gradient(180deg,
-            rgba(26, 83, 92, 0.85) 0%,
-            rgba(18, 18, 26, 0.95) 100%);
-    border-radius: 24px;
-    border: 1px solid rgba(78, 205, 196, 0.3);
-    box-shadow:
-        0 25px 50px -12px rgba(0, 0, 0, 0.5),
-        0 0 50px rgba(78, 205, 196, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    overflow: hidden;
     display: flex;
     flex-direction: column;
+    width: 100%;
+    max-width: 640px;
+    max-height: 80vh;
+    overflow: hidden;
+    background: var(--sy-surface);
+    border: 1px solid var(--sy-line);
+    border-radius: var(--sy-radius);
+    box-shadow: var(--sy-shadow-overlay);
 }
 
-/* Glassmorphism highlight */
-.think-modal-highlight {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 40%;
-    background: linear-gradient(180deg,
-            rgba(255, 255, 255, 0.08) 0%,
-            transparent 100%);
-    pointer-events: none;
-    border-radius: 24px 24px 0 0;
-}
-
-/* Header */
 .think-modal-header {
-    position: relative;
-    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.25rem 1.5rem;
-    background: linear-gradient(90deg,
-            rgba(255, 154, 86, 0.15) 0%,
-            rgba(255, 217, 61, 0.1) 50%,
-            rgba(78, 205, 196, 0.15) 100%);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.think-modal-title {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.think-modal-emoji {
-    font-size: 2rem;
-    filter: drop-shadow(0 0 10px rgba(255, 217, 61, 0.5));
+    gap: 16px;
+    padding: 16px 16px 16px 24px;
+    border-bottom: 1px solid var(--sy-line);
 }
 
 .think-modal-title h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 700;
-    background: linear-gradient(135deg,
-            var(--mind-solar-glow) 0%,
-            var(--mind-solar-noon) 50%,
-            var(--mind-aqua-surface) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    margin: 4px 0 0;
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--sy-text);
 }
 
-.think-modal-subtitle {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.think-modal-close {
-    width: 36px;
-    height: 36px;
-    border: none;
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-secondary);
-    border-radius: 50%;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.think-modal-close:hover {
-    background: rgba(255, 255, 255, 0.2);
-    color: var(--text-primary);
-    transform: rotate(90deg);
-}
-
-/* Content */
 .think-modal-content {
-    position: relative;
-    z-index: 1;
     flex: 1;
-    padding: 1.5rem;
     overflow-y: auto;
+    padding: 24px;
 }
 
 .think-modal-response {
-    font-size: 0.9375rem;
-    color: var(--text-primary);
-    line-height: 1.7;
+    max-width: 68ch;
+    font-size: 16px;
+    line-height: 24px;
+    color: var(--sy-text-2);
 }
 
 .think-modal-response p {
-    margin: 0 0 0.75rem 0;
+    margin: 0 0 8px;
 }
 
-.think-modal-response p:last-child {
-    margin-bottom: 0;
-}
-
-/* Footer */
 .think-modal-footer {
-    position: relative;
-    z-index: 1;
     display: flex;
-    gap: 0.75rem;
     justify-content: flex-end;
-    padding: 1rem 1.5rem;
-    background: rgba(0, 0, 0, 0.3);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 8px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--sy-line);
 }
 
-.think-modal-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.625rem 1.25rem;
-    border: none;
-    border-radius: 12px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.think-modal-btn-secondary {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-secondary);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.think-modal-btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: var(--text-primary);
-}
-
-.think-modal-btn-primary {
-    background: linear-gradient(135deg,
-            var(--mind-aqua-surface) 0%,
-            rgba(78, 205, 196, 0.8) 100%);
-    color: var(--mind-aqua-abyss);
-    box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
-}
-
-.think-modal-btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(78, 205, 196, 0.4);
+@media (max-width: 640px) {
+    .think-modal-footer {
+        flex-direction: column-reverse;
+    }
 }

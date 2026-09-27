@@ -75,7 +75,7 @@ export function CodeBlockView({ instanceId }: CodeBlockViewProps) {
                     </button>
 
                     {showLangPicker && (
-                        <div className="absolute top-full left-0 mt-1 z-10 bg-[var(--citadel-elevated)] border border-[var(--citadel-border)] rounded-lg shadow-lg py-1 min-w-[120px]">
+                        <div className="absolute top-full left-0 mt-1 z-10 bg-[var(--citadel-elevated)] border border-[var(--citadel-border)] rounded-lg shadow-[var(--sy-shadow-overlay)] py-1 min-w-[120px]">
                             {LANGUAGES.map(lang => (
                                 <button
                                     key={lang}

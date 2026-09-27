@@ -11,7 +11,6 @@ import {
     Search,
     Layers,
     Save,
-    Palette,
     Zap,
     Moon,
     Sun,
@@ -129,16 +128,6 @@ export function CommandPalette() {
                                         icon={<Layers className="w-4 h-4" />}
                                         label="Clear Canvas"
                                         onSelect={handleClearCanvas}
-                                    />
-                                    <CommandItem
-                                        icon={<Palette className="w-4 h-4" />}
-                                        label="[SKIN] Change Aesthetic"
-                                        shortcut="⌘⇧S"
-                                        onSelect={() => {
-                                            // Stub for Phase 2
-                                            alert('SKIN feature coming in Phase 2!');
-                                            closeCommandPalette();
-                                        }}
                                     />
                                 </Command.Group>
 

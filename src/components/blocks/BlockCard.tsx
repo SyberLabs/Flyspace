@@ -56,14 +56,11 @@ export function BlockCard({
     const pinBlock = useMindStore(state => state.pinBlock);
     const unpinBlock = useMindStore(state => state.unpinBlock);
 
-    // Check if this block is wired to any persona
-    // Check if this block is wired to any persona (Subscribe to wire store changes)
+    // Wire counts per side (subscribe to wire store changes); the port
+    // handles show them.
     const wires = useWireStore(state => state.wires);
     const wiresFromBlock = wires.filter(w => w.sourceBlockId === block.instance_id);
     const wiresToBlock = wires.filter(w => w.targetBlockId === block.instance_id);
-    const hasOutgoingWires = wiresFromBlock.length > 0;
-    const hasIncomingWires = wiresToBlock.length > 0;
-    const isWired = hasOutgoingWires || hasIncomingWires;
 
     const handleTogglePin = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -84,11 +81,7 @@ export function BlockCard({
             animate={{
                 opacity: 1,
                 scale: isDragging ? 1.02 : 1,
-                boxShadow: isDragging
-                    ? '0 20px 40px rgba(0, 0, 0, 0.4), 0 0 40px rgba(99, 102, 241, 0.2)'
-                    : isCited
-                        ? '0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 28px rgba(34, 211, 238, 0.25)'
-                        : undefined
+                boxShadow: isDragging ? '0 24px 64px rgba(0, 0, 0, 0.55)' : undefined
             }}
             exit={{ opacity: 0, scale: 0.95 }}
             onMouseEnter={() => setIsHovered(true)}
@@ -96,10 +89,9 @@ export function BlockCard({
             data-cited={isCited ? 'true' : 'false'}
             className={cn(
                 "block-card flex flex-col group",
-                isDragging && "ring-2 ring-[var(--citadel-primary)]",
-                isPinned && "ring-1 ring-[var(--mind-aqua-surface)] shadow-[0_0_12px_rgba(99,255,230,0.15)]",
-                !isPinned && isWired && "ring-1 ring-[var(--truth-amber)]/20",
-                isCited && "ring-2 ring-[var(--citadel-secondary)]"
+                isDragging && "ring-2 ring-[var(--sy-brand)]",
+                isPinned && "ring-1 ring-[var(--sy-line-strong)]",
+                isCited && "ring-2 ring-[var(--sy-brand)]"
             )}
             style={{
                 width: block.dimensions.width,
@@ -125,13 +117,6 @@ export function BlockCard({
                         >
                             <BlockGlyph name={block.schema.icon} className="w-3 h-3" />
                         </div>
-                        {/* Connection indicators as tiny dots */}
-                        {hasIncomingWires && (
-                            <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[var(--truth-green)]" />
-                        )}
-                        {hasOutgoingWires && (
-                            <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[var(--truth-amber)]" />
-                        )}
                     </div>
 
                     {/* Title - truncated */}
@@ -141,7 +126,7 @@ export function BlockCard({
 
                     {/* Pinned indicator - compact */}
                     {isPinned && (
-                        <span className="text-xs text-[var(--mind-aqua-surface)] flex-shrink-0">📍</span>
+                        <Pin className="w-3 h-3 text-[var(--sy-text-2)] flex-shrink-0" aria-label="Pinned" />
                     )}
                 </div>
 
@@ -227,7 +212,7 @@ function getStatusColor(status: ConnectionStatus): string {
         case 'connected': return 'var(--truth-green)';
         case 'connecting': return 'var(--truth-amber)';
         case 'error': return 'var(--truth-red)';
-        case 'paused': return 'var(--citadel-secondary)';
+        case 'paused': return 'var(--text-muted)';
         default: return 'var(--text-muted)';
     }
 }

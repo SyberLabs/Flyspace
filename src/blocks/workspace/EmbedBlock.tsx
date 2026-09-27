@@ -87,7 +87,7 @@ export function EmbedBlockView({ instanceId }: EmbedBlockViewProps) {
                 />
                 <button
                     onClick={handleLoadUrl}
-                    className="px-2 py-1 text-xs font-medium bg-[var(--citadel-primary)] text-white rounded hover:opacity-90"
+                    className="px-2 py-1 text-xs font-medium bg-[var(--sy-text)] text-[var(--sy-on-primary)] rounded hover:opacity-90"
                 >
                     Go
                 </button>

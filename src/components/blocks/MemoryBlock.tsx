@@ -100,7 +100,7 @@ export function MemoryBlockView({ instanceId }: MemoryBlockProps) {
                         </option>
                     ))}
                 </select>
-                <span className="text-[10px] text-[var(--text-muted)] tabular-nums">
+                <span className="text-xs text-[var(--text-muted)] tabular-nums">
                     {entries.length}
                 </span>
             </div>

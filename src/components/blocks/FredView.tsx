@@ -98,7 +98,7 @@ export function FredView({
                 >
                     {metrics && latest !== null && (
                         <div className="p-3 rounded-md bg-[var(--citadel-surface)]/60 border border-[var(--citadel-border)]">
-                            <div className="text-[10px] text-[var(--text-muted)]">Latest</div>
+                            <div className="text-xs text-[var(--text-muted)]">Latest</div>
                             <div className="flex items-baseline gap-2">
                                 <div className="text-lg font-semibold text-[var(--text-primary)]">
                                     {formatValue(latest)}
@@ -128,7 +128,7 @@ export function FredView({
             </div>
 
             {lastUpdated && (
-                <div className="px-3 py-2 text-[10px] text-[var(--text-muted)] border-t border-[var(--citadel-border)]">
+                <div className="px-3 py-2 text-xs text-[var(--text-muted)] border-t border-[var(--citadel-border)]">
                     Updated {new Date(lastUpdated).toLocaleString()}
                 </div>
             )}

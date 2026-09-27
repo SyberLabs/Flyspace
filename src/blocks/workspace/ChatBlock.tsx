@@ -134,9 +134,7 @@ export function ChatBlockView({ instanceId }: ChatBlockViewProps) {
         <div className="flex flex-col h-full">
             {/* Compact Header */}
             <div className="flex items-center gap-1.5 px-2 py-1 border-b border-[var(--citadel-border)]/50">
-                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--mind-aqua-surface)] to-[var(--citadel-primary)] flex items-center justify-center">
-                    <Bot className="w-2.5 h-2.5 text-white" />
-                </div>
+                <Bot className="w-4 h-4 text-[var(--sy-text-3)]" strokeWidth={1.5} aria-hidden="true" />
                 <span className="text-xs font-medium text-[var(--text-secondary)]">
                     {activePersona?.name || 'Mind'}
                 </span>
@@ -171,7 +169,7 @@ export function ChatBlockView({ instanceId }: ChatBlockViewProps) {
                                 className={cn(
                                     "max-w-[85%] px-2 py-1 rounded-md text-xs leading-relaxed",
                                     msg.role === 'user'
-                                        ? "bg-[var(--citadel-primary)] text-white"
+                                        ? "bg-[var(--sy-text)] text-[var(--sy-on-primary)]"
                                         : "bg-[var(--citadel-surface)] text-[var(--text-primary)]"
                                 )}
                             >
@@ -183,7 +181,7 @@ export function ChatBlockView({ instanceId }: ChatBlockViewProps) {
                 {isLoading && (
                     <div className="flex gap-1.5 items-center text-[var(--text-muted)]">
                         <Loader2 className="w-3 h-3 animate-spin" />
-                        <span className="text-[10px]">Thinking...</span>
+                        <span className="text-xs">Thinking...</span>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
@@ -206,7 +204,7 @@ export function ChatBlockView({ instanceId }: ChatBlockViewProps) {
                         className={cn(
                             "p-1 rounded transition-colors",
                             input.trim() && !isLoading
-                                ? "bg-[var(--citadel-primary)] text-white"
+                                ? "bg-[var(--sy-text)] text-[var(--sy-on-primary)]"
                                 : "text-[var(--text-muted)]/50"
                         )}
                     >

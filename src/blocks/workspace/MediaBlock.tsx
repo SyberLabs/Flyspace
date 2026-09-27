@@ -231,7 +231,7 @@ export function MediaBlockView({ instanceId }: MediaBlockViewProps) {
                         <button
                             onClick={addMediaFromUrl}
                             disabled={!urlInput.trim()}
-                            className="px-3 py-2 bg-[var(--citadel-primary)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                            className="px-3 py-2 bg-[var(--sy-text)] text-[var(--sy-on-primary)] rounded-lg text-sm font-medium disabled:opacity-50"
                         >
                             Add
                         </button>
@@ -270,7 +270,7 @@ export function MediaBlockView({ instanceId }: MediaBlockViewProps) {
                                 {renderMediaItem(item)}
 
                                 {/* Overlay Controls */}
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <div className="absolute inset-0 bg-[rgba(5,6,10,0.72)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                     {!item.url.startsWith('data:') && (
                                         <a
                                             href={item.url}
@@ -291,7 +291,7 @@ export function MediaBlockView({ instanceId }: MediaBlockViewProps) {
 
                                 {/* File name badge for local files */}
                                 {item.name && (
-                                    <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-black/70 text-xs text-white truncate">
+                                    <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-[rgba(5,6,10,0.72)] text-xs text-white truncate">
                                         {item.name}
                                     </div>
                                 )}
@@ -304,7 +304,7 @@ export function MediaBlockView({ instanceId }: MediaBlockViewProps) {
             {/* Lightbox */}
             {selectedItem && selectedItem.type === 'image' && (
                 <div
-                    className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-8"
+                    className="fixed inset-0 z-50 bg-[rgba(5,6,10,0.72)] flex items-center justify-center p-8"
                     onClick={() => setSelectedItem(null)}
                 >
                     <button
@@ -325,7 +325,7 @@ export function MediaBlockView({ instanceId }: MediaBlockViewProps) {
             {/* PDF Viewer */}
             {selectedItem && selectedItem.type === 'pdf' && (
                 <div
-                    className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+                    className="fixed inset-0 z-50 bg-[rgba(5,6,10,0.72)] flex items-center justify-center p-4"
                     onClick={() => setSelectedItem(null)}
                 >
                     <button

@@ -107,26 +107,30 @@ export function LlmStatusPill() {
                 data-testid="llm-status-pill"
                 aria-haspopup="menu"
                 aria-expanded={open}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--citadel-border)] bg-[var(--citadel-elevated)] hover:border-[var(--citadel-primary)] transition-colors"
+                className="flex items-center gap-2 h-11 px-3 rounded-lg text-sm text-[var(--sy-text-2)] hover:text-[var(--sy-text)] hover:bg-[var(--sy-surface-2)] transition-colors"
             >
-                <Brain className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                <Brain className="w-5 h-5 text-[var(--sy-text-3)]" strokeWidth={1.5} aria-hidden="true" />
                 <span
+                    aria-hidden="true"
                     className={cn(
-                        'w-1.5 h-1.5 rounded-full',
-                        status === 'available' && 'bg-[var(--truth-green)]',
-                        status === 'unavailable' && 'bg-[var(--truth-red)]',
-                        status === 'checking' && 'bg-[var(--truth-amber)] animate-pulse'
+                        'w-2 h-2 rounded-full',
+                        status === 'available' && 'bg-[var(--sy-success)]',
+                        status === 'unavailable' && 'bg-[var(--sy-danger)]',
+                        status === 'checking' && 'bg-[var(--sy-warning)] animate-pulse'
                     )}
                 />
-                <span className="text-[10px] text-[var(--text-muted)]">{llmConfig.provider}</span>
+                <span className="font-mono text-xs">{llmConfig.provider}</span>
+                <span className="hidden xl:inline text-[var(--sy-text-3)]">
+                    {status === 'available' ? 'ready' : status === 'unavailable' ? 'offline' : 'checking'}
+                </span>
             </button>
 
             {open && (
                 <div
                     role="menu"
-                    className="absolute right-0 top-full mt-1.5 w-60 z-50 rounded-lg border border-[var(--citadel-border)] bg-[var(--citadel-surface)] shadow-xl overflow-hidden"
+                    className="absolute right-0 top-full mt-1.5 w-60 z-50 rounded-lg border border-[var(--sy-line)] bg-[var(--sy-surface-2)] shadow-[var(--sy-shadow-overlay)] overflow-hidden"
                 >
-                    <p className="px-3 pt-2.5 pb-1.5 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+                    <p className="px-3 pt-3 pb-2 sy-label">
                         Provider
                     </p>
 
@@ -139,21 +143,21 @@ export function LlmStatusPill() {
                                 onClick={() => { setProvider(p.id); setOpen(false); }}
                                 title={p.hint}
                                 className={cn(
-                                    'w-full text-left px-3 py-2 flex items-start gap-2 transition-colors',
+                                    'w-full text-left min-h-11 px-3 py-2 flex items-start gap-2 transition-colors',
                                     active
-                                        ? 'bg-[var(--citadel-primary)]/10'
-                                        : 'hover:bg-[var(--citadel-elevated)]'
+                                        ? 'bg-[var(--sy-bg)]'
+                                        : 'hover:bg-[var(--sy-bg)]'
                                 )}
                             >
                                 <Check
                                     className={cn(
-                                        'w-3 h-3 mt-0.5 flex-shrink-0',
-                                        active ? 'text-[var(--citadel-primary-glow)]' : 'opacity-0'
+                                        'w-4 h-4 mt-0.5 flex-shrink-0',
+                                        active ? 'text-[var(--sy-brand)]' : 'opacity-0'
                                     )}
                                 />
                                 <span className="min-w-0">
-                                    <span className="block text-xs text-[var(--text-primary)]">{p.label}</span>
-                                    <span className="block text-[10px] text-[var(--text-muted)] leading-snug">
+                                    <span className="block text-sm font-medium text-[var(--sy-text)]">{p.label}</span>
+                                    <span className="block text-xs text-[var(--text-muted)] leading-snug">
                                         {p.hint}
                                     </span>
                                 </span>
@@ -162,16 +166,16 @@ export function LlmStatusPill() {
                     })}
 
                     <div className="border-t border-[var(--citadel-border)] px-3 py-2 flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-[var(--text-muted)] truncate" title={hint}>
+                        <span className="text-xs text-[var(--text-muted)] truncate" title={hint}>
                             {hint}
                         </span>
                         <button
                             onClick={() => void ping()}
                             title="Re-check availability"
                             aria-label="Re-check availability"
-                            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--citadel-elevated)] transition-colors flex-shrink-0"
+                            className="sy-icon-btn flex-shrink-0"
                         >
-                            <RefreshCw className={cn('w-3 h-3', status === 'checking' && 'animate-spin')} />
+                            <RefreshCw className={cn(status === 'checking' && 'animate-spin')} />
                         </button>
                     </div>
                 </div>

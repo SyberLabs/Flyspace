@@ -1,12 +1,12 @@
 'use client';
 
 // ============================================
-// PROJECT OMNI: ARMORY SIDEBAR
+// OMNIOS: BLOCK LIBRARY (sidebar)
 // ============================================
 
-import { motion } from 'framer-motion';
 import {
     Search,
+    X,
     TrendingUp,
     Newspaper,
     Globe,
@@ -26,7 +26,6 @@ import { useState } from 'react';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
 import { OmniBlockSchema, BlockCategory } from '@/core/schemas/block.schema';
 import { useBlockStore, useUIStore } from '@/core/stores';
-import { cn } from '@/lib/utils';
 import { BlockGlyph } from '@/components/blockIcons';
 
 // Icon mapping
@@ -70,22 +69,22 @@ const DEFAULT_EXPANDED_CATEGORIES: BlockCategory[] = [
 ];
 
 const CATEGORY_LABELS: Record<BlockCategory, string> = {
-    truth: 'Truth Blocks',
-    pulse: 'Pulse Blocks',
-    physicality: 'Physicality Blocks',
-    model: 'Model Blocks',
-    workspace: 'Workspace Blocks',
-    system: 'System Blocks',
+    truth: 'Markets',
+    pulse: 'News',
+    physicality: 'Physical world',
+    model: 'Models',
+    workspace: 'Workspace',
+    system: 'System',
     health: 'Health Blocks',
     career: 'Career Blocks',
     finance: 'Finance Blocks',
     mind_system: 'Mind Blocks',
     relationships: 'Relationships Blocks',
-    environment: 'Environment Blocks',
+    environment: 'Environment',
     time: 'Time Blocks'
 };
 
-export function Sidebar() {
+export function Sidebar({ isOpen = false, onClose }: { isOpen?: boolean; onClose?: () => void } = {}) {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedCategories, setExpandedCategories] = useState<BlockCategory[]>(DEFAULT_EXPANDED_CATEGORIES);
 
@@ -110,73 +109,77 @@ export function Sidebar() {
     };
 
     return (
-        <aside className="sidebar">
-            {/* Header */}
-            <div className="sidebar-header">
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">The Armory</h2>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">Drag blocks to your Canvas</p>
+        <aside id="block-library" className="sidebar" data-open={isOpen} aria-label="Block library">
+            <div className="sidebar-header flex items-start justify-between gap-2">
+                <div>
+                    <h2 className="text-lg font-semibold leading-7 text-[var(--sy-text)]">Block library</h2>
+                    <p className="text-sm text-[var(--sy-text-3)]">Drag a block onto the canvas, or select it to add.</p>
+                </div>
+                {onClose && (
+                    <button type="button" onClick={onClose} className="sy-icon-btn md:hidden -mr-2 -mt-2" aria-label="Close block library">
+                        <X />
+                    </button>
+                )}
             </div>
 
-            {/* Search */}
-            <div className="px-4 py-3 border-b border-[var(--citadel-border)]">
+            <div className="px-4 pb-3">
+                <label htmlFor="block-search" className="sr-only">Search blocks</label>
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--sy-text-3)]" strokeWidth={1.5} aria-hidden="true" />
                     <input
-                        type="text"
-                        placeholder="Search blocks..."
+                        id="block-search"
+                        type="search"
+                        placeholder="Search blocks"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2 bg-[var(--citadel-elevated)] border border-[var(--citadel-border)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--citadel-primary)]"
+                        className="w-full h-11 pl-10 pr-4 bg-[var(--sy-surface)] border border-[var(--sy-line-strong)] rounded-lg text-base text-[var(--sy-text)] placeholder:text-[var(--sy-text-3)] focus:outline-none focus:border-[var(--sy-brand)]"
                     />
                 </div>
             </div>
 
-            {/* Block Categories */}
-            <div className="sidebar-content space-y-2">
+            <div className="sidebar-content">
+                {filteredBlocks.length === 0 && (
+                    <div className="px-2 py-6">
+                        <p className="text-base font-semibold text-[var(--sy-text)]">No blocks match</p>
+                        <p className="text-sm text-[var(--sy-text-2)] mt-1">Try a source name such as Polymarket or Weather.</p>
+                        <button type="button" onClick={() => setSearchQuery('')} className="btn btn-secondary mt-4">
+                            Clear search
+                        </button>
+                    </div>
+                )}
                 {ARMORY_CATEGORY_ORDER.map(category => {
                     const blocks = blocksByCategory[category] || [];
                     if (blocks.length === 0) return null;
                     const isExpanded = expandedCategories.includes(category);
 
                     return (
-                        <div key={category} className="rounded-lg overflow-hidden">
-                            {/* Category Header */}
+                        <section key={category} className="border-t border-[var(--sy-line)] first:border-t-0">
                             <button
+                                type="button"
                                 onClick={() => toggleCategory(category)}
-                                className="w-full flex items-center gap-2 px-3 py-2 bg-[var(--citadel-elevated)] hover:bg-[var(--citadel-border)]/30 transition-colors"
+                                aria-expanded={isExpanded}
+                                className="w-full h-11 flex items-center gap-3 px-2 rounded-lg text-[var(--sy-text-3)] hover:text-[var(--sy-text)] transition-colors"
                             >
-                                <span className="text-[var(--text-secondary)]">
-                                    {CATEGORY_ICONS[category]}
+                                <span aria-hidden="true">{CATEGORY_ICONS[category]}</span>
+                                <span className="flex-1 text-left sy-label !text-inherit">
+                                    {CATEGORY_LABELS[category]}
+                                    <span className="ml-2">{blocks.length}</span>
                                 </span>
-                                <div className="flex-1 text-left">
-                                    <span className="text-sm font-medium text-[var(--text-primary)]">
-                                        {CATEGORY_LABELS[category]}
-                                    </span>
-                                    <span className="text-xs text-[var(--text-muted)] ml-2">
-                                        ({blocks.length})
-                                    </span>
-                                </div>
                                 {isExpanded ? (
-                                    <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+                                    <ChevronDown className="w-4 h-4" aria-hidden="true" />
                                 ) : (
-                                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+                                    <ChevronRight className="w-4 h-4" aria-hidden="true" />
                                 )}
                             </button>
 
-                            {/* Category Blocks */}
                             {isExpanded && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    className="bg-[var(--citadel-surface)] border-t border-[var(--citadel-border)]"
-                                >
+                                <ul className="pb-2">
                                     {blocks.map(block => (
-                                        <BlockItem key={block.block_id} block={block} />
+                                        <BlockItem key={block.block_id} block={block} onAdded={onClose} />
                                     ))}
-                                </motion.div>
+                                </ul>
                             )}
-                        </div>
+                        </section>
                     );
                 })}
             </div>
@@ -190,9 +193,11 @@ export function Sidebar() {
 
 interface BlockItemProps {
     block: OmniBlockSchema;
+    /** Closes the mobile drawer once a block is added. */
+    onAdded?: () => void;
 }
 
-function BlockItem({ block }: BlockItemProps) {
+function BlockItem({ block, onAdded }: BlockItemProps) {
     const { addBlock } = useBlockStore();
     const { setDraggingBlock } = useUIStore();
 
@@ -210,39 +215,31 @@ function BlockItem({ block }: BlockItemProps) {
         // Quick-add to canvas at a default position
         const offset = Math.random() * 100;
         addBlock(block, { x: 320 + offset, y: 80 + offset });
+        onAdded?.();
     };
 
     return (
-        <div
-            draggable
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onClick={handleClick}
-            className={cn(
-                "cursor-grab active:cursor-grabbing",
-                "border-b border-[var(--citadel-border)]/50 last:border-b-0"
-            )}
-        >
-            <motion.div
-                whileHover={{ x: 4 }}
-                className={cn(
-                    "flex items-center gap-3 px-3 py-2.5",
-                    "hover:bg-[var(--citadel-elevated)] transition-colors"
-                )}
+        <li>
+            <button
+                type="button"
+                draggable
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onClick={handleClick}
+                title={block.description}
+                className="w-full min-h-11 flex items-center gap-3 px-2 py-2 rounded-lg text-left cursor-grab active:cursor-grabbing hover:bg-[var(--sy-surface-2)] transition-colors"
             >
-                <div className="w-8 h-8 rounded-lg bg-[var(--citadel-primary)]/10 flex items-center justify-center text-[var(--citadel-primary)]">
-                    <BlockGlyph name={block.icon} className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                <BlockGlyph name={block.icon} className="w-5 h-5 flex-none text-[var(--sy-text-3)]" />
+                <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-[var(--sy-text)] truncate">
                         {block.display_name}
-                    </p>
-                    <p className="text-xs text-[var(--text-muted)] truncate">
+                    </span>
+                    <span className="block text-xs text-[var(--sy-text-3)] truncate">
                         {block.description}
-                    </p>
-                </div>
-            </motion.div>
-        </div>
+                    </span>
+                </span>
+            </button>
+        </li>
     );
 }
 

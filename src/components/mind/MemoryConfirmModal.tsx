@@ -53,7 +53,7 @@ export function MemoryConfirmModal({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                        className="fixed inset-0 bg-[rgba(5,6,10,0.72)] z-50"
                     />
 
                     {/* Modal */}
@@ -65,14 +65,11 @@ export function MemoryConfirmModal({
                         onAnimationComplete={handleOpen}
                         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md"
                     >
-                        <div className="bg-[var(--citadel-elevated)] border border-[var(--citadel-border)] rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="bg-[var(--sy-surface)] border border-[var(--sy-line)] rounded-lg shadow-[var(--sy-shadow-overlay)] overflow-hidden">
                             {/* Header */}
-                            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--citadel-border)] bg-gradient-to-r from-[var(--truth-amber)]/10 to-[var(--mind-aqua-surface)]/10">
+                            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--citadel-border)]">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--truth-amber)] to-[var(--mind-aqua-surface)] flex items-center justify-center">
-                                        <Brain className="w-5 h-5 text-white" />
-                                    </div>
-                                    <div>
+                                                                        <div>
                                         <h2 className="text-lg font-semibold text-[var(--text-primary)]">
                                             Save to Memory?
                                         </h2>
@@ -114,11 +111,11 @@ export function MemoryConfirmModal({
                                         <textarea
                                             value={editedContent}
                                             onChange={(e) => setEditedContent(e.target.value)}
-                                            className="w-full h-32 px-4 py-3 bg-[var(--citadel-surface)] border border-[var(--citadel-primary)]/50 rounded-xl text-[var(--text-primary)] placeholder:text-[var(--text-muted)] resize-none focus:outline-none focus:border-[var(--citadel-primary)] transition-colors text-sm"
+                                            className="w-full h-32 px-4 py-3 bg-[var(--citadel-surface)] border border-[var(--citadel-primary)]/50 rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] resize-none focus:outline-none focus:border-[var(--citadel-primary)] transition-colors text-sm"
                                             autoFocus
                                         />
                                     ) : (
-                                        <div className="px-4 py-3 bg-[var(--citadel-surface)] border border-[var(--citadel-border)] rounded-xl">
+                                        <div className="px-4 py-3 bg-[var(--citadel-surface)] border border-[var(--citadel-border)] rounded-lg">
                                             <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap">
                                                 {editedContent}
                                             </p>
@@ -150,8 +147,8 @@ export function MemoryConfirmModal({
                                     className={cn(
                                         "px-5 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2",
                                         editedContent.trim()
-                                            ? "bg-gradient-to-r from-[var(--truth-amber)] to-[var(--mind-aqua-surface)] text-white hover:shadow-lg"
-                                            : "bg-[var(--citadel-border)] text-[var(--text-muted)] cursor-not-allowed"
+                                            ? "bg-[var(--sy-text)] text-[var(--sy-on-primary)] hover:bg-white"
+                                            : "bg-[var(--sy-text)] text-[var(--sy-on-primary)] opacity-40 cursor-not-allowed"
                                     )}
                                 >
                                     <Check className="w-4 h-4" />

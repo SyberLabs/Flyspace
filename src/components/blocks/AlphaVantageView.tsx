@@ -133,7 +133,7 @@ export function AlphaVantageView({
                             </div>
 
                             {lastUpdated && (
-                                <div className="text-[10px] text-[var(--text-muted)]">
+                                <div className="text-xs text-[var(--text-muted)]">
                                     Updated {new Date(lastUpdated).toLocaleString()}
                                 </div>
                             )}
@@ -152,7 +152,7 @@ function Metric({ label, value, format }: { label: string; value: number; format
 
     return (
         <div className="p-2 rounded-md bg-[var(--citadel-surface)]/60 border border-[var(--citadel-border)]">
-            <div className="text-[10px] text-[var(--text-muted)]">{label}</div>
+            <div className="text-xs text-[var(--text-muted)]">{label}</div>
             <div className="text-sm text-[var(--text-primary)]">{display}</div>
         </div>
     );

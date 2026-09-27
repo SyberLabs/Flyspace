@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================
-// PROJECT OMNI: MAIN APPLICATION
+// OMNIOS: MAIN APPLICATION
 // ============================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,9 +9,7 @@ import { Canvas } from '@/canvas/Canvas';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { CommandPalette } from '@/components/CommandPalette';
-import { SkinModal } from '@/components/SkinModal';
-import { Sprout } from 'lucide-react';
-import Link from 'next/link';
+import { Info } from 'lucide-react';
 import { ApiDashboardModal } from '@/components/ApiDashboard';
 import { ShellPanel } from '@/components/ShellPanel';
 import { MindPanel } from '@/components/mind';
@@ -28,7 +26,7 @@ export default function CitadelApp() {
     const { initializeDefaults } = useApiStore();
 
     const [isMindOpen, setIsMindOpen] = useState(false);
-    const [isSkinOpen, setIsSkinOpen] = useState(false);
+    const [isLibraryOpen, setIsLibraryOpen] = useState(false);
     const [isApiOpen, setIsApiOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isShellsOpen, setIsShellsOpen] = useState(false);
@@ -58,67 +56,52 @@ export default function CitadelApp() {
     }, [activeTool, captureSelection]);
     return (
         <div
-            className={`flex flex-col h-screen overflow-hidden bg-[var(--citadel-void)] ${activeTool === 'highlighter' ? 'cursor-text' : ''}`}
+            className={`flex flex-col h-dvh overflow-hidden bg-[var(--sy-bg)] ${activeTool === 'highlighter' ? 'cursor-text' : ''}`}
             onMouseUp={handleMouseUp}
         >
-            {/* Top Bar */}
             <TopBar
-                onOpenSkin={() => setIsSkinOpen(true)}
                 onOpenApi={() => setIsApiOpen(true)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenShells={() => setIsShellsOpen(true)}
+                onToggleLibrary={() => setIsLibraryOpen(o => !o)}
+                isLibraryOpen={isLibraryOpen}
             />
 
             {process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1' && (
-                <div className="px-3 py-2 text-xs text-center text-white bg-slate-800">
-                    Public preview: your canvas stays in this browser. AI answers and keyed data sources are disabled.
+                <div className="flex items-start gap-3 px-4 py-3 border-b border-[var(--sy-line)] text-sm text-[var(--sy-text-2)]" role="note">
+                    <Info className="w-5 h-5 flex-none text-[var(--sy-brand)]" strokeWidth={1.5} aria-hidden="true" />
+                    <p>
+                        <span className="font-semibold text-[var(--sy-text)]">Public preview.</span>{' '}
+                        Your canvas stays in this browser. AI answers and keyed data sources are off.
+                    </p>
                 </div>
             )}
 
-            {/* Main Content */}
-            <div className="flex flex-1 overflow-hidden">
-                {/* Sidebar / Armory */}
-                <Sidebar />
+            <div className="relative flex flex-1 overflow-hidden">
+                {/* Block library: a column on desktop, a drawer below 768px */}
+                <Sidebar isOpen={isLibraryOpen} onClose={() => setIsLibraryOpen(false)} />
+                {isLibraryOpen && (
+                    <button
+                        type="button"
+                        aria-label="Close block library"
+                        className="md:hidden absolute inset-0 z-30 bg-[rgba(5,6,10,0.72)]"
+                        onClick={() => setIsLibraryOpen(false)}
+                    />
+                )}
 
-                {/* Canvas Workspace - follows the active shell (root by default,
-                    or a template-spawned shell after using the Shell Store) */}
+                {/* Canvas follows the active shell (root by default, or a
+                    template-spawned shell after using the Shell Store) */}
                 <main className="flex-1 overflow-hidden relative">
                     <Canvas shellId={activeShellId} onBrowseShells={() => setIsShellsOpen(true)} />
-
-                    {/* Mind Dock - Always Visible */}
                     <MindDock onExpandPanel={() => setIsMindOpen(true)} />
-
-                    {/* Garden FAB - Bottom Right */}
-                    <Link
-                        href="/garden"
-                        className="absolute bottom-6 right-6 z-30 group"
-                    >
-                        <div className="flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105 transition-all duration-200">
-                            <Sprout className="w-5 h-5" />
-                            <span className="text-sm font-medium">Garden</span>
-                        </div>
-                    </Link>
                 </main>
             </div>
 
-            {/* Command Palette */}
             <CommandPalette />
-
-            {/* Shell Manager Panel */}
             <ShellPanel isOpen={isShellsOpen} onClose={() => setIsShellsOpen(false)} />
-
-            {/* Mind Panel */}
             <MindPanel isOpen={isMindOpen} onClose={() => setIsMindOpen(false)} />
-
-            {/* Skin Modal */}
-            <SkinModal isOpen={isSkinOpen} onClose={() => setIsSkinOpen(false)} />
-
-            {/* API Dashboard Modal */}
             <ApiDashboardModal isOpen={isApiOpen} onClose={() => setIsApiOpen(false)} />
-
-            {/* Settings Panel */}
             <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-
 
             {/* Context Capture Modal (for Highlighter tool) */}
             <ContextCaptureModal
@@ -127,7 +110,5 @@ export default function CitadelApp() {
                 selectedText={selection?.text || ''}
             />
         </div>
-);
+    );
 }
-
-

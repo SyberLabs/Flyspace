@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================
-// PROJECT OMNI: MIND PANEL
+// OMNIOS: MIND PANEL
 // Unified Mind Interface - Shell | Systems | Projects
 // ============================================
 
@@ -12,6 +12,7 @@ import { LLMProvider, PersonaConfig, ContextPool, ContextEntry } from '@/core/sc
 import { MemoryConfirmModal } from './MemoryConfirmModal';
 import { ThinkResultModal } from './ThinkResultModal';
 import { ContextCaptureModal } from './ContextCaptureModal';
+import { Brain, X, MousePointer2, Highlighter, Sparkles, Loader2, Check, Trash2, Pin, Eye, ChevronDown, ChevronRight, Users, MessageSquare, Share2, Settings as SettingsIcon } from 'lucide-react';
 import './MindPanel.css';
 interface MindPanelProps {
     isOpen: boolean;
@@ -85,44 +86,37 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
 
     return (
         <div className="mind-panel-overlay" onClick={onClose} onMouseUp={handleMouseUp}>
-            <div className={`mind-panel ${activeTool === 'highlighter' ? 'cursor-text' : ''}`} onClick={e => e.stopPropagation()}>
-                {/* Glossy highlight overlay */}
-                <div className="mind-panel-highlight" />
-
-                {/* Floating bubbles background */}
-                <div className="mind-bubbles">
-                    <div className="bubble bubble-1" />
-                    <div className="bubble bubble-2" />
-                    <div className="bubble bubble-3" />
-                    <div className="bubble bubble-4" />
-                    <div className="bubble bubble-5" />
-                </div>
-
+            <div className={`mind-panel ${activeTool === 'highlighter' ? 'cursor-text' : ''}`} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="mind-panel-title">
                 {/* Header */}
                 <header className="mind-panel-header">
                     <div className="mind-title">
-                        <span className="mind-icon">🧠</span>
                         <div>
-                            <h2>The Mind</h2>
-                            <span className="mind-subtitle">Cognitive Substrate v2.0</span>
+                            <p className="sy-label">Mind</p>
+                            <h2 id="mind-panel-title">Personas and context</h2>
                         </div>
                     </div>
 
                     {/* Tool Strip */}
-                    <div className="flex bg-black/20 rounded-lg p-1 gap-1 border border-white/5 mx-4">
+                    <div className="hidden sm:flex ml-auto" role="group" aria-label="Panel tool">
                         <button
-                            className={`p-1.5 rounded text-sm transition-colors ${activeTool === 'cursor' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`}
+                            type="button"
+                            className="sy-icon-btn"
+                            aria-pressed={activeTool === 'cursor'}
                             onClick={() => setActiveTool('cursor')}
                             title="Cursor Mode"
+                            aria-label="Cursor"
                         >
-                            🖱️
+                            <MousePointer2 />
                         </button>
                         <button
-                            className={`p-1.5 rounded text-sm transition-colors ${activeTool === 'highlighter' ? 'bg-[var(--cyan-glow)]/20 text-[var(--cyan-glow)]' : 'text-white/50 hover:text-white'}`}
+                            type="button"
+                            className="sy-icon-btn"
+                            aria-pressed={activeTool === 'highlighter'}
                             onClick={() => setActiveTool('highlighter')}
                             title="Context Highlighter"
+                            aria-label="Highlight text to capture context"
                         >
-                            🖊️
+                            <Highlighter />
                         </button>
                     </div>
 
@@ -130,7 +124,9 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                         <span className={`status-dot status-${status}`} />
                         <span className="status-text">{status}</span>
                     </div>
-                    <button className="mind-close" onClick={onClose}>✕</button>
+                    <button type="button" className="sy-icon-btn" onClick={onClose} aria-label="Close mind panel">
+                        <X />
+                    </button>
                 </header>
 
                 {/* Shell Mind Content */}
@@ -138,17 +134,19 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                         {/* Navigation Tabs */}
                         <nav className="mind-tabs">
                             {[
-                                { id: 'personas', icon: '👤', label: 'Personas' },
-                                { id: 'context', icon: '💭', label: 'Context' },
-                                { id: 'graph', icon: '🔗', label: 'Graph' },
-                                { id: 'settings', icon: '⚙️', label: 'Settings' }
+                                { id: 'personas', icon: <Users />, label: 'Personas' },
+                                { id: 'context', icon: <MessageSquare />, label: 'Context' },
+                                { id: 'graph', icon: <Share2 />, label: 'Graph' },
+                                { id: 'settings', icon: <SettingsIcon />, label: 'Settings' }
                             ].map(tab => (
                                 <button
                                     key={tab.id}
+                                    type="button"
                                     className={`mind-tab ${activeTab === tab.id ? 'active' : ''}`}
+                                    aria-current={activeTab === tab.id ? 'page' : undefined}
                                     onClick={() => setActiveTab(tab.id as typeof activeTab)}
                                 >
-                                    <span className="tab-icon">{tab.icon}</span>
+                                    <span className="tab-icon" aria-hidden="true">{tab.icon}</span>
                                     <span className="tab-label">{tab.label}</span>
                                 </button>
                             ))}
@@ -187,32 +185,33 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                             onClose={() => setThinkResult(null)}
                             response={thinkResult || ''}
                             personaName={activePersona?.name || 'The Mind'}
-                            personaEmoji={activePersona?.avatar || '🧠'}
+                            
                         />
 
                         {/* Footer with Think Button */}
                         <footer className="mind-footer">
                             {activePersona && (
                                 <div className="active-persona-badge">
-                                    <span className="persona-avatar">{activePersona.avatar}</span>
                                     <span className="persona-name">{activePersona.name}</span>
                                     <span className="persona-status">Active</span>
                                 </div>
                             )}
 
                             <button
+                                type="button"
+                                aria-busy={isThinking}
                                 className={`think-button ${isThinking ? 'thinking' : ''}`}
                                 onClick={handleThink}
                                 disabled={isThinking || process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1'}
                             >
                                 {isThinking ? (
                                     <>
-                                        <span className="think-spinner">⏳</span>
-                                        <span>Thinking...</span>
+                                        <Loader2 className="think-spinner" aria-hidden="true" />
+                                        <span>{activePersona?.name ?? 'Mind'} is thinking…</span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="think-icon">✨</span>
+                                        <Sparkles className="think-icon" aria-hidden="true" />
                                         <span>Think</span>
                                     </>
                                 )}
@@ -301,11 +300,11 @@ function PersonasView({ personas, activePersonaId, onSelect }: PersonasViewProps
                 {personas.map(persona => (
                 <button
                     key={persona.id}
+                    type="button"
+                    aria-pressed={persona.id === activePersonaId}
                     className={`persona-card ${persona.id === activePersonaId ? 'active' : ''}`}
                     onClick={() => onSelect(persona.id)}
                 >
-                    <div className="persona-card-highlight" />
-                    <div className="persona-avatar-large">{persona.avatar}</div>
                     <h3 className="persona-name">{persona.name}</h3>
                     <p className="persona-description">{persona.description}</p>
 
@@ -325,7 +324,7 @@ function PersonasView({ personas, activePersonaId, onSelect }: PersonasViewProps
                     </div>
 
                     {persona.id === activePersonaId && (
-                        <div className="persona-active-badge">✓ Active</div>
+                        <div className="persona-active-badge"><span className="sy-dot bg-[var(--sy-brand)]" aria-hidden="true" /> Active</div>
                     )}
                 </button>
                 ))}
@@ -399,13 +398,14 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
         <div className="context-pools">
             {/* Header Actions */}
             <div className="flex justify-between items-center mb-4 px-2">
-                <h3 className="text-sm font-medium text-white/50 uppercase tracking-wider">Context Memory</h3>
+                <h3 className="sy-label">Context memory</h3>
                 <button
+                    type="button"
                     onClick={onClearAll}
-                    className="text-xs px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors flex items-center gap-1"
+                    className="btn btn-ghost !text-[var(--sy-danger)]"
                     title="Clear Observations, Predictions, Directives"
                 >
-                    <span>🗑️</span> Clear Context
+                    <Trash2 className="w-4 h-4" aria-hidden="true" /> Clear context
                 </button>
             </div>
 
@@ -413,7 +413,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
             {focusPool && (
                 <div className="focus-section">
                     <div className="focus-header">
-                        <span className="focus-icon">📍</span>
+                        <Pin className="focus-icon" aria-hidden="true" />
                         <span className="focus-title">Focused Blocks</span>
                         <span className="focus-count">{focusPool.entries.length}/5</span>
                         {focusPool.entries.length > 0 && (
@@ -429,7 +429,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                     {focusPool.entries.length === 0 ? (
                         <div className="focus-empty">
                             <p>No blocks pinned</p>
-                            <p className="focus-hint">Click 📌 on any block to focus it for deep analysis</p>
+                            <p className="focus-hint">Pin a block from its header to focus it for deeper analysis.</p>
                         </div>
                     ) : (
                         <div className="focus-blocks">
@@ -446,14 +446,15 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                                                 disabled={isCrystallizing}
                                                 title="Crystallize to Memory"
                                             >
-                                                {isCrystallizing ? '⏳' : '🧠'}
+                                                {isCrystallizing ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Brain className="w-4 h-4" aria-hidden="true" />}
                                             </button>
                                             <button
                                                 className="focus-unpin-btn"
                                                 onClick={() => entry.sourceBlockId && unpinBlock(entry.sourceBlockId)}
                                                 title="Unpin"
+                                                aria-label="Unpin"
                                             >
-                                                ✕
+                                                <X className="w-4 h-4" aria-hidden="true" />
                                             </button>
                                         </div>
                                     </div>
@@ -471,7 +472,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
             {observationsPool && (
                 <div className="awareness-section">
                     <div className="awareness-header">
-                        <span className="awareness-icon">👁️</span>
+                        <Eye className="awareness-icon" aria-hidden="true" />
                         <span className="awareness-title">Awareness</span>
                         <span className="awareness-status">
                             {observationsPool.entries.length} observations tracked
@@ -492,8 +493,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                         className="pool-header"
                         onClick={() => setExpandedPool(expandedPool === pool.id ? null : pool.id)}
                     >
-                        <span className="pool-icon">{pool.icon}</span>
-                        <div className="pool-info">
+                                                <div className="pool-info">
                             <span className="pool-name">{pool.name}</span>
                             <span className="pool-count">{pool.entries.length} entries</span>
                         </div>
@@ -504,7 +504,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                             />
                         </div>
                         <span className="pool-expand-icon">
-                            {expandedPool === pool.id ? '▼' : '▶'}
+                            {expandedPool === pool.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </span>
                     </button>
 
@@ -518,7 +518,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                                         <div className="flex justify-between items-start gap-2">
                                             <div>
                                                 <span className="entry-type">
-                                                    {Boolean(entry.metadata?.isMemorySuggestion) ? '🧠 Suggestion' : entry.type}
+                                                    {Boolean(entry.metadata?.isMemorySuggestion) ? 'Suggestion' : entry.type}
                                                 </span>
                                                 <p className="entry-content">{entry.content}</p>
                                                 <span className="entry-time">
@@ -529,13 +529,13 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                                             {/* Allow saving suggestions to memory */}
                                             {!!entry.metadata?.isMemorySuggestion && (
                                                 <button
-                                                    className="p-1 hover:bg-[var(--truth-amber)]/20 text-[var(--truth-amber)] rounded"
+                                                    className="sy-icon-btn"
                                                     onClick={() => handleCrystallizeAndSave(entry)}
                                                     disabled={isCrystallizing}
                                                     title="Save to Memory"
                                                 >
                                                     <span className="sr-only">Save</span>
-                                                    {isCrystallizing ? '⏳' : '🧠'}
+                                                    {isCrystallizing ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Brain className="w-4 h-4" aria-hidden="true" />}
                                                 </button>
                                             )}
                                         </div>
@@ -601,14 +601,12 @@ function GraphView({ graph }: GraphViewProps) {
             <div className="graph-canvas">
                 {graph.nodes.length === 0 ? (
                     <div className="graph-empty">
-                        <span className="graph-empty-icon">🌊</span>
-                        <p>Knowledge graph is empty</p>
-                        <p className="graph-empty-hint">Add blocks to the Shell to populate the graph</p>
+                        <p className="graph-empty-title">The knowledge graph is empty.</p>
+                        <p className="graph-empty-hint">Add blocks to the shell and it fills in as they load.</p>
                     </div>
                 ) : (
                     <div className="graph-placeholder">
-                        <span className="graph-icon">🔮</span>
-                        <p>Graph visualization coming soon</p>
+                        <p>{graph.nodes.length} nodes are in the graph. A visual view is not built yet.</p>
                     </div>
                 )}
             </div>
@@ -626,10 +624,10 @@ interface SettingsViewProps {
 }
 
 function SettingsView({ llmConfig, onProviderChange }: SettingsViewProps) {
-    const providers: { id: LLMProvider; name: string; icon: string; needsKey: boolean; envVar?: string }[] = [
-        { id: 'local', name: 'Local (Ollama)', icon: '🏠', needsKey: false },
-        { id: 'anthropic', name: 'Anthropic', icon: '🧠', needsKey: true, envVar: 'ANTHROPIC_API_KEY' },
-        { id: 'google', name: 'Google Gemini', icon: '🔮', needsKey: true, envVar: 'GOOGLE_API_KEY' }
+    const providers: { id: LLMProvider; name: string; needsKey: boolean; envVar?: string }[] = [
+        { id: 'local', name: 'Local (Ollama)', needsKey: false },
+        { id: 'anthropic', name: 'Anthropic', needsKey: true, envVar: 'ANTHROPIC_API_KEY' },
+        { id: 'google', name: 'Google Gemini', needsKey: true, envVar: 'GOOGLE_API_KEY' }
     ];
 
     const currentProvider = providers.find(p => p.id === llmConfig.provider);
@@ -647,13 +645,14 @@ function SettingsView({ llmConfig, onProviderChange }: SettingsViewProps) {
                     {providers.map(provider => (
                         <button
                             key={provider.id}
+                            type="button"
+                            aria-pressed={llmConfig.provider === provider.id}
                             className={`provider-card ${llmConfig.provider === provider.id ? 'active' : ''}`}
                             onClick={() => handleProviderSelect(provider.id)}
                         >
-                            <span className="provider-icon">{provider.icon}</span>
                             <span className="provider-name">{provider.name}</span>
                             {llmConfig.provider === provider.id && (
-                                <span className="provider-check">✓</span>
+                                <Check className="provider-check" aria-label="Selected" />
                             )}
                         </button>
                     ))}

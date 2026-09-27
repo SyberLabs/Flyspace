@@ -12,7 +12,6 @@ import {
     ChevronUp,
     Zap,
     Loader2,
-    Plug,
     MessageSquare,
     Gem,
     Workflow,
@@ -144,7 +143,6 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                 onClick={toggleCollapsed}
             >
                 <div className="flex items-center gap-3">
-                    <span className="text-2xl">{config.avatar}</span>
                     <div>
                         <p className="text-sm font-medium text-[var(--text-primary)]">
                             {personaData.customName || config.name}
@@ -161,48 +159,32 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
 
     return (
         <div className="flex flex-col h-full relative">
-            {/* Compact Header */}
-            <div
-                className="flex items-center justify-between px-2 py-1.5 border-b border-[var(--citadel-border)]/50"
-                style={{ backgroundColor: `${config.color}08` }}
-            >
-                <div className="flex items-center gap-2">
-                    <span className="text-base">{config.avatar}</span>
-                    <div>
-                        <p className="text-xs font-medium" style={{ color: config.color }}>
-                            {personaData.customName || config.name}
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div
-                        className="flex items-center gap-1 px-2 py-1 rounded-full text-xs"
-                        style={{ backgroundColor: `${config.color}20`, color: config.color }}
-                    >
-                        <Plug className="w-3 h-3" />
-                        {connectedWires.length}
-                    </div>
+            {/* Header: name, sources, refresh, collapse */}
+            <div className="flex items-center justify-between gap-2 pl-3 pr-1 h-11 border-b border-[var(--sy-line)]">
+                <p className="min-w-0 truncate text-sm">
+                    <span className="font-semibold text-[var(--sy-text)]">{personaData.customName || config.name}</span>
+                    <span className="ml-2 text-[var(--sy-text-3)]">
+                        {connectedWires.length === 0 ? 'No wires' : `${connectedWires.length} connected`}
+                    </span>
+                </p>
+                <div className="flex items-center flex-none">
                     <button
-                        onClick={toggleCollapsed}
-                        className="p-1 hover:bg-[var(--citadel-surface)] rounded transition-colors"
-                        title="Collapse"
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleUpdateContext(); }}
+                        className="h-11 px-2 text-sm text-[var(--sy-brand)] hover:underline underline-offset-[3px]"
                     >
-                        <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
+                        Refresh
+                    </button>
+                    <button
+                        type="button"
+                        onClick={toggleCollapsed}
+                        className="sy-icon-btn"
+                        title="Collapse"
+                        aria-label="Collapse"
+                    >
+                        <ChevronUp />
                     </button>
                 </div>
-            </div>
-
-            {/* Compact Context Status */}
-            <div className="flex items-center justify-between px-2 py-1 border-b border-[var(--citadel-border)]/50 bg-[var(--citadel-surface)]/30">
-                <span className="text-[10px] text-[var(--text-muted)]">
-                    {connectedWires.length === 0 ? 'No wires' : `${connectedWires.length} connected`}
-                </span>
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleUpdateContext(); }}
-                    className="text-[10px] text-[var(--citadel-primary)] hover:underline"
-                >
-                    Refresh
-                </button>
             </div>
 
             {/* Messages - maximized */}
@@ -214,27 +196,27 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                         {connectedWires.length === 0 ? (
                             <>
                                 <MessageSquare
-                                    className="w-8 h-8 mb-2 opacity-50"
-                                    style={{ color: config.color }}
+                                    className="w-6 h-6 mb-3 text-[var(--sy-text-3)]"
+                                    strokeWidth={1.5}
                                 />
                                 <p className="text-sm text-[var(--text-muted)]">
                                     Wire data blocks to me for context
                                 </p>
                                 <p className="text-xs text-[var(--text-muted)]/70 mt-1">
-                                    Drag from block edge → drop here
+                                    Drag from a block&apos;s right port to this block
                                 </p>
                             </>
                         ) : (
                             <>
                                 <Zap
-                                    className="w-8 h-8 mb-2 opacity-50"
-                                    style={{ color: config.color }}
+                                    className="w-6 h-6 mb-3 text-[var(--sy-text-3)]"
+                                    strokeWidth={1.5}
                                 />
                                 <p className="text-sm text-[var(--text-muted)]">
                                     {connectedWires.length} {connectedWires.length === 1 ? 'source' : 'sources'} connected
                                 </p>
                                 <p className="text-xs text-[var(--text-muted)]/70 mt-1">
-                                    Ready — Think, or ask a question
+                                    Ready. Think, or ask a question.
                                 </p>
                             </>
                         )}
@@ -248,17 +230,13 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                                 msg.role === 'user' ? "justify-end" : "justify-start"
                             )}
                         >
-                            {msg.role === 'assistant' && (
-                                <span className="text-lg flex-shrink-0">{config.avatar}</span>
-                            )}
                             <div
                                 className={cn(
                                     "max-w-[85%] px-3 py-2 rounded-lg text-sm",
                                     msg.role === 'user'
-                                        ? "text-white"
-                                        : "bg-[var(--citadel-surface)] text-[var(--text-primary)] border border-[var(--citadel-border)]"
+                                        ? "bg-[var(--sy-surface-2)] text-[var(--sy-text)]"
+                                        : "bg-[var(--sy-bg)] text-[var(--sy-text)] border border-[var(--sy-line)]"
                                 )}
-                                style={msg.role === 'user' ? { backgroundColor: config.color } : undefined}
                             >
                                 {msg.role === 'assistant' ? (
                                     <AnswerBody content={msg.content} />
@@ -270,7 +248,7 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                                     show={msg.role === 'assistant'}
                                 />
                                 {msg.stopped && (
-                                    <p className="mt-1 text-[10px] text-[var(--text-muted)]">Stopped</p>
+                                    <p className="mt-1 text-xs text-[var(--text-muted)]">Stopped</p>
                                 )}
                                 {msg.role === 'assistant' && !msg.content.startsWith('⚠️') && (
                                     <CrystallizeButton
@@ -282,7 +260,7 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                                     <button
                                         type="button"
                                         onClick={() => { void regeneratePersonaTurn(instanceId); }}
-                                        className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                                        className="mt-1.5 flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                                         title="Regenerate this answer"
                                     >
                                         <RotateCcw className="w-3 h-3" />
@@ -295,18 +273,17 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                 )}
                 {personaData.isThinking && (
                     <div className="flex gap-2 items-center">
-                        <span className="text-lg">{config.avatar}</span>
                         <div className="flex items-center gap-2 px-3 py-2 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
-                            <Loader2 className="w-4 h-4 animate-spin" style={{ color: config.color }} />
-                            <span className="text-sm text-[var(--text-muted)]">Thinking...</span>
+                            <Loader2 className="w-4 h-4 animate-spin text-[var(--sy-brand)]" aria-hidden="true" />
+                            <span className="text-sm text-[var(--sy-text-2)]">{config.name} is thinking…</span>
                         </div>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Compact Input Area */}
-            <div className="p-1.5 border-t border-[var(--citadel-border)]/50">
+            {/* Input Area */}
+            <div className="p-2 border-t border-[var(--sy-line)]">
                 <div className="flex gap-1">
                     <input
                         type="text"
@@ -314,45 +291,51 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                         placeholder={`Ask ${config.name}...`}
+                        aria-label={`Ask ${config.name}`}
                         disabled={personaData.isThinking}
-                        className="flex-1 px-2 py-1 bg-transparent border border-[var(--citadel-border)]/50 rounded text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]/50 focus:outline-none focus:border-[var(--citadel-primary)] disabled:opacity-50"
+                        className="flex-1 min-w-0 h-11 px-3 bg-[var(--sy-bg)] border border-[var(--sy-line-strong)] rounded-lg text-sm text-[var(--sy-text)] placeholder:text-[var(--sy-text-3)] focus:outline-none focus:border-[var(--sy-brand)] disabled:opacity-40"
                     />
                     {hasChain && (
                         <button
+                            type="button"
                             onClick={() => { if (!personaData.isThinking) void runChain(); }}
                             disabled={personaData.isThinking}
-                            className="p-1 rounded transition-colors disabled:opacity-50 text-[var(--citadel-primary-glow)] bg-[var(--citadel-primary)]/15 hover:bg-[var(--citadel-primary)]/25"
+                            className="sy-icon-btn flex-none disabled:opacity-40"
                             title="Run chain — think upstream personas first, then this one"
+                            aria-label="Run chain"
                         >
-                            <Workflow className="w-3 h-3" />
+                            <Workflow />
                         </button>
                     )}
                     {personaData.isThinking ? (
                         <button
+                            type="button"
                             onClick={() => { stopPersonaTurn(instanceId); }}
-                            className="p-1 rounded transition-colors"
-                            style={{ backgroundColor: `${config.color}20`, color: config.color }}
+                            className="sy-icon-btn flex-none"
                             title="Stop"
+                            aria-label="Stop"
                         >
-                            <Square className="w-3 h-3" />
+                            <Square />
                         </button>
                     ) : (
                         <button
+                            type="button"
                             onClick={handleThink}
-                            className="p-1 rounded transition-colors"
-                            style={{ backgroundColor: `${config.color}20`, color: config.color }}
+                            className="sy-icon-btn flex-none"
                             title="Think"
+                            aria-label="Think"
                         >
-                            <Zap className="w-3 h-3" />
+                            <Zap />
                         </button>
                     )}
                     <button
+                        type="button"
                         onClick={handleSendMessage}
                         disabled={!input.trim() || personaData.isThinking}
-                        className="p-1 rounded text-white transition-colors disabled:opacity-50"
-                        style={{ backgroundColor: config.color }}
+                        className="flex-none w-11 h-11 inline-flex items-center justify-center rounded-lg bg-[var(--sy-text)] text-[var(--sy-on-primary)] hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        aria-label="Send"
                     >
-                        <Send className="w-3 h-3" />
+                        <Send className="w-5 h-5" strokeWidth={1.5} />
                     </button>
                 </div>
             </div>
@@ -390,7 +373,7 @@ function ProvenanceChips({ message, show }: { message: PersonaChatMessage; show:
     return (
         <div className="mt-2 pt-2 border-t border-[var(--citadel-border)]/60">
             <div className="flex flex-wrap items-center gap-1">
-                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mr-1">
+                <span className="text-xs uppercase tracking-wider text-[var(--text-muted)] mr-1">
                     Grounded in
                 </span>
 
@@ -400,7 +383,7 @@ function ProvenanceChips({ message, show }: { message: PersonaChatMessage; show:
             </div>
 
             {hasDerived && (
-                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                     Dashed sources are recollection or another persona&apos;s answer, not live data.
                 </p>
             )}
@@ -445,7 +428,7 @@ function SourceChip({
             onBlur={() => onHighlight([])}
             data-testid="provenance-chip"
             className={cn(
-                'px-1.5 py-0.5 rounded text-[10px] border transition-colors',
+                'px-1.5 py-0.5 rounded text-xs border transition-colors',
                 style.className
             )}
             title={style.title}
@@ -496,13 +479,13 @@ const MD_COMPONENTS = {
             <code className="block" {...props} />
         ) : (
             <code
-                className="px-1 py-0.5 rounded bg-[var(--citadel-void)] text-[var(--citadel-secondary)] text-[11px]"
+                className="px-1 py-0.5 rounded bg-[var(--citadel-void)] text-[var(--citadel-secondary)] text-xs"
                 {...props}
             />
         ),
     pre: (props: React.ComponentProps<'pre'>) => (
         <pre
-            className="my-1.5 p-2 rounded bg-[var(--citadel-void)] border border-[var(--citadel-border)] overflow-x-auto text-[11px] leading-snug"
+            className="my-1.5 p-2 rounded bg-[var(--citadel-void)] border border-[var(--citadel-border)] overflow-x-auto text-xs leading-snug"
             {...props}
         />
     ),
@@ -522,7 +505,7 @@ const MD_COMPONENTS = {
     ),
     table: (props: React.ComponentProps<'table'>) => (
         <div className="my-1.5 overflow-x-auto">
-            <table className="text-[11px] border-collapse" {...props} />
+            <table className="text-xs border-collapse" {...props} />
         </div>
     ),
     th: (props: React.ComponentProps<'th'>) => (
@@ -562,7 +545,7 @@ function CrystallizeButton({ content, personaId }: { content: string; personaId:
                 type="button"
                 onMouseEnter={() => result.blockId && setHighlightedBlocks([result.blockId])}
                 onMouseLeave={() => setHighlightedBlocks([])}
-                className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--truth-amber)]"
+                className="mt-1.5 flex items-center gap-1 text-xs text-[var(--truth-amber)]"
                 title="Highlight the Memory block holding this"
             >
                 <Gem className="w-3 h-3" />
@@ -578,7 +561,7 @@ function CrystallizeButton({ content, personaId }: { content: string; personaId:
                 const r = crystallize(content, personaId);
                 if (r.ok) setResult({ blockId: r.memoryBlockId, created: r.createdBlock });
             }}
-            className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--truth-amber)] transition-colors"
+            className="mt-1.5 flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--truth-amber)] transition-colors"
             title="Keep this as memory — it becomes a block you can wire anywhere"
         >
             <Gem className="w-3 h-3" />

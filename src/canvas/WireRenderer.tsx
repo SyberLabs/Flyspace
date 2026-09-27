@@ -21,10 +21,12 @@ interface WireRendererProps {
  * Wire type colors
  */
 const WIRE_COLORS: Record<WireType, string> = {
-    push: '#6366f1',
-    pull: '#10b981',
-    contextual: '#8b5cf6',
-    reactive: '#f59e0b'
+    // One signal colour for every wire (SyberLabs DS: neutral first, one
+    // signal). The wire type is named in the label, not encoded in hue.
+    push: '#4890F0',
+    pull: '#4890F0',
+    contextual: '#4890F0',
+    reactive: '#4890F0'
 };
 
 /**

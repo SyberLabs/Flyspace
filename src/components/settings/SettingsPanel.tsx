@@ -7,7 +7,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Settings,
     X,
     Key,
     Database,
@@ -107,14 +106,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+                    className="fixed inset-0 z-[100] bg-[rgba(5,6,10,0.72)] flex items-center justify-center p-4"
                     onClick={onClose}
                 >
                     <motion.div
                         initial={{ scale: 0.95, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.95, opacity: 0 }}
-                        className="relative bg-[var(--citadel-bg)]/95 backdrop-blur-xl border border-[var(--citadel-border)] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
+                        className="relative bg-[var(--sy-bg)] border border-[var(--sy-line)] rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-[var(--sy-shadow-overlay)]"
                         style={{
                             boxShadow: '0 25px 70px rgba(0, 0, 0, 0.6), 0 0 2px rgba(255, 255, 255, 0.1) inset'
                         }}
@@ -123,10 +122,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 border-b border-[var(--citadel-border)]">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-[var(--citadel-primary)]/10 flex items-center justify-center">
-                                    <Settings className="w-5 h-5 text-[var(--citadel-primary)]" />
-                                </div>
-                                <div>
+                                                                <div>
                                     <h2 className="text-lg font-semibold text-[var(--text-primary)]">
                                         System Settings
                                     </h2>
@@ -137,9 +133,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             </div>
                             <button
                                 onClick={onClose}
-                                className="p-2 hover:bg-[var(--citadel-surface)]/50 rounded-lg transition-colors"
+                                className="sy-icon-btn"
+                                aria-label="Close settings"
                             >
-                                <X className="w-5 h-5 text-[var(--text-muted)]" />
+                                <X />
                             </button>
                         </div>
 
@@ -148,13 +145,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             {/* Mock Data Toggle */}
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2">
-                                    <Database className="w-4 h-4 text-[var(--citadel-primary)]" />
+                                    <Database className="w-4 h-4 text-[var(--sy-text-3)]" />
                                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                                         Data Source Mode
                                     </h3>
                                 </div>
 
-                                <div className="flex items-center justify-between p-4 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
+                                <div className="flex items-center justify-between pt-4 border-t border-[var(--sy-line)]">
                                     <div>
                                         <p className="text-sm font-medium text-[var(--text-primary)]">
                                             Use Mock Data
@@ -173,7 +170,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                         )}
                                     >
                                         <motion.div
-                                            className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-lg"
+                                            className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-[var(--sy-shadow-overlay)]"
                                             animate={{ left: useMockData ? '1.5rem' : '0.125rem' }}
                                             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                                         />
@@ -184,13 +181,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             {/* NewsAPI Configuration — server-side via .env */}
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2">
-                                    <Key className="w-4 h-4 text-[var(--truth-amber)]" />
+                                    <Key className="w-4 h-4 text-[var(--sy-text-3)]" />
                                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                                         NewsAPI Configuration
                                     </h3>
                                 </div>
 
-                                <div className="space-y-3 p-4 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
+                                <div className="space-y-3 pt-4 border-t border-[var(--sy-line)]">
                                     <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                                         NewsAPI is configured on the server. Set{' '}
                                         <code className="px-1 py-0.5 rounded bg-[var(--citadel-bg)] text-[var(--text-primary)]">NEWSAPI_KEY</code>{' '}
@@ -210,7 +207,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                     <button
                                         onClick={handleTestNews}
                                         disabled={testingNews}
-                                        className="w-full px-3 py-2 bg-[var(--truth-amber)] hover:bg-[var(--truth-amber)]/80 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                                        className="btn btn-secondary w-full"
                                     >
                                         <TestTube className="w-4 h-4" />
                                         {testingNews ? 'Testing...' : 'Test Connection'}
@@ -241,23 +238,23 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             {/* Keyless demo APIs */}
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2">
-                                    <Key className="w-4 h-4 text-[var(--truth-green)]" />
+                                    <Key className="w-4 h-4 text-[var(--sy-text-3)]" />
                                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                                         Demo APIs (no key)
                                     </h3>
                                 </div>
 
-                                <div className="space-y-3 p-4 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
+                                <div className="space-y-3 pt-4 border-t border-[var(--sy-line)]">
                                     <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                                         These {getKeylessApis().length} connectors are installed by default and work with nothing in{' '}
                                         <code className="px-1 py-0.5 rounded bg-[var(--citadel-bg)] text-[var(--text-primary)]">.env</code>.
-                                        Drag them from the Armory, or spawn World Watch / Investor / Researcher.
+                                        Drag them from the block library, or spawn World Watch / Investor / Researcher.
                                     </p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {getKeylessApis().map(api => (
                                             <span
                                                 key={api.id}
-                                                className="text-xs px-2 py-0.5 rounded-full bg-[var(--truth-green)]/15 text-[var(--truth-green)]"
+                                                className="text-xs px-2 py-0.5 rounded border border-[var(--sy-line)] text-[var(--sy-text-2)]"
                                             >
                                                 {api.name}
                                             </span>
@@ -270,7 +267,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                     <button
                                         onClick={handleTestPolymarket}
                                         disabled={testingPolymarket}
-                                        className="w-full px-3 py-2 bg-[var(--truth-green)] hover:bg-[var(--truth-green)]/80 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                                        className="btn btn-secondary w-full"
                                     >
                                         <TestTube className="w-4 h-4" />
                                         {testingPolymarket ? 'Testing...' : 'Test Connection'}
@@ -301,13 +298,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             {/* Data Management — OmniVault export/import (apex A2) */}
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2">
-                                    <HardDrive className="w-4 h-4 text-[var(--citadel-primary)]" />
+                                    <HardDrive className="w-4 h-4 text-[var(--sy-text-3)]" />
                                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                                         Your Data
                                     </h3>
                                 </div>
 
-                                <div className="space-y-3 p-4 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
+                                <div className="space-y-3 pt-4 border-t border-[var(--sy-line)]">
                                     <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                                         Shells, wires, and Mind state live locally (IndexedDB via OmniVault).
                                         Export a portable backup, or restore one.
@@ -315,12 +312,12 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                     <div className="flex gap-2">
                                         <button
                                             onClick={handleExportData}
-                                            className="flex-1 px-3 py-2 bg-[var(--citadel-primary)] hover:bg-[var(--citadel-primary-glow)] text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                                            className="btn btn-primary flex-1"
                                         >
                                             <Download className="w-4 h-4" />
                                             Export data
                                         </button>
-                                        <label className="flex-1 px-3 py-2 bg-[var(--citadel-elevated)] border border-[var(--citadel-border)] hover:border-[var(--citadel-primary)] text-[var(--text-primary)] text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer">
+                                        <label className="btn btn-secondary flex-1 flex items-center justify-center gap-2 cursor-pointer">
                                             <Upload className="w-4 h-4" />
                                             Import data
                                             <input
@@ -354,9 +351,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             </div>
 
                             {/* Info Box */}
-                            <div className="p-4 bg-[var(--citadel-primary)]/5 border border-[var(--citadel-primary)]/20 rounded-lg">
+                            <div className="p-4 border border-[var(--sy-line)] rounded-lg">
                                 <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                                    <strong className="text-[var(--citadel-primary)]">Tip:</strong> Twelve demo APIs need no key.
+                                    <strong className="text-[var(--sy-text)]">Tip:</strong> Twelve demo APIs need no key.
                                     NewsAPI, FRED, and the other keyed connectors read{' '}
                                     <code className="px-1 py-0.5 rounded bg-[var(--citadel-bg)] text-[var(--text-primary)]">.env</code>{' '}
                                     on the server only — never the browser. Toggle &quot;Use Mock Data&quot; to explore without live calls.

@@ -177,14 +177,14 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
                     shellId={currentShell}
                 />
 
-                {/* Drop indicator when dragging from Armory */}
+                {/* Drop indicator when dragging from the block library */}
                 {draggingBlockId && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         className="absolute inset-0 flex items-center justify-center pointer-events-none"
                     >
-                        <div className="text-[var(--text-muted)] text-sm bg-[var(--citadel-surface)]/80 px-4 py-2 rounded-lg backdrop-blur-sm">
+                        <div className="text-[var(--sy-text-2)] text-sm bg-[var(--sy-surface)] border border-[var(--sy-line)] px-4 py-3 rounded-lg">
                             Drop to add block
                         </div>
                     </motion.div>
@@ -192,29 +192,30 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
 
                 {/* Empty state - shell-aware */}
                 {shellBlocks.length === 0 && !draggingBlockId && !hideEmptyState && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="text-center pointer-events-auto max-w-md px-6">
-                            <div className="text-[var(--text-primary)] text-lg mb-2">
-                                Start with an environment
-                            </div>
-                            <p className="text-[var(--text-muted)] text-sm mb-5">
-                                A shell arrives pre-wired — live data blocks already connected to
-                                personas, so you can ask a question immediately.
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-4 pb-32 md:p-16">
+                        <div className="pointer-events-auto w-full max-w-[560px]">
+                            <p className="sy-label">01 / Start with a shell</p>
+                            <h2 className="mt-4 font-serif text-[32px] leading-[36px] md:text-[40px] md:leading-[44px] tracking-[-0.01em] text-[var(--sy-text)]">
+                                See the sources behind an answer.
+                            </h2>
+                            <p className="mt-4 text-base text-[var(--sy-text-2)] max-w-[48ch]">
+                                A shell arrives pre-wired: live data blocks already connected to
+                                personas, so you can ask a question immediately and trace what fed the answer.
                             </p>
                             {onBrowseShells && (
-                                <button
-                                    onClick={onBrowseShells}
-                                    className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--citadel-primary)] text-white hover:opacity-90 transition-opacity"
-                                >
+                                <button type="button" onClick={onBrowseShells} className="btn btn-primary mt-8">
                                     Browse shells
                                 </button>
                             )}
-                            <p className="text-[var(--text-muted)]/70 text-xs mt-5">
-                                Or drag a block from the sidebar &middot; press{' '}
-                                <kbd className="px-1.5 py-0.5 bg-[var(--citadel-surface)] rounded text-[10px] font-mono">
-                                    &#8984;K
-                                </kbd>{' '}
-                                for the command palette
+                            <p className="mt-6 text-sm text-[var(--sy-text-3)]">
+                                Or add a block from the library.
+                                <span className="hidden md:inline">
+                                    {' '}Press{' '}
+                                    <kbd className="font-mono text-xs border border-[var(--sy-line)] rounded px-1.5 py-0.5">
+                                        &#8984;K
+                                    </kbd>{' '}
+                                    for commands.
+                                </span>
                             </p>
                         </div>
                     </div>

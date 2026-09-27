@@ -48,13 +48,13 @@ export class BlockErrorBoundary extends Component<BlockErrorBoundaryProps, Block
                     <p className="text-xs font-medium text-[var(--text-primary)]">
                         {this.props.blockName} crashed
                     </p>
-                    <p className="text-[10px] text-[var(--text-muted)] max-w-[220px] break-words">
+                    <p className="text-xs text-[var(--text-muted)] max-w-[220px] break-words">
                         The rest of the canvas is unaffected.
                         {this.state.error.message ? ` (${this.state.error.message.slice(0, 120)})` : ''}
                     </p>
                     <button
                         onClick={this.handleRetry}
-                        className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-[var(--citadel-border)] text-[var(--text-secondary)] hover:border-[var(--citadel-primary)] hover:text-[var(--text-primary)] transition-colors"
+                        className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-[var(--citadel-border)] text-[var(--text-secondary)] hover:border-[var(--citadel-primary)] hover:text-[var(--text-primary)] transition-colors"
                     >
                         <RotateCcw className="w-3 h-3" />
                         Retry

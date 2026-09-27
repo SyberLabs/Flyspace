@@ -7,7 +7,7 @@
 
 import { useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Copy, Sparkles, Check } from 'lucide-react';
+import { X, Copy, Check } from 'lucide-react';
 import { useState } from 'react';
 import { useBlockStore } from '@/core/stores';
 import { cn } from '@/lib/utils';
@@ -18,15 +18,13 @@ interface ThinkResultModalProps {
     onClose: () => void;
     response: string;
     personaName?: string;
-    personaEmoji?: string;
 }
 
 export function ThinkResultModal({
     isOpen,
     onClose,
     response,
-    personaName = 'The Mind',
-    personaEmoji = '🧠'
+    personaName = 'The Mind'
 }: ThinkResultModalProps) {
     const [copied, setCopied] = useState(false);
     const addBlock = useBlockStore(state => state.addBlock);
@@ -87,26 +85,25 @@ export function ThinkResultModal({
                 >
                     <motion.div
                         className="think-modal"
-                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="think-modal-title"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Glassmorphism highlight */}
-                        <div className="think-modal-highlight" />
-
                         {/* Header */}
                         <div className="think-modal-header">
                             <div className="think-modal-title">
-                                <span className="think-modal-emoji">{personaEmoji}</span>
                                 <div>
-                                    <h2>{personaName}&apos;s Response</h2>
-                                    <span className="think-modal-subtitle">Mind Analysis Complete</span>
+                                    <p className="sy-label">Answer</p>
+                                    <h2 id="think-modal-title">{personaName}&apos;s response</h2>
                                 </div>
                             </div>
-                            <button className="think-modal-close" onClick={onClose}>
-                                <X className="w-5 h-5" />
+                            <button type="button" className="sy-icon-btn" onClick={onClose} aria-label="Close response">
+                                <X />
                             </button>
                         </div>
 
@@ -129,13 +126,14 @@ export function ThinkResultModal({
                         {/* Footer Actions */}
                         <div className="think-modal-footer">
                             <button
-                                className="think-modal-btn think-modal-btn-secondary"
+                                type="button"
+                                className="btn btn-secondary"
                                 onClick={handleCopy}
                             >
                                 {copied ? (
                                     <>
                                         <Check className="w-4 h-4" />
-                                        Copied!
+                                        Copied
                                     </>
                                 ) : (
                                     <>
@@ -145,11 +143,11 @@ export function ThinkResultModal({
                                 )}
                             </button>
                             <button
-                                className="think-modal-btn think-modal-btn-primary"
+                                type="button"
+                                className="btn btn-primary"
                                 onClick={handleCrystallize}
                             >
-                                <Sparkles className="w-4 h-4" />
-                                Crystallize to Block
+                                Keep as a block
                             </button>
                         </div>
                     </motion.div>

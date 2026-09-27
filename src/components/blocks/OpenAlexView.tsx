@@ -119,7 +119,7 @@ export function OpenAlexView({
             </div>
 
             {lastUpdated && (
-                <div className="px-3 py-2 text-[10px] text-[var(--text-muted)] border-t border-[var(--citadel-border)]">
+                <div className="px-3 py-2 text-xs text-[var(--text-muted)] border-t border-[var(--citadel-border)]">
                     Updated {new Date(lastUpdated).toLocaleString()}
                 </div>
             )}

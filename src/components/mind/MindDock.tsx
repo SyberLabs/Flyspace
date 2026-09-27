@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, MessageCircle, Sparkles, ChevronUp, Settings, Zap } from 'lucide-react';
+import { Brain, MessageCircle, Sparkles, ChevronUp, X } from 'lucide-react';
 import { useMindStore } from '@/core/stores';
 import { getMindEngine } from '@/core/services';
 import { cn } from '@/lib/utils';
@@ -100,25 +100,27 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
             <AnimatePresence>
                 {quickResponse && (
                     <motion.div
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute bottom-20 left-1/2 -translate-x-1/2 max-w-md z-50"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                        className="absolute bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-md z-50"
+                        role="status"
                     >
-                        <div className="bg-[var(--citadel-surface)] border border-[var(--mind-aqua-glow)]/30 rounded-xl p-4 shadow-lg backdrop-blur-sm">
+                        <div className="relative bg-[var(--sy-surface-2)] border border-[var(--sy-line)] rounded-lg p-4 pr-14 shadow-[var(--sy-shadow-overlay)]">
                             <div className="flex items-start gap-3">
-                                <div className="w-8 h-8 rounded-full bg-[var(--mind-aqua-glow)]/20 flex items-center justify-center flex-shrink-0">
-                                    <Brain className="w-4 h-4 text-[var(--mind-aqua-glow)]" />
-                                </div>
-                                <p className="text-sm text-[var(--text-primary)] leading-relaxed">
+                                <Brain className="w-5 h-5 flex-none text-[var(--sy-brand)]" strokeWidth={1.5} aria-hidden="true" />
+                                <p className="text-sm text-[var(--sy-text)]">
                                     {quickResponse}
                                 </p>
                             </div>
                             <button
+                                type="button"
                                 onClick={() => setQuickResponse(null)}
-                                className="absolute top-2 right-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs"
+                                className="sy-icon-btn absolute top-0 right-0"
+                                aria-label="Dismiss answer"
                             >
-                                ✕
+                                <X />
                             </button>
                         </div>
                     </motion.div>
@@ -129,28 +131,33 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
             <AnimatePresence>
                 {quickChatOpen && (
                     <motion.div
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-16 left-1/2 -translate-x-1/2 w-96 z-40"
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                        className="absolute bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-md z-40"
                     >
-                        <div className="bg-[var(--citadel-surface)] border border-[var(--citadel-border)] rounded-xl p-3 shadow-lg">
+                        <div className="bg-[var(--sy-surface)] border border-[var(--sy-line)] rounded-lg p-2 shadow-[var(--sy-shadow-overlay)]">
                             <div className="flex items-center gap-2">
+                                <label htmlFor="mind-quick-ask" className="sr-only">Quick question</label>
                                 <input
+                                    id="mind-quick-ask"
                                     type="text"
                                     value={quickMessage}
                                     onChange={(e) => setQuickMessage(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleQuickAsk()}
-                                    placeholder="Quick question..."
-                                    className="flex-1 bg-[var(--citadel-elevated)] border border-[var(--citadel-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--mind-aqua-glow)]/50"
+                                    placeholder="Ask a quick question"
+                                    className="flex-1 h-11 bg-[var(--sy-bg)] border border-[var(--sy-line-strong)] rounded-lg px-4 text-base text-[var(--sy-text)] placeholder:text-[var(--sy-text-3)] focus:outline-none focus:border-[var(--sy-brand)]"
                                     autoFocus
                                 />
                                 <button
+                                    type="button"
                                     onClick={handleQuickAsk}
                                     disabled={isThinking || !quickMessage.trim()}
-                                    className="p-2 rounded-lg bg-[var(--mind-aqua-glow)]/20 text-[var(--mind-aqua-glow)] hover:bg-[var(--mind-aqua-glow)]/30 disabled:opacity-50 transition-colors"
+                                    aria-busy={isThinking}
+                                    className="btn btn-primary"
                                 >
-                                    <Zap className="w-4 h-4" />
+                                    Ask
                                 </button>
                             </div>
                         </div>
@@ -159,94 +166,59 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
             </AnimatePresence>
 
             {/* Main Dock */}
-            <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30"
-            >
-                <div className="flex items-center gap-2 px-4 py-2 bg-[var(--citadel-surface)]/95 backdrop-blur-md border border-[var(--citadel-border)] rounded-2xl shadow-lg">
-                    {/* Persona Avatar & Info */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[calc(100%-32px)]">
+                <div className="flex items-center gap-1 p-1 bg-[var(--sy-surface)] border border-[var(--sy-line)] rounded-lg shadow-[var(--sy-shadow-overlay)]">
+                    {/* Persona */}
                     <button
+                        type="button"
                         onClick={onExpandPanel}
-                        className="flex items-center gap-3 px-3 py-1.5 rounded-xl hover:bg-[var(--citadel-elevated)] transition-colors group"
+                        className="flex items-center gap-3 h-11 pl-3 pr-2 rounded-lg hover:bg-[var(--sy-surface-2)] transition-colors group min-w-0"
+                        title="Open Mind Panel (M)"
                     >
-                        <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-all",
-                            isThinking
-                                ? "bg-[var(--mind-aqua-glow)]/30 animate-pulse"
-                                : "bg-[var(--mind-aqua-glow)]/20"
-                        )}>
-                            {activePersona?.avatar || '🧠'}
-                        </div>
-                        <div className="text-left">
-                            <div className="text-sm font-medium text-[var(--text-primary)]">
+                        <Brain className={cn('w-5 h-5 flex-none text-[var(--sy-text-2)]', isThinking && 'animate-pulse')} strokeWidth={1.5} aria-hidden="true" />
+                        <span className="text-left min-w-0">
+                            <span className="block text-sm font-medium text-[var(--sy-text)] truncate">
                                 {activePersona?.name || 'Mind'}
-                            </div>
-                            <div className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                            </span>
+                            <span className="flex items-center gap-1.5 text-xs text-[var(--sy-text-3)] whitespace-nowrap">
                                 <span className={cn(
-                                    "w-1.5 h-1.5 rounded-full",
-                                    status === 'ready' ? "bg-[var(--truth-green)]" :
-                                        status === 'processing' ? "bg-[var(--truth-amber)] animate-pulse" :
-                                            "bg-[var(--text-muted)]"
-                                )} />
-                                {status === 'processing' ? 'Processing...' : `${totalContext} ctx`}
-                            </div>
-                        </div>
-                        <ChevronUp className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-colors" />
+                                    'w-2 h-2 rounded-full flex-none',
+                                    status === 'ready' ? 'bg-[var(--sy-success)]' :
+                                        status === 'processing' ? 'bg-[var(--sy-warning)] animate-pulse' :
+                                            'border border-[var(--sy-text-3)]'
+                                )} aria-hidden="true" />
+                                {status === 'processing' ? 'Thinking' : status === 'ready' ? `Ready · ${totalContext} sources` : `${totalContext} sources`}
+                            </span>
+                        </span>
+                        <ChevronUp className="w-4 h-4 text-[var(--sy-text-3)] group-hover:text-[var(--sy-text)] transition-colors" aria-hidden="true" />
                     </button>
 
-                    {/* Divider */}
-                    <div className="w-px h-8 bg-[var(--citadel-border)]" />
+                    <div className="w-px h-8 bg-[var(--sy-line)]" aria-hidden="true" />
 
-                    {/* Quick Actions */}
-                    <div className="flex items-center gap-1">
-                        {/* Think */}
-                        <button
-                            onClick={handleQuickThink}
-                            disabled={isThinking}
-                            className={cn(
-                                "p-2.5 rounded-xl transition-all",
-                                isThinking
-                                    ? "bg-[var(--mind-aqua-glow)]/20 text-[var(--mind-aqua-glow)] animate-pulse"
-                                    : "hover:bg-[var(--citadel-elevated)] text-[var(--text-muted)] hover:text-[var(--mind-aqua-glow)]"
-                            )}
-                            title="Think (analyze context)"
-                        >
-                            <Sparkles className="w-5 h-5" />
-                        </button>
+                    <button
+                        type="button"
+                        onClick={handleQuickThink}
+                        disabled={isThinking}
+                        aria-busy={isThinking}
+                        className="sy-icon-btn disabled:opacity-40"
+                        title="Think (analyze context)"
+                        aria-label="Think about the wired context"
+                    >
+                        <Sparkles />
+                    </button>
 
-                        {/* Quick Chat Toggle */}
-                        <button
-                            onClick={() => setQuickChatOpen(!quickChatOpen)}
-                            className={cn(
-                                "p-2.5 rounded-xl transition-all",
-                                quickChatOpen
-                                    ? "bg-[var(--citadel-primary)]/20 text-[var(--citadel-primary)]"
-                                    : "hover:bg-[var(--citadel-elevated)] text-[var(--text-muted)] hover:text-[var(--citadel-primary)]"
-                            )}
-                            title="Quick Ask"
-                        >
-                            <MessageCircle className="w-5 h-5" />
-                        </button>
-
-                        {/* Settings / Expand */}
-                        <button
-                            onClick={onExpandPanel}
-                            className="p-2.5 rounded-xl hover:bg-[var(--citadel-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
-                            title="Open Mind Panel (M)"
-                        >
-                            <Settings className="w-5 h-5" />
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setQuickChatOpen(!quickChatOpen)}
+                        className="sy-icon-btn"
+                        aria-expanded={quickChatOpen}
+                        title="Quick Ask"
+                        aria-label="Quick ask"
+                    >
+                        <MessageCircle />
+                    </button>
                 </div>
-
-                {/* Keyboard Hint */}
-                <div className="text-center mt-2">
-                    <span className="text-[10px] text-[var(--text-muted)]/50 px-2 py-0.5 bg-[var(--citadel-surface)]/50 rounded">
-                        Press M to expand
-                    </span>
-                </div>
-            </motion.div>
+            </div>
         </>
     );
 }

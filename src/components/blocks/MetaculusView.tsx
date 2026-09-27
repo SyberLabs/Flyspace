@@ -35,7 +35,7 @@ export function MetaculusView({ questions, status, lastUpdated, onRefresh, error
                     </div>
                     <div>
                         <h3 className="text-sm font-medium text-[var(--text-primary)]">Metaculus</h3>
-                        <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
+                        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
                             <span className={cn(
                                 "flex items-center gap-1",
                                 status === 'connected' ? "text-[var(--truth-green)]" : "text-[var(--text-muted)]"
@@ -81,7 +81,7 @@ export function MetaculusView({ questions, status, lastUpdated, onRefresh, error
 
             {/* Footer */}
             <div className="px-3 py-2 border-t border-[var(--citadel-border)] bg-[var(--citadel-bg)]/50 flex-shrink-0">
-                <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
                     <span>{questions.length} active questions</span>
                     <a
                         href="https://www.metaculus.com"
@@ -151,7 +151,7 @@ function ForecastCard({ question }: { question: OmniItem }) {
                 </div>
 
                 {/* Meta Info */}
-                <div className="flex items-center gap-3 text-[10px] text-[var(--text-muted)]">
+                <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
                     <div className="flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         <span>{forecasters}</span>

@@ -50,17 +50,17 @@ import { BlockGlyph } from '@/components/blockIcons';
 // CATEGORY ICONS & LABELS
 // ============================================
 
-const CATEGORY_CONFIG: Record<ApiCategory, { icon: React.ReactNode; label: string; color: string }> = {
-    truth: { icon: <TrendingUp className="w-4 h-4" />, label: 'Truth', color: 'var(--truth-green)' },
-    pulse: { icon: <Newspaper className="w-4 h-4" />, label: 'Pulse', color: 'var(--truth-amber)' },
-    physicality: { icon: <Globe className="w-4 h-4" />, label: 'Physicality', color: 'var(--citadel-primary)' },
-    bio: { icon: <Activity className="w-4 h-4" />, label: 'Bio', color: 'var(--truth-red)' },
-    ai: { icon: <Sparkles className="w-4 h-4" />, label: 'AI & LLM', color: 'var(--mind-aqua-surface)' },
-    environment: { icon: <CloudSun className="w-4 h-4" />, label: 'Environment', color: '#22c55e' },
-    social: { icon: <MessageSquare className="w-4 h-4" />, label: 'Social', color: '#8b5cf6' },
-    developer: { icon: <Code className="w-4 h-4" />, label: 'Developer', color: '#f97316' },
-    economy: { icon: <DollarSign className="w-4 h-4" />, label: 'Economy', color: '#eab308' },
-    custom: { icon: <Settings className="w-4 h-4" />, label: 'Custom', color: 'var(--text-muted)' }
+const CATEGORY_CONFIG: Record<ApiCategory, { icon: React.ReactNode; label: string }> = {
+    truth: { icon: <TrendingUp className="w-4 h-4" />, label: 'Truth' },
+    pulse: { icon: <Newspaper className="w-4 h-4" />, label: 'Pulse' },
+    physicality: { icon: <Globe className="w-4 h-4" />, label: 'Physicality' },
+    bio: { icon: <Activity className="w-4 h-4" />, label: 'Bio' },
+    ai: { icon: <Sparkles className="w-4 h-4" />, label: 'AI & LLM' },
+    environment: { icon: <CloudSun className="w-4 h-4" />, label: 'Environment' },
+    social: { icon: <MessageSquare className="w-4 h-4" />, label: 'Social' },
+    developer: { icon: <Code className="w-4 h-4" />, label: 'Developer' },
+    economy: { icon: <DollarSign className="w-4 h-4" />, label: 'Economy' },
+    custom: { icon: <Settings className="w-4 h-4" />, label: 'Custom' }
 };
 
 // ============================================
@@ -100,7 +100,7 @@ export function ApiDashboardModal({ isOpen, onClose }: ApiDashboardModalProps) {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                        className="fixed inset-0 bg-[rgba(5,6,10,0.72)] z-50"
                     />
 
                     {/* Modal */}
@@ -111,14 +111,11 @@ export function ApiDashboardModal({ isOpen, onClose }: ApiDashboardModalProps) {
                         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-4xl max-h-[85vh] flex flex-col"
                     >
-                        <div className="bg-[var(--citadel-elevated)] border border-[var(--citadel-border)] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full">
+                        <div className="bg-[var(--sy-surface)] border border-[var(--sy-line)] rounded-lg shadow-[var(--sy-shadow-overlay)] overflow-hidden flex flex-col h-full">
                             {/* Header */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--citadel-border)] bg-gradient-to-r from-[var(--citadel-primary)]/10 to-[var(--mind-aqua-surface)]/10">
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--citadel-border)]">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--citadel-primary)] to-[var(--mind-aqua-surface)] flex items-center justify-center">
-                                        <Key className="w-5 h-5 text-white" />
-                                    </div>
-                                    <div>
+                                                                        <div>
                                         <h2 className="text-lg font-semibold text-[var(--text-primary)]">
                                             API Command Center
                                         </h2>
@@ -135,7 +132,7 @@ export function ApiDashboardModal({ isOpen, onClose }: ApiDashboardModalProps) {
                                         className={cn(
                                             "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
                                             activeTab === 'dashboard'
-                                                ? "bg-[var(--citadel-primary)] text-white"
+                                                ? "bg-[var(--sy-text)] text-[var(--sy-on-primary)]"
                                                 : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                                         )}
                                     >
@@ -146,7 +143,7 @@ export function ApiDashboardModal({ isOpen, onClose }: ApiDashboardModalProps) {
                                         className={cn(
                                             "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
                                             activeTab === 'marketplace'
-                                                ? "bg-[var(--citadel-primary)] text-white"
+                                                ? "bg-[var(--sy-text)] text-[var(--sy-on-primary)]"
                                                 : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                                         )}
                                     >
@@ -156,9 +153,10 @@ export function ApiDashboardModal({ isOpen, onClose }: ApiDashboardModalProps) {
 
                                 <button
                                     onClick={onClose}
-                                    className="p-2 rounded-lg hover:bg-[var(--citadel-border)]/50 transition-colors"
+                                    className="sy-icon-btn"
+                                    aria-label="Close API sources"
                                 >
-                                    <X className="w-5 h-5 text-[var(--text-muted)]" />
+                                    <X />
                                 </button>
                             </div>
 
@@ -215,13 +213,13 @@ function DashboardView({ configs, statusCounts }: DashboardViewProps) {
             {/* Status Summary */}
             <div className="flex items-center gap-4 px-6 py-4 border-b border-[var(--citadel-border)]">
                 <StatusBadge icon={<CheckCircle />} count={statusCounts.connected} label="Connected" color="var(--truth-green)" />
-                <StatusBadge icon={<Circle />} count={statusCounts.idle} label="Idle" color="var(--truth-amber)" />
+                <StatusBadge icon={<Circle />} count={statusCounts.idle} label="Idle" color="var(--text-muted)" />
                 <StatusBadge icon={<XCircle />} count={statusCounts.error} label="Error" color="var(--truth-red)" />
                 <StatusBadge icon={<CircleDashed />} count={statusCounts.notConfigured} label="Not Configured" color="var(--text-muted)" />
             </div>
 
             {/* API List */}
-            <div className="flex-1 overflow-auto p-4 space-y-2">
+            <div className="flex-1 overflow-auto px-4 py-2">
                 {configs.map(config => (
                     <ApiConfigCard
                         key={config.providerId}
@@ -237,10 +235,10 @@ function DashboardView({ configs, statusCounts }: DashboardViewProps) {
 
 function StatusBadge({ icon, count, label, color }: { icon: React.ReactNode; count: number; label: string; color: string }) {
     return (
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--citadel-surface)] rounded-lg">
-            <span style={{ color }}>{icon}</span>
-            <span className="text-lg font-semibold text-[var(--text-primary)]">{count}</span>
-            <span className="text-xs text-[var(--text-muted)]">{label}</span>
+        <div className="flex items-center gap-2 py-2">
+            <span style={{ color }} aria-hidden="true">{icon}</span>
+            <span className="text-lg font-semibold text-[var(--sy-text)]">{count}</span>
+            <span className="text-sm text-[var(--sy-text-3)]">{label}</span>
         </div>
     );
 }
@@ -259,7 +257,6 @@ function ApiConfigCard({ config, isExpanded, onToggle }: ApiConfigCardProps) {
     const { testConnection, uninstallApi } = useApiStore();
     const [isTesting, setIsTesting] = useState(false);
 
-    const categoryConfig = CATEGORY_CONFIG[config.provider.category];
 
     const handleTest = async () => {
         setIsTesting(true);
@@ -274,28 +271,27 @@ function ApiConfigCard({ config, isExpanded, onToggle }: ApiConfigCardProps) {
                     : CircleDashed;
 
     return (
-        <div className="border border-[var(--citadel-border)] rounded-xl overflow-hidden bg-[var(--citadel-surface)]/50">
+        <div className="border-b border-[var(--sy-line)]">
             {/* Header Row */}
             <button
                 onClick={onToggle}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--citadel-surface)] transition-colors"
+                className="w-full flex items-center gap-3 px-2 min-h-16 py-3 rounded-lg hover:bg-[var(--sy-surface-2)] transition-colors"
             >
-                <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: `${categoryConfig.color}20`, color: categoryConfig.color }}
-                >
-                    <BlockGlyph name={config.provider.icon} className="w-4 h-4" />
-                </div>
+                <BlockGlyph name={config.provider.icon} className="w-5 h-5 flex-none text-[var(--sy-text-3)]" />
                 <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-[var(--text-primary)]">{config.provider.name}</p>
                     <p className="text-xs text-[var(--text-muted)]">{config.provider.description}</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <StatusIcon
-                        className={cn("w-5 h-5", config.status === 'testing' && "animate-spin")}
+                        className={cn("w-4 h-4", config.status === 'testing' && "animate-spin")}
                         style={{ color: getStatusColor(config.status) }}
+                        aria-hidden="true"
                     />
-                    <span className="text-xs text-[var(--text-muted)]">
+                    <span className="text-sm text-[var(--sy-text-2)] capitalize">
+                        {config.status.replace('_', ' ')}
+                    </span>
+                    <span className="hidden sm:inline font-mono text-xs text-[var(--sy-text-3)] w-24 text-right">
                         {config.requestCount} requests
                     </span>
                 </div>
@@ -330,7 +326,7 @@ function ApiConfigCard({ config, isExpanded, onToggle }: ApiConfigCardProps) {
                                         No API key required
                                     </p>
                                     <p className="text-xs text-[var(--text-muted)] mt-1">
-                                        Works on the canvas with nothing in <code>.env</code>. Drag its block from the Armory.
+                                        Works on the canvas with nothing in <code>.env</code>. Drag its block from the block library.
                                     </p>
                                 </div>
                             )}
@@ -425,7 +421,7 @@ function MarketplaceView({ searchQuery, setSearchQuery, selectedCategory, setSel
                         className={cn(
                             "px-3 py-1 rounded-full text-xs font-medium transition-colors",
                             selectedCategory === 'all'
-                                ? "bg-[var(--citadel-primary)] text-white"
+                                ? "bg-[var(--sy-text)] text-[var(--sy-on-primary)]"
                                 : "bg-[var(--citadel-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                         )}
                     >
@@ -438,10 +434,10 @@ function MarketplaceView({ searchQuery, setSearchQuery, selectedCategory, setSel
                             className={cn(
                                 "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors",
                                 selectedCategory === category
-                                    ? "text-white"
+                                    ? "bg-[var(--sy-text)] text-[var(--sy-on-primary)]"
                                     : "bg-[var(--citadel-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                             )}
-                            style={selectedCategory === category ? { backgroundColor: CATEGORY_CONFIG[category].color } : undefined}
+                            aria-pressed={selectedCategory === category}
                         >
                             {CATEGORY_CONFIG[category].icon}
                             {CATEGORY_CONFIG[category].label}
@@ -452,7 +448,7 @@ function MarketplaceView({ searchQuery, setSearchQuery, selectedCategory, setSel
 
             {/* API Grid */}
             <div className="flex-1 overflow-auto p-4">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6">
                     {filteredApis.map(api => (
                         <ApiMarketplaceCard
                             key={api.id}
@@ -484,21 +480,15 @@ interface ApiMarketplaceCardProps {
 }
 
 function ApiMarketplaceCard({ api, isInstalled, onInstall }: ApiMarketplaceCardProps) {
-    const categoryConfig = CATEGORY_CONFIG[api.category];
     const supportLevel = getApiSupportLevel(api.id);
     const canInstall = isApiSupported(api.id);
     const supportLabel =
         supportLevel === 'supported' ? 'Supported' : supportLevel === 'experimental' ? 'Experimental' : 'Planned';
 
     return (
-        <div className="border border-[var(--citadel-border)] rounded-xl p-4 bg-[var(--citadel-surface)]/50 hover:bg-[var(--citadel-surface)] transition-colors">
+        <div className="border-t border-[var(--sy-line)] py-4">
             <div className="flex items-start gap-3">
-                <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${categoryConfig.color}20`, color: categoryConfig.color }}
-                >
-                    <BlockGlyph name={api.icon} className="w-5 h-5" />
-                </div>
+                <BlockGlyph name={api.icon} className="w-5 h-5 mt-0.5 flex-none text-[var(--sy-text-3)]" />
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[var(--text-primary)] truncate">{api.name}</p>
                     <p className="text-xs text-[var(--text-muted)] line-clamp-2 mt-0.5">{api.description}</p>
@@ -539,7 +529,7 @@ function ApiMarketplaceCard({ api, isInstalled, onInstall }: ApiMarketplaceCardP
                         isInstalled
                             ? "bg-[var(--truth-green)]/20 text-[var(--truth-green)]"
                             : canInstall
-                                ? "bg-[var(--citadel-primary)] text-white hover:opacity-90"
+                                ? "bg-[var(--sy-text)] text-[var(--sy-on-primary)] hover:opacity-90"
                                 : "bg-[var(--citadel-border)] text-[var(--text-muted)] cursor-not-allowed"
                     )}
                 >

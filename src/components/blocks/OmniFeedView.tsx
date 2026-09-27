@@ -65,7 +65,7 @@ export function OmniFeedView({
                     </div>
                     <div className="flex items-center gap-1">
                         {lastUpdated ? (
-                            <span className="text-[10px] text-[var(--text-muted)]">
+                            <span className="text-xs text-[var(--text-muted)]">
                                 {formatRelativeTime(lastUpdated)}
                             </span>
                         ) : null}
