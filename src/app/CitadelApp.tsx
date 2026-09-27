@@ -70,7 +70,7 @@ export default function CitadelApp() {
             />
 
             {process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1' && (
-                <div className="px-3 py-2 text-xs text-center text-white bg-slate-800">
+                <div className="demo-banner" role="note">
                     Public preview: your canvas stays in this browser. AI answers and keyed data sources are disabled.
                 </div>
             )}
@@ -93,9 +93,9 @@ export default function CitadelApp() {
                         href="/garden"
                         className="absolute bottom-6 right-6 z-30 group"
                     >
-                        <div className="flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105 transition-all duration-200">
-                            <Sprout className="w-5 h-5" />
-                            <span className="text-sm font-medium">Garden</span>
+                        <div className="btn garden-pill">
+                            <Sprout />
+                            <span>Garden</span>
                         </div>
                     </Link>
                 </main>

@@ -171,7 +171,7 @@ export function ChatBlockView({ instanceId }: ChatBlockViewProps) {
                                 className={cn(
                                     "max-w-[85%] px-2 py-1 rounded-md text-xs leading-relaxed",
                                     msg.role === 'user'
-                                        ? "bg-[var(--citadel-primary)] text-white"
+                                        ? "bg-[var(--citadel-primary)] text-[var(--citadel-void)]"
                                         : "bg-[var(--citadel-surface)] text-[var(--text-primary)]"
                                 )}
                             >
@@ -206,7 +206,7 @@ export function ChatBlockView({ instanceId }: ChatBlockViewProps) {
                         className={cn(
                             "p-1 rounded transition-colors",
                             input.trim() && !isLoading
-                                ? "bg-[var(--citadel-primary)] text-white"
+                                ? "bg-[var(--citadel-primary)] text-[var(--citadel-void)]"
                                 : "text-[var(--text-muted)]/50"
                         )}
                     >

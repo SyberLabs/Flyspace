@@ -18,13 +18,13 @@ interface WireRendererProps {
 }
 
 /**
- * Wire type colors
+ * Wire type colors (SyberLabs Atlas v2: blue, success, violet, amber)
  */
 const WIRE_COLORS: Record<WireType, string> = {
-    push: '#6366f1',
-    pull: '#10b981',
-    contextual: '#8b5cf6',
-    reactive: '#f59e0b'
+    push: '#4890f0',
+    pull: '#6ff5a8',
+    contextual: '#9a6bff',
+    reactive: '#ffb54a'
 };
 
 /**

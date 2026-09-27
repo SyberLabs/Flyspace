@@ -152,13 +152,13 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => setShowCreateDialog(true)}
-                                    className="flex-1 px-3 py-2 bg-[var(--citadel-primary)] text-white rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
+                                    className="flex-1 px-3 py-2 bg-[var(--citadel-primary)] text-[var(--citadel-void)] rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
                                 >
                                     New Shell
                                 </button>
                                 <button
                                     onClick={() => setShowSaveDialog(true)}
-                                    className="flex-1 px-3 py-2 bg-[var(--mind-aqua-surface)] text-white rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
+                                    className="flex-1 px-3 py-2 bg-[var(--mind-aqua-surface)] text-[var(--citadel-void)] rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
                                 >
                                     Save Current
                                 </button>
@@ -214,7 +214,7 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                                     </div>
                                                     <button
                                                         onClick={() => handleUseTemplate(template)}
-                                                        className="shrink-0 px-3 py-1.5 bg-[var(--citadel-primary)] text-white rounded-md hover:opacity-90 transition-opacity text-xs font-medium"
+                                                        className="shrink-0 px-3 py-1.5 bg-[var(--citadel-primary)] text-[var(--citadel-void)] rounded-md hover:opacity-90 transition-opacity text-xs font-medium"
                                                     >
                                                         Use this shell
                                                     </button>
@@ -400,7 +400,7 @@ function ShellSection({
                                             </kbd>
                                         )}
                                         {isActive && (
-                                            <span className="text-[10px] px-2 py-0.5 bg-[var(--citadel-primary)] text-white rounded-full">
+                                            <span className="text-[10px] px-2 py-0.5 bg-[var(--citadel-primary)] text-[var(--citadel-void)] rounded-full">
                                                 ACTIVE
                                             </span>
                                         )}
@@ -426,7 +426,7 @@ function ShellSection({
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                     onClick={() => onLoad(shell.id)}
-                                    className="px-2 py-1 bg-[var(--citadel-primary)] text-white rounded text-xs hover:opacity-90 transition-opacity"
+                                    className="px-2 py-1 bg-[var(--citadel-primary)] text-[var(--citadel-void)] rounded text-xs hover:opacity-90 transition-opacity"
                                 >
                                     Load
                                 </button>
@@ -537,7 +537,7 @@ function ShellDialog({
                     <button
                         onClick={onConfirm}
                         disabled={!nameValue.trim()}
-                        className="flex-1 px-4 py-2 bg-[var(--citadel-primary)] text-white rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-4 py-2 bg-[var(--citadel-primary)] text-[var(--citadel-void)] rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {confirmText}
                     </button>
