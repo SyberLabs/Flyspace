@@ -308,26 +308,49 @@ const browserSpeechEngine: SpeechEngine = {
                 finish(() => reject(new Error('Speech recognition timed out')));
             }, 15_000);
             recognition.lang = lang || 'en-US';
-            recognition.interimResults = false;
+            recognition.interimResults = true;
             recognition.maxAlternatives = 1;
             recognition.onresult = (event: SpeechRecognitionEventLike) => {
-                const transcript = event.results?.[0]?.[0]?.transcript ?? '';
-                if (session) {
+                const list = event.results;
+                const latest = list && list.length > 0 ? list[list.length - 1] : undefined;
+                const transcript = latest?.[0]?.transcript ?? '';
+                const isFinal = latest?.isFinal === true;
+                if (session && transcript) {
                     onObservation?.({
                         sessionId: session.id,
-                        segmentId: `${session.id}:interim`,
+                        segmentId: `${session.id}:${isFinal ? 'final' : 'interim'}`,
                         startedAt,
                         updatedAt: Date.now(),
+                        endedAt: isFinal ? Date.now() : undefined,
                         text: transcript,
-                        final: false,
+                        final: isFinal,
                         language: lang,
                         source: 'unknown'
                     });
                 }
-                finish(() => resolve(transcript));
+                if (isFinal) finish(() => resolve(transcript));
             };
             recognition.onerror = (event: { error?: string }) => {
-                finish(() => reject(new Error(event.error || 'Speech recognition failed')));
+                const code = event.error || 'failed';
+                if (session) {
+                    onObservation?.({
+                        sessionId: session.id,
+                        segmentId: `${session.id}:error`,
+                        startedAt,
+                        updatedAt: Date.now(),
+                        endedAt: Date.now(),
+                        text: '',
+                        final: true,
+                        language: lang,
+                        source: 'unknown',
+                        terminal: 'error'
+                    });
+                }
+                if (code === 'aborted') {
+                    finish(() => reject(new DOMException('Speech canceled', 'AbortError')));
+                    return;
+                }
+                finish(() => reject(new Error(speechRecognitionMessage(code))));
             };
             recognition.onend = () => finish(() => reject(new Error('No speech recognized')));
             recognition.start();
@@ -335,8 +358,26 @@ const browserSpeechEngine: SpeechEngine = {
     }
 };
 
+export function speechRecognitionMessage(code: string): string {
+    if (code === 'not-allowed' || code === 'service-not-allowed') return 'Permission denied';
+    if (code === 'audio-capture') return 'No microphone is available';
+    if (code === 'network') return 'Speech recognition service is unreachable';
+    if (code === 'aborted') return 'Speech canceled';
+    return `Speech recognition failed (${code})`;
+}
+
+interface SpeechRecognitionAlternative {
+    transcript?: string;
+}
+
+interface SpeechRecognitionResultLike {
+    isFinal?: boolean;
+    0?: SpeechRecognitionAlternative;
+    [index: number]: SpeechRecognitionAlternative | undefined;
+}
+
 interface SpeechRecognitionEventLike {
-    results?: Array<Array<{ transcript?: string }>>;
+    results?: ArrayLike<SpeechRecognitionResultLike> & { length: number };
 }
 
 interface SpeechRecognitionLike {

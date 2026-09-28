@@ -8,7 +8,7 @@ import {
     uninstallCapability
 } from './registry';
 import { executeCapability, unbindLocalHandler } from './execute';
-import { setSpeechEngine, type SpeechEngine } from './speech';
+import { setSpeechEngine, speechRecognitionMessage, type SpeechEngine } from './speech';
 
 function fakeEngine(transcript = 'hello there'): SpeechEngine & { spoken: string[]; langs: Array<string | undefined> } {
     const spoken: string[] = [];
@@ -93,6 +93,12 @@ describe('speech capabilities', () => {
         const silent = await executeCapability('cap_speech_listen', {});
         expect(silent.error?.code).toBe('UPSTREAM_ERROR');
         expect(silent.error?.message).toBe('No speech recognized');
+    });
+
+    it('names a denied microphone as permission denied', () => {
+        expect(speechRecognitionMessage('not-allowed')).toBe('Permission denied');
+        expect(speechRecognitionMessage('service-not-allowed')).toBe('Permission denied');
+        expect(speechRecognitionMessage('network')).toBe('Speech recognition service is unreachable');
     });
 
     it('brings builtins back after they are cleared', () => {
