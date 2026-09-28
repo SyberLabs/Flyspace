@@ -21,7 +21,19 @@ export interface McpTransport {
 }
 
 const mcpTransports = new Map<string, McpTransport>();
+const localHandlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
 const lastResult = new Map<string, CapabilityResult>();
+
+export function bindLocalHandler(
+    handler: string,
+    fn: (args: Record<string, unknown>) => Promise<unknown>
+): void {
+    localHandlers.set(handler, fn);
+}
+
+export function unbindLocalHandler(handler: string): void {
+    localHandlers.delete(handler);
+}
 
 export function bindMcpTransport(serverId: string, transport: McpTransport): void {
     mcpTransports.set(serverId, transport);
@@ -70,9 +82,7 @@ export async function executeCapability(
     if ('error' in auth) return finish(auth.error);
 
     try {
-        const step = manifest.transport.kind === 'http'
-            ? await executeHttp(manifest, input, auth.headers, auth.query, options.fetchImpl ?? fetch)
-            : await executeMcp(manifest, input);
+        const step = await dispatch(manifest, input, auth.headers, auth.query, options.fetchImpl ?? fetch);
         if (step.type === 'halt') return finish(step.result);
         const value = step.value;
 
@@ -145,6 +155,20 @@ function applyAuth(manifest: CapabilityManifest): { headers: Record<string, stri
 
 type Step = { type: 'value'; value: unknown } | { type: 'halt'; result: CapabilityResult };
 
+async function dispatch(
+    manifest: CapabilityManifest,
+    input: Record<string, unknown>,
+    authHeaders: Record<string, string>,
+    authQuery: Record<string, string>,
+    fetchImpl: typeof fetch
+): Promise<Step> {
+    if (manifest.transport.kind === 'http') {
+        return executeHttp(manifest, input, authHeaders, authQuery, fetchImpl);
+    }
+    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, input);
+    return executeLocal(manifest, input);
+}
+
 function halt(result: CapabilityResult): Step {
     return { type: 'halt', result };
 }
@@ -209,6 +233,21 @@ async function executeHttp(
         return { type: 'value', value: text };
     }
     return halt(failure(manifest.id, 'UPSTREAM_PARSE', 'Response was not JSON', false));
+}
+
+async function executeLocal(manifest: CapabilityManifest, input: Record<string, unknown>): Promise<Step> {
+    if (manifest.transport.kind !== 'local') {
+        return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not a local capability', false));
+    }
+    const handler = localHandlers.get(manifest.transport.handler);
+    if (!handler) {
+        return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No local handler bound for ${manifest.transport.handler}`, false));
+    }
+    const args: Record<string, unknown> = {};
+    for (const entry of manifest.inputs) {
+        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
+    }
+    return { type: 'value', value: await handler(args) };
 }
 
 async function executeMcp(manifest: CapabilityManifest, input: Record<string, unknown>): Promise<Step> {

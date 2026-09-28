@@ -68,12 +68,58 @@ Installing a manifest:
 cannot uninstall Polymarket. Removing a capability drops its gateway entry,
 its block type, and its canvas instances.
 
-Canvas views resolve `cap_*` through `getBlockView` to one shared
-`CapabilityBlockView`. Read and compute run on open. Write and destructive
-wait for an explicit Run after approval.
+Canvas views resolve unknown `cap_*` ids through `getBlockView` to one shared
+`CapabilityBlockView`. Read and compute with `invocation: auto` run on open.
+`invocation: manual`, and every write or destructive effect, wait for an
+explicit control. Invocation is part of the digest because it changes when
+the capability runs. Approval stays outside the digest.
 
-## Wire check
+## Install session
+
+The Armory hosts the only product door into `installProposal`: paste an
+OpenAPI document, compile it, review effect and auth slots, and install the
+checked operations. Secret values are written only to the in-memory session
+slot and cleared from the form. The panel never calls `restoreSnapshot` and
+never marks a proposal approved. Approve and Deny are separate controls on
+installed write and destructive capabilities.
+
+## Typed wires at execution
 
 `createWire` refuses the connection only when both ends declare a schema and
 the output is not assignable to the input. `any`, and every current catalog
 port (no schema), still connect.
+
+A capability with a single required string input exposes that input port as
+`any`, so a feed, a text block, or a persona can connect. At execution,
+`resolveWiredInputs` projects the upstream value into named arguments:
+
+1. typed object fields that match input names and schemas
+2. a single typed value that matches the only input
+3. the latest assistant message that is not a warning
+4. text-block `content`
+5. joined item titles, when the only required input is a string
+
+`runInstalledCapability` merges wired values, then block params, then the
+explicit `run()` input. A wire that matches nothing is ignored.
+
+## Local transport and speech
+
+`transport.kind: local` names a handler (`speech.speak`, `speech.listen`).
+Handlers are bound in process. There is no network call and no secret.
+
+Speak and Listen ship as built-in manifests (`cap_speech_speak`,
+`cap_speech_listen`). Both are manual. Speak is compute. Listen is read.
+The browser engine uses `speechSynthesis` and `SpeechRecognition` when they
+exist. Speak stays unavailable until the browser reports at least one voice.
+Speak gives up after 60 seconds.
+Listen gives up after 15 seconds and stops the recognition session. Tests
+replace the engine with `setSpeechEngine`. Utterances are capped at 5000
+characters. The install session refuses to install a selected operation
+while its secret slot is empty.
+
+`ensureSpeechCapabilities` binds the handlers and installs the manifests when
+their digest is missing. It runs at startup and after `restoreSnapshot`, so
+a snapshot that omits speech does not drop the builtins. A user removal
+lasts until the next ensure. The install list hides the `speech` locator so
+builtins are not reviewed as pasted APIs. Their canvas views are
+`SpeechBlockView`, registered ahead of the generic `cap_` fallback.

@@ -76,15 +76,20 @@ function toItem(entry: unknown, capabilityId: string, index: number, titlePath?:
         };
     }
     const titled = titlePath ? readPath(entry, titlePath) : undefined;
+    const spoken = typeof entry.spoken === 'string' ? entry.spoken
+        : typeof entry.transcript === 'string' ? entry.transcript
+            : undefined;
     const title = typeof titled === 'string'
         ? titled
         : typeof entry.title === 'string'
             ? entry.title
             : typeof entry.name === 'string'
                 ? entry.name
-                : typeof entry.id === 'string' || typeof entry.id === 'number'
-                    ? String(entry.id)
-                    : 'Result';
+                : spoken
+                    ? spoken.slice(0, 180)
+                    : typeof entry.id === 'string' || typeof entry.id === 'number'
+                        ? String(entry.id)
+                        : 'Result';
     const id = typeof entry.id === 'string' || typeof entry.id === 'number'
         ? String(entry.id)
         : `${capabilityId}-${index}`;

@@ -11,6 +11,7 @@ export const CAPABILITY_MANIFEST_VERSION = 1 as const;
 export type CapabilityEffect = 'read' | 'compute' | 'write' | 'destructive';
 export type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
 export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring';
+export type CapabilityInvocation = 'auto' | 'manual';
 export type HttpMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export type InputLocation = 'path' | 'query' | 'header' | 'body' | 'argument';
 export type EffectSource = 'method' | 'extension' | 'annotation' | 'declared';
@@ -47,7 +48,8 @@ export interface CapabilityOutput {
 
 export type CapabilityTransport =
     | { kind: 'http'; baseUrl: string; method: HttpMethod; path: string }
-    | { kind: 'mcp'; serverId: string; toolName: string };
+    | { kind: 'mcp'; serverId: string; toolName: string }
+    | { kind: 'local'; handler: string };
 
 export interface CapabilityManifest {
     version: typeof CAPABILITY_MANIFEST_VERSION;
@@ -58,6 +60,12 @@ export interface CapabilityManifest {
     effect: CapabilityEffect;
     effectSource: EffectSource;
     approval: CapabilityApproval;
+    /**
+     * `auto` runs read/compute when the block opens.
+     * `manual` waits for an explicit action (speech, and anything else
+     * that must not fire because a block was merely placed).
+     */
+    invocation?: CapabilityInvocation;
     auth: AuthBinding;
     transport: CapabilityTransport;
     inputs: CapabilityInput[];
@@ -77,7 +85,7 @@ const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring'];
 
 const MANIFEST_KEYS = new Set([
     'version', 'id', 'title', 'description', 'source', 'effect', 'effectSource',
-    'approval', 'auth', 'transport', 'inputs', 'output', 'digest'
+    'approval', 'invocation', 'auth', 'transport', 'inputs', 'output', 'digest'
 ]);
 
 const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
@@ -115,6 +123,7 @@ export function digestPayload(draft: ManifestDraft): unknown {
         source: draft.source,
         effect: draft.effect,
         effectSource: draft.effectSource,
+        invocation: draft.invocation === 'manual' ? 'manual' : 'auto',
         auth: draft.auth,
         transport: draft.transport,
         inputs: draft.inputs,
@@ -123,9 +132,11 @@ export function digestPayload(draft: ManifestDraft): unknown {
 }
 
 export function sealManifest(draft: ManifestDraft): CapabilityManifest {
+    const invocation = draft.invocation === 'manual' ? 'manual' : 'auto';
+    const body = { ...draft, invocation } as ManifestDraft;
     return {
-        ...draft,
-        digest: sha256(canonicalize(digestPayload(draft)))
+        ...body,
+        digest: sha256(canonicalize(digestPayload(body)))
     };
 }
 
@@ -251,8 +262,12 @@ export function validateManifest(input: unknown): ManifestValidation {
 
     validateAuth(input.auth, errors);
 
-    if (!isRecord(input.transport) || (input.transport.kind !== 'http' && input.transport.kind !== 'mcp')) {
-        errors.push('transport.kind must be http or mcp');
+    if (input.invocation !== undefined && input.invocation !== 'auto' && input.invocation !== 'manual') {
+        errors.push('invocation must be auto or manual');
+    }
+
+    if (!isRecord(input.transport) || (input.transport.kind !== 'http' && input.transport.kind !== 'mcp' && input.transport.kind !== 'local')) {
+        errors.push('transport.kind must be http, mcp, or local');
     } else if (input.transport.kind === 'http') {
         if (typeof input.transport.baseUrl !== 'string') errors.push('transport.baseUrl is required');
         else validateHttpUrl(input.transport.baseUrl, errors);
@@ -270,13 +285,15 @@ export function validateManifest(input: unknown): ManifestValidation {
         ) {
             errors.push(`effect ${effect} is not allowed for ${input.transport.method}`);
         }
-    } else {
+    } else if (input.transport.kind === 'mcp') {
         if (typeof input.transport.serverId !== 'string' || !/^[A-Za-z0-9_.:-]{1,80}$/.test(input.transport.serverId)) {
             errors.push('transport.serverId is invalid');
         }
         if (typeof input.transport.toolName !== 'string' || !NAME_PATTERN.test(input.transport.toolName)) {
             errors.push('transport.toolName is invalid');
         }
+    } else if (typeof input.transport.handler !== 'string' || !/^[a-z][a-z0-9_.]{0,63}$/.test(input.transport.handler)) {
+        errors.push('transport.handler is invalid');
     }
 
     if (!Array.isArray(input.inputs)) {
@@ -307,8 +324,8 @@ export function validateManifest(input: unknown): ManifestValidation {
             if (transportKind === 'http' && entry.in === 'argument') {
                 errors.push('http transports cannot take argument inputs');
             }
-            if (transportKind === 'mcp' && entry.in !== 'argument') {
-                errors.push('mcp transports only take argument inputs');
+            if ((transportKind === 'mcp' || transportKind === 'local') && entry.in !== 'argument') {
+                errors.push(`${String(transportKind)} transports only take argument inputs`);
             }
             if ((method === 'GET' || method === 'HEAD') && entry.in === 'body') {
                 errors.push(`${String(method)} cannot declare a body`);
@@ -385,6 +402,7 @@ function canonicalDraft(input: Record<string, unknown>): ManifestDraft {
         effect: input.effect as CapabilityEffect,
         effectSource: input.effectSource as EffectSource,
         approval: input.approval as CapabilityApproval,
+        invocation: input.invocation === 'manual' ? 'manual' : 'auto',
         auth: canonicalAuth(input.auth as AuthBinding),
         transport: canonicalTransport(input.transport as CapabilityTransport),
         inputs: (input.inputs as CapabilityInput[]).map(entry => ({
@@ -411,6 +429,9 @@ function canonicalAuth(auth: AuthBinding): AuthBinding {
 function canonicalTransport(transport: CapabilityTransport): CapabilityTransport {
     if (transport.kind === 'mcp') {
         return { kind: 'mcp', serverId: transport.serverId, toolName: transport.toolName };
+    }
+    if (transport.kind === 'local') {
+        return { kind: 'local', handler: transport.handler };
     }
     return {
         kind: 'http',

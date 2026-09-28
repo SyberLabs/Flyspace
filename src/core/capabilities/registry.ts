@@ -13,10 +13,12 @@ import type { ApiTypeDefinition } from '../gateway/omnidata.schema';
 import { createOmniError } from '../gateway/omnidata.schema';
 import { validateManifest, type CapabilityManifest } from './manifest';
 import { allCapabilities, capabilityIds, claimHydration, deleteCapability, readCapability, writeCapability } from './state';
-import { executeCapability, clearLastResult } from './execute';
+import { bindLocalHandler, executeCapability, clearLastResult } from './execute';
 import { isCapabilityResult, type CapabilityResult } from './project';
 import { onCapabilityRehydrate, useCapabilityStore } from './store';
 import { portDataTypeFor } from './compatibility';
+import { resolveWiredInputs } from './wireInputs';
+import { runSpeechHandler, speechManifests } from './speech';
 import type { ValueType } from './valueType';
 
 export interface InstallResult {
@@ -141,6 +143,7 @@ export function restoreSnapshot(snapshot: unknown): RestoreReport {
     for (const manifest of accepted) commit(manifest);
     persistEnabled = true;
     touch();
+    ensureSpeechCapabilities();
     return { installed: accepted.map(manifest => manifest.id), rejected };
 }
 
@@ -165,7 +168,11 @@ export async function runInstalledCapability(
             error
         };
     }
-    const params = input ?? block.params ?? {};
+    const params = {
+        ...resolveWiredInputs(instanceId),
+        ...(isPlain(block.params) ? block.params : {}),
+        ...(input ?? {})
+    };
     const result = await executeCapability(capabilityId, params);
     const items = result.presentation.items ?? [];
     useBlockStore.getState().updateData(instanceId, {
@@ -204,13 +211,14 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
     const output = manifest.output.schema;
     const ports: PortSchema[] = [];
     if (manifest.inputs.length > 0) {
+        const inbound = inputPortSchema(manifest);
         ports.push({
             id: 'in',
             direction: 'input',
-            dataType: portDataTypeFor(inputSchema(manifest).kind),
-            label: 'Arguments',
+            dataType: portDataTypeFor(inbound.kind),
+            label: inbound.kind === 'any' ? 'Text' : 'Arguments',
             description: 'Capability arguments',
-            schema: inputSchema(manifest)
+            schema: inbound
         });
     }
     ports.push({
@@ -231,11 +239,29 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
         semantic_tags: ['capability', manifest.source.kind, manifest.effect],
         wiring_logic: 'capability',
         ports,
-        icon: 'Puzzle',
+        icon: iconFor(manifest),
         description: manifest.description ?? `${manifest.effect} capability`,
         isUserCreatable: true,
         capabilityId: manifest.id
     };
+}
+
+/** A lone required string accepts any wired value and projects it to text. */
+function inputPortSchema(manifest: CapabilityManifest): ValueType {
+    if (
+        manifest.inputs.length === 1
+        && manifest.inputs[0].required
+        && manifest.inputs[0].schema.kind === 'string'
+    ) {
+        return { kind: 'any' };
+    }
+    return inputSchema(manifest);
+}
+
+function iconFor(manifest: CapabilityManifest): string {
+    if (manifest.id === 'cap_speech_speak') return 'Volume2';
+    if (manifest.id === 'cap_speech_listen') return 'Mic';
+    return 'Puzzle';
 }
 
 function inputSchema(manifest: CapabilityManifest): ValueType {
@@ -304,4 +330,19 @@ export function acceptRehydrated(manifests: CapabilityManifest[]): void {
     }
 }
 
-onCapabilityRehydrate(acceptRehydrated);
+export function ensureSpeechCapabilities(): void {
+    bindLocalHandler('speech.speak', args => runSpeechHandler('speech.speak', args));
+    bindLocalHandler('speech.listen', args => runSpeechHandler('speech.listen', args));
+    for (const manifest of speechManifests()) {
+        const current = readCapability(manifest.id);
+        if (current?.digest === manifest.digest) continue;
+        installProposal(manifest);
+    }
+}
+
+onCapabilityRehydrate((manifests) => {
+    acceptRehydrated(manifests);
+    ensureSpeechCapabilities();
+});
+
+ensureSpeechCapabilities();

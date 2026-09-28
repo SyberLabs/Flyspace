@@ -17,7 +17,14 @@ export type { McpToolSchema } from './mcp';
 export { compileBring } from './bring';
 export type { BringApiDescription } from './bring';
 export { capabilitySecrets } from './secrets';
-export { executeCapability, bindMcpTransport, unbindMcpTransport, getLastResult } from './execute';
+export {
+    executeCapability,
+    bindMcpTransport,
+    unbindMcpTransport,
+    bindLocalHandler,
+    unbindLocalHandler,
+    getLastResult
+} from './execute';
 export type { McpTransport } from './execute';
 export type { CapabilityResult, TypedValue } from './project';
 export { explainPortWire } from './compatibility';
@@ -31,7 +38,11 @@ export {
     exportSnapshot,
     restoreSnapshot,
     clearCapabilities,
-    runInstalledCapability
+    runInstalledCapability,
+    ensureSpeechCapabilities
 } from './registry';
 export type { CapabilitySnapshot, InstallResult, RestoreReport } from './registry';
+export { resolveWiredInputs } from './wireInputs';
+export { setSpeechEngine, getSpeechEngine, speechManifests, runSpeechHandler } from './speech';
+export type { SpeechEngine, SpeechSupport } from './speech';
 export { useCapabilityStore } from './store';

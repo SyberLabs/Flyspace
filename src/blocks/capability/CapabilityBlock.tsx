@@ -31,11 +31,12 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const [running, setRunning] = useState(false);
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
+    const manual = manifest?.invocation === 'manual';
 
     useEffect(() => {
-        if (!manifest || sideEffect) return;
+        if (!manifest || sideEffect || manual) return;
         void runInstalledCapability(instanceId);
-    }, [instanceId, manifest, sideEffect]);
+    }, [instanceId, manifest, sideEffect, manual]);
 
     const run = () => {
         if (!manifest || running) return;
@@ -74,7 +75,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 disabled={!manifest || running || blocked}
                 className="rounded border border-[var(--citadel-border)] px-2 py-1 text-xs disabled:opacity-50"
             >
-                {running ? 'Running…' : blocked ? 'Needs approval' : sideEffect ? 'Run' : 'Refresh'}
+                {running ? 'Running…' : blocked ? 'Needs approval' : sideEffect || manual ? 'Run' : 'Refresh'}
             </button>
         </div>
     );

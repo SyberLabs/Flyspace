@@ -32,6 +32,7 @@ import {
 import { PersonaBlockView } from '@/blocks/persona';
 import { MemoryBlockView } from '@/components/blocks/MemoryBlock';
 import { CapabilityBlockView } from '@/blocks/capability/CapabilityBlock';
+import { SpeechBlockView } from '@/blocks/capability/SpeechBlock';
 import { useBlockStore } from '@/core/stores';
 
 function storedParams(instanceId: string): Record<string, unknown> | undefined {
@@ -491,7 +492,12 @@ export const BlockViews: Record<string, React.ComponentType<{ instanceId: string
     'persona_guardian': PersonaBlockView,
 
     // Memory Blocks
-    'memory_pool': MemoryBlockView
+    'memory_pool': MemoryBlockView,
+
+    // Built-in speech. Registered ahead of the cap_ fallback so Speak and
+    // Listen get their own controls instead of the generic capability view.
+    'cap_speech_speak': SpeechBlockView,
+    'cap_speech_listen': SpeechBlockView
 };
 
 export function getBlockView(blockId: string): React.ComponentType<{ instanceId: string }> | null {
