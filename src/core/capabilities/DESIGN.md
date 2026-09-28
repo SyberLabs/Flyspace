@@ -41,7 +41,7 @@ A manifest describes a capability. It does not grant itself authority.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
 - Execution is one runtime: `executeCapability`. Write and destructive calls that leave the process and then throw are `EFFECT_UNCERTAIN` and are not retryable. Mounting a React view is not a request to run.
 - HTTP capabilities are `browser_direct`. That is the browser's fetch, including CORS. It is not a general server-side broker. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
-- Speech is an observation with a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. `Promise<string>` is only the final transcript the block stores.
+- Speech is an observation with a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. Interim results stay on the session until a final transcript. A denied microphone is `Permission denied`, not the browser error code. `Promise<string>` is only the final transcript the block stores.
 
 ## Effects
 
