@@ -39,8 +39,10 @@ A manifest describes a capability. It does not grant itself authority.
 - HTTP method is an effect floor. `x-omni-effect` and MCP annotations may raise that floor. They cannot turn POST into auto-running compute. Untrusted MCP `readOnlyHint` is not approval.
 - Capability ids are a hash of canonical origin and operation. Speech handlers keep pinned ids. A different origin cannot reuse an existing id.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
-- Execution is one runtime: `executeCapability`. Write and destructive calls that leave the process and then throw are `EFFECT_UNCERTAIN` and are not retryable. Mounting a React view is not a request to run.
-- HTTP capabilities are `browser_direct`. That is the browser's fetch, including CORS. It is not a general server-side broker. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
+- Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and input replays. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
+- Triggers are `manual`, `on_create` (once per block), `on_input_change`, `interval`, and `event`. Write and destructive stay manual. Mounting a view is not a trigger.
+- HTTP capabilities are `browser_direct` or `server_broker`. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
+- MCP tools compile from schemas and run through a Streamable HTTP client once a server URL is bound.
 - Speech is an observation with a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. Interim results stay on the session until a final transcript. A denied microphone is `Permission denied`, not the browser error code. `Promise<string>` is only the final transcript the block stores.
 
 ## Effects

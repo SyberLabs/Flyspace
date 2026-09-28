@@ -14,6 +14,7 @@ import { createOmniError } from '../gateway/omnidata.schema';
 import { validateManifest, type CapabilityManifest } from './manifest';
 import { allCapabilities, capabilityIds, claimHydration, deleteCapability, readCapability, writeCapability } from './state';
 import { bindLocalHandler, executeCapability, clearLastResult } from './execute';
+import { clearExecutionLedger } from './executionLedger';
 import { isCapabilityResult, type CapabilityResult } from './project';
 import { onCapabilityRehydrate, useCapabilityStore } from './store';
 import { portDataTypeFor } from './compatibility';
@@ -148,6 +149,7 @@ export function restoreSnapshot(snapshot: unknown): RestoreReport {
 }
 
 export function clearCapabilities(): void {
+    clearExecutionLedger();
     for (const id of capabilityIds()) uninstallCapability(id);
 }
 
@@ -155,7 +157,7 @@ export function clearCapabilities(): void {
 export async function runInstalledCapability(
     instanceId: string,
     input?: Record<string, unknown>,
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal; idempotencyKey?: string }
 ): Promise<CapabilityResult> {
     const block = useBlockStore.getState().getBlock(instanceId);
     const capabilityId = block?.schema.capabilityId;
@@ -174,7 +176,10 @@ export async function runInstalledCapability(
         ...(isPlain(block.params) ? block.params : {}),
         ...(input ?? {})
     };
-    const result = await executeCapability(capabilityId, params, { signal: options?.signal });
+    const result = await executeCapability(capabilityId, params, {
+        signal: options?.signal,
+        idempotencyKey: options?.idempotencyKey
+    });
     const items = result.presentation.items ?? [];
     useBlockStore.getState().updateData(instanceId, {
         capabilityId,

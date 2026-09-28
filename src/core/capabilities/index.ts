@@ -27,6 +27,9 @@ export {
     getExecution,
     latestExecution
 } from './execute';
+export { createMcpHttpTransport } from './mcpClient';
+export { emitCapabilityEvent, subscribeCapabilityEvent } from './triggers';
+export { admitExecution, clearExecutionLedger } from './executionLedger';
 export type { CapabilityExecution, ExecutionStatus, LocalCall } from './execute';
 export type { McpTransport } from './execute';
 export type { CapabilityResult, TypedValue } from './project';

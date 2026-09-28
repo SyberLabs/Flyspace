@@ -1,5 +1,15 @@
 name: CI
 
+# Production gates. These job names are the status checks main must require
+# once a repository admin can turn enforcement on. This token cannot change
+# branch protection (the rules API returns 403), so the workflow is the gate
+# that runs; the repository setting is what makes main refuse a red result.
+# Required check names:
+#   - Typecheck, Test & Build
+#   - Client bundle carries no secrets
+#   - Inference Ledger (Postgres)
+#   - Dependency audit
+
 on:
   push:
     branches: [main]
