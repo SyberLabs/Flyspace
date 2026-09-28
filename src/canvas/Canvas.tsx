@@ -21,7 +21,7 @@ import { BlockCard } from '@/components/blocks/BlockCard';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
 import { WireRenderer } from './WireRenderer';
 import { snapToGrid, cn } from '@/lib/utils';
-import { BlockViews } from '@/core/registry/ViewRegistry';
+import { getBlockView } from '@/core/registry/ViewRegistry';
 import { useClientMounted } from '@/core/hooks';
 import { Atmosphere } from '@/components/brand/Atmosphere';
 import { Sigil } from '@/components/brand/Sigil';
@@ -418,7 +418,7 @@ interface BlockContentProps {
 function BlockContent({ block }: BlockContentProps) {
     // Look up a registered view. createElement (not <View />) so the compiler
     // does not treat a map lookup as "creating a component during render".
-    const View = BlockViews[block.schema.block_id];
+    const View = getBlockView(block.schema.block_id);
     if (View) {
         return createElement(View, { instanceId: block.instance_id });
     }

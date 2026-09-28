@@ -113,6 +113,18 @@ class ApiGatewayService {
     }
 
     /**
+     * Remove a runtime capability registration.
+     * Catalog ids are not removable through this path.
+     */
+    unregisterType(apiId: string): boolean {
+        if (!apiId.startsWith('cap_')) return false;
+        defaultParamsRegistry.delete(apiId);
+        const removed = apiTypeRegistry.delete(apiId);
+        this.clearCache(apiId);
+        return removed;
+    }
+
+    /**
      * Check if data is cached and still valid
      */
     private getCached(apiId: string, params?: Record<string, unknown>): OmniData | null {

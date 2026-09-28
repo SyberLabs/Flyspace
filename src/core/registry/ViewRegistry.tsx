@@ -31,6 +31,7 @@ import {
 } from '@/blocks/workspace';
 import { PersonaBlockView } from '@/blocks/persona';
 import { MemoryBlockView } from '@/components/blocks/MemoryBlock';
+import { CapabilityBlockView } from '@/blocks/capability/CapabilityBlock';
 import { useBlockStore } from '@/core/stores';
 
 function storedParams(instanceId: string): Record<string, unknown> | undefined {
@@ -494,5 +495,5 @@ export const BlockViews: Record<string, React.ComponentType<{ instanceId: string
 };
 
 export function getBlockView(blockId: string): React.ComponentType<{ instanceId: string }> | null {
-    return BlockViews[blockId] || null;
+    return BlockViews[blockId] ?? (blockId.startsWith('cap_') ? CapabilityBlockView : null);
 }

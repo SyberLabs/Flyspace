@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
+import { useCapabilityStore } from '@/core/capabilities/store';
 import { OmniBlockSchema, BlockCategory } from '@/core/schemas/block.schema';
 import { useBlockStore, useUIStore } from '@/core/stores';
 import { cn } from '@/lib/utils';
@@ -88,6 +89,9 @@ const CATEGORY_LABELS: Record<BlockCategory, string> = {
 export function Sidebar() {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedCategories, setExpandedCategories] = useState<BlockCategory[]>(DEFAULT_EXPANDED_CATEGORIES);
+    // Capability installs mutate the block registry outside React. Subscribing
+    // here redraws the Armory when a manifest is added or removed.
+    useCapabilityStore(state => state.manifests.length);
 
     const allBlocks = blockRegistry.getAll();
     const filteredBlocks = searchQuery
