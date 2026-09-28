@@ -1,6 +1,7 @@
 // Installed manifests only. Proposals are not executable.
 // Side effects stop here until approveCapability has moved them to `approved`.
 
+import { canonicalize, sha256 } from './hash';
 import { readCapability } from './state';
 import { capabilitySecrets } from './secrets';
 import {
@@ -10,7 +11,7 @@ import {
     type CapabilityResult,
     type TypedValue
 } from './project';
-import type { CapabilityManifest } from './manifest';
+import type { CapabilityEffect, CapabilityManifest } from './manifest';
 import { isRecord, validateValue } from './valueType';
 
 const MAX_BODY_CHARS = 1_000_000;
@@ -20,13 +21,31 @@ export interface McpTransport {
     call(serverId: string, toolName: string, args: Record<string, unknown>): Promise<unknown>;
 }
 
+export interface LocalCall {
+    signal?: AbortSignal;
+}
+
+export type ExecutionStatus = 'running' | 'succeeded' | 'failed' | 'canceled' | 'uncertain';
+
+export interface CapabilityExecution {
+    runId: string;
+    capabilityId: string;
+    manifestDigest: string;
+    effect: CapabilityEffect;
+    inputDigest: string;
+    startedAt: number;
+    dispatchedAt?: number;
+    status: ExecutionStatus;
+}
+
 const mcpTransports = new Map<string, McpTransport>();
-const localHandlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+const localHandlers = new Map<string, (args: Record<string, unknown>, call?: LocalCall) => Promise<unknown>>();
 const lastResult = new Map<string, CapabilityResult>();
+const executions = new Map<string, CapabilityExecution>();
 
 export function bindLocalHandler(
     handler: string,
-    fn: (args: Record<string, unknown>) => Promise<unknown>
+    fn: (args: Record<string, unknown>, call?: LocalCall) => Promise<unknown>
 ): void {
     localHandlers.set(handler, fn);
 }
@@ -52,8 +71,22 @@ export function clearLastResult(capabilityId?: string): void {
     else lastResult.clear();
 }
 
+export function getExecution(runId: string): CapabilityExecution | undefined {
+    return executions.get(runId);
+}
+
+export function latestExecution(capabilityId: string): CapabilityExecution | undefined {
+    let latest: CapabilityExecution | undefined;
+    for (const execution of executions.values()) {
+        if (execution.capabilityId !== capabilityId) continue;
+        if (!latest || execution.startedAt >= latest.startedAt) latest = execution;
+    }
+    return latest;
+}
+
 export interface ExecuteOptions {
     fetchImpl?: typeof fetch;
+    signal?: AbortSignal;
 }
 
 export async function executeCapability(
@@ -79,11 +112,33 @@ export async function executeCapability(
     }
 
     const auth = applyAuth(manifest);
-    if ('error' in auth) return finish(auth.error);
+    if ('error' in auth) return finish(auth.error, undefined);
+
+    const run = beginRun(manifest, input);
+    const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
+    let dispatched = false;
 
     try {
-        const step = await dispatch(manifest, input, auth.headers, auth.query, options.fetchImpl ?? fetch);
-        if (step.type === 'halt') return finish(step.result);
+        if (options.signal?.aborted) {
+            return finish(failure(capabilityId, 'CANCELED', 'Execution was canceled', false), run, 'canceled');
+        }
+        const step = await dispatch(
+            manifest,
+            input,
+            auth.headers,
+            auth.query,
+            options.fetchImpl ?? fetch,
+            options.signal,
+            () => {
+                dispatched = true;
+                run.dispatchedAt = Date.now();
+                executions.set(run.runId, run);
+            }
+        );
+        if (step.type === 'halt') {
+            const uncertain = step.result.error?.code === 'EFFECT_UNCERTAIN';
+            return finish(step.result, run, uncertain ? 'uncertain' : 'failed');
+        }
         const value = step.value;
 
         const schemaErrors = validateValue(manifest.output.schema, value);
@@ -93,7 +148,7 @@ export async function executeCapability(
                 'TYPED_OUTPUT_MISMATCH',
                 schemaErrors.slice(0, 6).join('; '),
                 false
-            ));
+            ), run, 'failed');
         }
         const typed: TypedValue = { schema: manifest.output.schema, value };
         return finish({
@@ -101,14 +156,26 @@ export async function executeCapability(
             capabilityId,
             typed,
             presentation: projectSuccess(manifest, typed)
-        });
+        }, run, 'succeeded');
     } catch (error) {
+        if (dispatched && sideEffect) {
+            return finish(failure(
+                capabilityId,
+                'EFFECT_UNCERTAIN',
+                'The call was dispatched and the outcome was not observed. Do not retry automatically.',
+                false
+            ), run, 'uncertain');
+        }
+        const aborted = options.signal?.aborted || (error instanceof Error && error.name === 'AbortError');
+        if (aborted) {
+            return finish(failure(capabilityId, 'CANCELED', 'Execution was canceled', false), run, 'canceled');
+        }
         return finish(failure(
             capabilityId,
             'UPSTREAM_ERROR',
             error instanceof Error ? error.message : 'Unknown execution error',
-            true
-        ));
+            manifest.effect === 'read' || manifest.effect === 'compute'
+        ), run, 'failed');
     }
 }
 
@@ -160,13 +227,16 @@ async function dispatch(
     input: Record<string, unknown>,
     authHeaders: Record<string, string>,
     authQuery: Record<string, string>,
-    fetchImpl: typeof fetch
+    fetchImpl: typeof fetch,
+    signal: AbortSignal | undefined,
+    markDispatched: () => void
 ): Promise<Step> {
     if (manifest.transport.kind === 'http') {
-        return executeHttp(manifest, input, authHeaders, authQuery, fetchImpl);
+        return executeHttp(manifest, input, authHeaders, authQuery, fetchImpl, signal, markDispatched);
     }
+    markDispatched();
     if (manifest.transport.kind === 'mcp') return executeMcp(manifest, input);
-    return executeLocal(manifest, input);
+    return executeLocal(manifest, input, signal);
 }
 
 function halt(result: CapabilityResult): Step {
@@ -178,7 +248,9 @@ async function executeHttp(
     input: Record<string, unknown>,
     authHeaders: Record<string, string>,
     authQuery: Record<string, string>,
-    fetchImpl: typeof fetch
+    fetchImpl: typeof fetch,
+    signal: AbortSignal | undefined,
+    markDispatched: () => void
 ): Promise<Step> {
     if (manifest.transport.kind !== 'http') {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an http capability', false));
@@ -200,25 +272,29 @@ async function executeHttp(
         if (!headers['content-type'] && !headers['Content-Type']) headers['content-type'] = 'application/json';
     }
 
+    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    markDispatched();
     const response = await fetchImpl(url.toString(), {
         method: manifest.transport.method,
         headers,
         body,
         redirect: 'manual',
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        signal: requestSignal
     });
 
     if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
         return halt(failure(manifest.id, 'HTTP_REDIRECT_REFUSED', 'Redirects are not followed', false));
     }
     if (response.status < 200 || response.status >= 300) {
-        return halt(failure(manifest.id, 'HTTP_ERROR', `HTTP ${response.status}`, response.status >= 500));
+        const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
+        const retryable = !sideEffect && response.status >= 500;
+        return halt(failure(manifest.id, 'HTTP_ERROR', `HTTP ${response.status}`, retryable));
     }
 
-    const text = await response.text();
-    if (text.length > MAX_BODY_CHARS) {
-        return halt(failure(manifest.id, 'PAYLOAD_TOO_LARGE', 'Response exceeded 1MB', false));
-    }
+    const bodyText = await readBounded(response, manifest.id);
+    if (bodyText.type !== 'text') return bodyText;
+    const text = bodyText.text;
     if (text.trim() === '') return { type: 'value', value: null };
 
     const contentType = response.headers.get('content-type') ?? '';
@@ -235,7 +311,36 @@ async function executeHttp(
     return halt(failure(manifest.id, 'UPSTREAM_PARSE', 'Response was not JSON', false));
 }
 
-async function executeLocal(manifest: CapabilityManifest, input: Record<string, unknown>): Promise<Step> {
+async function readBounded(response: Response, capabilityId: string): Promise<{ type: 'text'; text: string } | Step> {
+    const declared = Number(response.headers.get('content-length') ?? '');
+    if (Number.isFinite(declared) && declared > MAX_BODY_CHARS) {
+        await response.body?.cancel().catch(() => undefined);
+        return halt(failure(capabilityId, 'PAYLOAD_TOO_LARGE', 'Response exceeded 1MB', false));
+    }
+    if (!response.body) {
+        const text = await response.text();
+        if (text.length > MAX_BODY_CHARS) {
+            return halt(failure(capabilityId, 'PAYLOAD_TOO_LARGE', 'Response exceeded 1MB', false));
+        }
+        return { type: 'text', text };
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        if (text.length > MAX_BODY_CHARS) {
+            await reader.cancel().catch(() => undefined);
+            return halt(failure(capabilityId, 'PAYLOAD_TOO_LARGE', 'Response exceeded 1MB', false));
+        }
+    }
+    text += decoder.decode();
+    return { type: 'text', text };
+}
+
+async function executeLocal(manifest: CapabilityManifest, input: Record<string, unknown>, signal?: AbortSignal): Promise<Step> {
     if (manifest.transport.kind !== 'local') {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not a local capability', false));
     }
@@ -247,7 +352,7 @@ async function executeLocal(manifest: CapabilityManifest, input: Record<string, 
     for (const entry of manifest.inputs) {
         if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
     }
-    return { type: 'value', value: await handler(args) };
+    return { type: 'value', value: await handler(args, { signal }) };
 }
 
 async function executeMcp(manifest: CapabilityManifest, input: Record<string, unknown>): Promise<Step> {
@@ -291,6 +396,20 @@ function encodeBase64(value: string): string {
     return btoa(binary);
 }
 
+function beginRun(manifest: CapabilityManifest, input: Record<string, unknown>): CapabilityExecution {
+    const run: CapabilityExecution = {
+        runId: `run_${sha256(`${manifest.digest}|${Date.now()}|${Math.random()}`).slice(0, 16)}`,
+        capabilityId: manifest.id,
+        manifestDigest: manifest.digest,
+        effect: manifest.effect,
+        inputDigest: sha256(canonicalize(input)),
+        startedAt: Date.now(),
+        status: 'running'
+    };
+    executions.set(run.runId, run);
+    return run;
+}
+
 function failure(capabilityId: string, code: string, message: string, retryable: boolean): CapabilityResult {
     const error = { code, message, retryable };
     return {
@@ -302,7 +421,16 @@ function failure(capabilityId: string, code: string, message: string, retryable:
     };
 }
 
-function finish(result: CapabilityResult): CapabilityResult {
+function finish(
+    result: CapabilityResult,
+    run?: CapabilityExecution,
+    status?: ExecutionStatus
+): CapabilityResult {
+    if (run && status) {
+        run.status = status;
+        executions.set(run.runId, run);
+        result.runId = run.runId;
+    }
     brandResult(result);
     lastResult.set(result.capabilityId, result);
     return result;

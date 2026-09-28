@@ -2,7 +2,9 @@
 // same manifest gate as OpenAPI — manual invocation, no secret, no network.
 // The browser engine is replaceable so tests never touch a real microphone.
 
+import { sha256 } from './hash';
 import { sealManifest, validateManifest, type CapabilityManifest } from './manifest';
+import type { LocalCall } from './execute';
 
 const MAX_UTTERANCE = 5_000;
 
@@ -11,10 +13,72 @@ export interface SpeechSupport {
     listen: boolean;
 }
 
+export type SpeechSource = 'on_device' | 'browser_service' | 'remote' | 'unknown';
+
+export type SpeechTerminal = 'final' | 'cancel' | 'timeout' | 'error' | 'unavailable';
+
+/** One moment of speech. Streams replace a single Promise<string>. */
+export interface SpeechObservation {
+    sessionId: string;
+    segmentId: string;
+    startedAt: number;
+    updatedAt: number;
+    endedAt?: number;
+    text: string;
+    final: boolean;
+    confidence?: number;
+    language?: string;
+    source: SpeechSource;
+    terminal?: SpeechTerminal;
+}
+
+export interface SpeechSession {
+    id: string;
+    signal: AbortSignal;
+    cancel: () => void;
+}
+
 export interface SpeechEngine {
     supported(): SpeechSupport;
-    speak(text: string): Promise<void>;
-    listen(lang?: string): Promise<string>;
+    locality?(): { speak: SpeechSource; listen: SpeechSource };
+    speak(text: string, session?: SpeechSession): Promise<void>;
+    listen(lang?: string, session?: SpeechSession, onObservation?: (observation: SpeechObservation) => void): Promise<string>;
+}
+
+const sessions = new Map<string, AbortController>();
+const observationLog = new Map<string, SpeechObservation[]>();
+let activeSpeakId: string | null = null;
+
+export function openSpeechSession(kind: 'speak' | 'listen'): SpeechSession {
+    const id = `${kind}_${sha256(`${Date.now()}|${Math.random()}`).slice(0, 12)}`;
+    const controller = new AbortController();
+    sessions.set(id, controller);
+    observationLog.set(id, []);
+    return {
+        id,
+        signal: controller.signal,
+        cancel() {
+            controller.abort();
+            if (activeSpeakId === id) {
+                activeSpeakId = null;
+                if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
+            }
+        }
+    };
+}
+
+export function speechObservations(sessionId: string): SpeechObservation[] {
+    return observationLog.get(sessionId) ?? [];
+}
+
+export function recordSpeechObservation(observation: SpeechObservation): void {
+    const list = observationLog.get(observation.sessionId) ?? [];
+    list.push(observation);
+    observationLog.set(observation.sessionId, list);
+}
+
+function speechSource(kind: 'speak' | 'listen'): SpeechSource {
+    return getSpeechEngine().locality?.()?.[kind] ?? 'unknown';
 }
 
 let engineOverride: SpeechEngine | null = null;
@@ -34,19 +98,60 @@ export function speechManifests(): CapabilityManifest[] {
     });
 }
 
-export async function runSpeechHandler(handler: string, args: Record<string, unknown>): Promise<unknown> {
+export async function runSpeechHandler(
+    handler: string,
+    args: Record<string, unknown>,
+    call?: LocalCall
+): Promise<unknown> {
     if (handler === 'speech.speak') {
         const text = typeof args.text === 'string' ? args.text.trim() : '';
         if (!text) throw new Error('Nothing to speak');
         if (text.length > MAX_UTTERANCE) throw new Error('Utterance exceeds 5000 characters');
-        await getSpeechEngine().speak(text);
-        return { spoken: text };
+        const session = openSpeechSession('speak');
+        if (call?.signal) call.signal.addEventListener('abort', () => session.cancel(), { once: true });
+        activeSpeakId = session.id;
+        try {
+            await getSpeechEngine().speak(text, session);
+        } finally {
+            if (activeSpeakId === session.id) activeSpeakId = null;
+        }
+        const observation: SpeechObservation = {
+            sessionId: session.id,
+            segmentId: `${session.id}:0`,
+            startedAt: Date.now(),
+            updatedAt: Date.now(),
+            endedAt: Date.now(),
+            text,
+            final: true,
+            source: speechSource('speak'),
+            terminal: session.signal.aborted ? 'cancel' : 'final'
+        };
+        recordSpeechObservation(observation);
+        if (session.signal.aborted) throw new DOMException('Speech canceled', 'AbortError');
+        return { spoken: text, source: observation.source, sessionId: session.id };
     }
     if (handler === 'speech.listen') {
         const lang = typeof args.lang === 'string' && args.lang.trim() ? args.lang.trim() : undefined;
-        const transcript = (await getSpeechEngine().listen(lang)).trim();
+        const session = openSpeechSession('listen');
+        if (call?.signal) call.signal.addEventListener('abort', () => session.cancel(), { once: true });
+        const startedAt = Date.now();
+        const transcript = (await getSpeechEngine().listen(lang, session, recordSpeechObservation)).trim();
+        if (session.signal.aborted) throw new DOMException('Speech canceled', 'AbortError');
         if (!transcript) throw new Error('No speech recognized');
-        return { transcript };
+        const observation: SpeechObservation = {
+            sessionId: session.id,
+            segmentId: `${session.id}:final`,
+            startedAt,
+            updatedAt: Date.now(),
+            endedAt: Date.now(),
+            text: transcript,
+            final: true,
+            language: lang,
+            source: speechSource('listen'),
+            terminal: 'final'
+        };
+        recordSpeechObservation(observation);
+        return { transcript, source: observation.source, sessionId: session.id };
     }
     throw new Error(`Unknown speech handler ${handler}`);
 }
@@ -124,7 +229,14 @@ const browserSpeechEngine: SpeechEngine = {
         };
     },
 
-    async speak(text: string) {
+    locality() {
+        return {
+            speak: 'unknown' as const,
+            listen: 'unknown' as const
+        };
+    },
+
+    async speak(text: string, session?: SpeechSession) {
         if (typeof window === 'undefined' || !window.speechSynthesis) {
             return Promise.reject(new Error('Speech synthesis is not available in this browser'));
         }
@@ -155,19 +267,28 @@ const browserSpeechEngine: SpeechEngine = {
                 finish(() => reject(new Error(message)));
             };
             // Chrome cancels an utterance spoken in the same turn as cancel().
+            if (session?.signal.aborted) {
+                finish(() => reject(new DOMException('Speech canceled', 'AbortError')));
+                return;
+            }
+            session?.signal.addEventListener('abort', () => {
+                if (activeSpeakId === session.id) synth.cancel();
+                finish(() => reject(new DOMException('Speech canceled', 'AbortError')));
+            }, { once: true });
             if (synth.speaking || synth.pending) synth.cancel();
             window.setTimeout(() => {
-                if (settled) return;
+                if (settled || session?.signal.aborted) return;
                 synth.speak(utterance);
             }, 50);
         });
     },
 
-    listen(lang?: string) {
+    listen(lang?: string, session?: SpeechSession, onObservation?: (observation: SpeechObservation) => void) {
         const Ctor = speechRecognitionCtor();
         if (!Ctor) return Promise.reject(new Error('Speech recognition is not available in this browser'));
         return new Promise((resolve, reject) => {
             const recognition = new Ctor();
+            const startedAt = Date.now();
             let settled = false;
             const finish = (fn: () => void) => {
                 if (settled) return;
@@ -180,6 +301,9 @@ const browserSpeechEngine: SpeechEngine = {
                 }
                 fn();
             };
+            session?.signal.addEventListener('abort', () => {
+                finish(() => reject(new DOMException('Speech canceled', 'AbortError')));
+            }, { once: true });
             const timer = window.setTimeout(() => {
                 finish(() => reject(new Error('Speech recognition timed out')));
             }, 15_000);
@@ -188,6 +312,18 @@ const browserSpeechEngine: SpeechEngine = {
             recognition.maxAlternatives = 1;
             recognition.onresult = (event: SpeechRecognitionEventLike) => {
                 const transcript = event.results?.[0]?.[0]?.transcript ?? '';
+                if (session) {
+                    onObservation?.({
+                        sessionId: session.id,
+                        segmentId: `${session.id}:interim`,
+                        startedAt,
+                        updatedAt: Date.now(),
+                        text: transcript,
+                        final: false,
+                        language: lang,
+                        source: 'unknown'
+                    });
+                }
                 finish(() => resolve(transcript));
             };
             recognition.onerror = (event: { error?: string }) => {

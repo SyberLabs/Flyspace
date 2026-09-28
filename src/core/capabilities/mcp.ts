@@ -2,6 +2,7 @@
 // Execution stays unbound until a host registers an McpTransport for the
 // server id. This module does not open a network connection.
 
+import { canonicalCapabilityId } from './identity';
 import { fromJsonSchema } from './jsonSchema';
 import {
     approvalForEffect,
@@ -13,7 +14,6 @@ import {
     type CapabilityManifest
 } from './manifest';
 import type { ValueType } from './valueType';
-import { slug } from './openapi';
 
 export interface McpToolAnnotations {
     readOnlyHint?: boolean;
@@ -35,52 +35,49 @@ export interface McpCompileResult {
     errors: Array<{ tool?: string; message: string }>;
 }
 
-export function compileMcpTools(tools: readonly McpToolSchema[]): McpCompileResult {
+export interface CompileMcpOptions {
+    /** Tool annotations are hints. They classify effect only when the server is trusted. */
+    trustedAnnotations?: boolean;
+}
+
+export function compileMcpTools(tools: readonly McpToolSchema[], options: CompileMcpOptions = {}): McpCompileResult {
     const manifests: CapabilityManifest[] = [];
     const errors: McpCompileResult['errors'] = [];
-    const used = new Set<string>();
 
     for (const tool of tools) {
-        const compiled = compileOne(tool, used);
+        const compiled = compileOne(tool, options.trustedAnnotations === true);
         if ('error' in compiled) errors.push({ tool: tool?.name, message: compiled.error });
         else manifests.push(compiled.manifest);
     }
     return { manifests, errors };
 }
 
-function compileOne(tool: McpToolSchema, used: Set<string>): { manifest: CapabilityManifest } | { error: string } {
+function compileOne(tool: McpToolSchema, trustedAnnotations: boolean): { manifest: CapabilityManifest } | { error: string } {
     if (!isRecord(tool) || typeof tool.serverId !== 'string' || typeof tool.name !== 'string') {
         return { error: 'MCP tool needs a serverId and name' };
     }
     if (!/^[A-Za-z0-9_.:-]{1,80}$/.test(tool.serverId)) return { error: 'serverId is invalid' };
     if (!/^[A-Za-z_][A-Za-z0-9_-]{0,64}$/.test(tool.name)) return { error: 'tool name is invalid' };
 
-    const effect = effectFromAnnotations(tool.annotations);
+    const effect = effectFromAnnotations(tool.annotations, trustedAnnotations);
     const inputs = compileArguments(tool.inputSchema);
     if ('error' in inputs) return inputs;
     const output = compileOutput(tool.outputSchema);
+    if ('error' in output) return output;
 
-    const base = `cap_mcp_${slug(tool.serverId)}_${slug(tool.name)}`.slice(0, 84);
-    let id = base;
-    let n = 2;
-    while (used.has(id)) {
-        const suffix = `_${n}`;
-        id = `${base.slice(0, 84 - suffix.length)}${suffix}`;
-        n += 1;
-    }
-    used.add(id);
-
+    const transport = { kind: 'mcp' as const, serverId: tool.serverId, toolName: tool.name };
     const sealed = sealManifest({
         version: 1,
-        id,
+        id: canonicalCapabilityId(transport),
         title: tool.name,
         ...(tool.description ? { description: tool.description.slice(0, 2000) } : {}),
         source: { kind: 'mcp', locator: tool.serverId, operationId: tool.name },
         effect: effect.effect,
-        effectSource: 'annotation',
+        effectSource: trustedAnnotations ? 'annotation' : 'declared',
         approval: approvalForEffect(effect.effect),
+        invocation: 'manual',
         auth: { kind: 'none' },
-        transport: { kind: 'mcp', serverId: tool.serverId, toolName: tool.name },
+        transport,
         inputs: inputs.inputs,
         output: output
     });
@@ -89,9 +86,12 @@ function compileOne(tool: McpToolSchema, used: Set<string>): { manifest: Capabil
     return { manifest: validated.manifest };
 }
 
-function effectFromAnnotations(annotations: McpToolAnnotations | undefined): { effect: CapabilityEffect } {
+function effectFromAnnotations(
+    annotations: McpToolAnnotations | undefined,
+    trustedAnnotations: boolean
+): { effect: CapabilityEffect } {
     if (annotations?.destructiveHint) return { effect: 'destructive' };
-    if (annotations?.readOnlyHint) return { effect: 'read' };
+    if (trustedAnnotations && annotations?.readOnlyHint) return { effect: 'read' };
     return { effect: 'write' };
 }
 
@@ -116,10 +116,10 @@ function compileArguments(schema: unknown): { inputs: CapabilityInput[] } | { er
     return { inputs };
 }
 
-function compileOutput(schema: unknown): CapabilityManifest['output'] {
-    if (schema === undefined) return { schema: { kind: 'any' }, presentation: 'raw' };
+function compileOutput(schema: unknown): CapabilityManifest['output'] | { error: string } {
+    if (schema === undefined) return { error: 'tool has no output schema' };
     const converted = fromJsonSchema(schema);
-    if (!converted.ok) return { schema: { kind: 'any', description: converted.error }, presentation: 'raw' };
+    if (!converted.ok) return { error: converted.error };
     return presentationFor(converted.schema);
 }
 

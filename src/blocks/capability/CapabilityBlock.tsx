@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useBlockStore } from '@/core/stores';
 import { runInstalledCapability, useCapabilityStore } from '@/core/capabilities';
 import type { OmniItem } from '@/core/gateway';
@@ -21,8 +21,9 @@ function readTypedKind(data: unknown): string | null {
 }
 
 /**
- * One view for every runtime capability. Read and compute fetch on open.
- * Write and destructive wait for an explicit run, and only after approval.
+ * One view for every runtime capability.
+ * Mounting the view is not an execution request. The user runs it.
+ * Write and destructive also wait until approval.
  */
 export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const block = useBlockStore(state => state.getBlock(instanceId));
@@ -31,12 +32,6 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const [running, setRunning] = useState(false);
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
-    const manual = manifest?.invocation === 'manual';
-
-    useEffect(() => {
-        if (!manifest || sideEffect || manual) return;
-        void runInstalledCapability(instanceId);
-    }, [instanceId, manifest, sideEffect, manual]);
 
     const run = () => {
         if (!manifest || running) return;
@@ -75,7 +70,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 disabled={!manifest || running || blocked}
                 className="rounded border border-[var(--citadel-border)] px-2 py-1 text-xs disabled:opacity-50"
             >
-                {running ? 'Running…' : blocked ? 'Needs approval' : sideEffect || manual ? 'Run' : 'Refresh'}
+                {running ? 'Running…' : blocked ? 'Needs approval' : 'Run'}
             </button>
         </div>
     );

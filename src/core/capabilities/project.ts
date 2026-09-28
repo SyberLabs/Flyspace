@@ -23,6 +23,7 @@ export interface CapabilityResult {
     typed: TypedValue | null;
     presentation: OmniData;
     error?: CapabilityError;
+    runId?: string;
 }
 
 const CAPABILITY_RESULT = Symbol.for('omni.capabilityResult');

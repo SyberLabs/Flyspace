@@ -31,17 +31,28 @@ proposal is stored as `pending` even if it arrived marked `approved`.
 keep an approval the user already granted, because that blob came from this
 store, and it is revalidated first.
 
+## Production boundaries
+
+A manifest describes a capability. It does not grant itself authority.
+
+- Credential slots are `origin + scheme + placement`. Two APIs that both name a scheme `ApiKey` do not share a secret, and a proposal cannot point its `secretRef` at another origin's slot.
+- HTTP method is an effect floor. `x-omni-effect` and MCP annotations may raise that floor. They cannot turn POST into auto-running compute. Untrusted MCP `readOnlyHint` is not approval.
+- Capability ids are a hash of canonical origin and operation. Speech handlers keep pinned ids. A different origin cannot reuse an existing id.
+- Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
+- Execution is one runtime: `executeCapability`. Write and destructive calls that leave the process and then throw are `EFFECT_UNCERTAIN` and are not retryable. Mounting a React view is not a request to run.
+- HTTP capabilities are `browser_direct`. That is the browser's fetch, including CORS. It is not a general server-side broker. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
+- Speech is an observation with a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. `Promise<string>` is only the final transcript the block stores.
+
 ## Effects
 
 | Effect | Default methods | Runs when |
 | --- | --- | --- |
-| read | GET, HEAD | installed |
-| compute | `x-omni-effect: compute` on a safe method, or an explicit bring/MCP declaration | installed |
-| write | POST, PUT, PATCH | approval is `approved` |
-| destructive | DELETE, or `destructiveHint` | approval is `approved` |
+| read | GET, HEAD | the user runs it |
+| compute | `x-omni-effect: compute` on a safe method, or an explicit bring/MCP declaration | the user runs it |
+| write | POST, PUT, PATCH | approval is `approved` and the user runs it |
+| destructive | DELETE, or `destructiveHint`, or a tightened GET/HEAD | approval is `approved` and the user runs it |
 
-A method cannot be relabeled into a weaker class. DELETE stays destructive.
-GET cannot be write or destructive.
+A method cannot be relabeled into a weaker class. GET and HEAD may be tightened to write or destructive. POST, PUT, and PATCH are at least write. DELETE stays destructive. An observed HTTP error on a write or destructive call is not marked retryable.
 
 ## Two values, one call
 

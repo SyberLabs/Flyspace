@@ -154,7 +154,8 @@ export function clearCapabilities(): void {
 /** Run an installed capability for a canvas instance and store both values. */
 export async function runInstalledCapability(
     instanceId: string,
-    input?: Record<string, unknown>
+    input?: Record<string, unknown>,
+    options?: { signal?: AbortSignal }
 ): Promise<CapabilityResult> {
     const block = useBlockStore.getState().getBlock(instanceId);
     const capabilityId = block?.schema.capabilityId;
@@ -173,7 +174,7 @@ export async function runInstalledCapability(
         ...(isPlain(block.params) ? block.params : {}),
         ...(input ?? {})
     };
-    const result = await executeCapability(capabilityId, params);
+    const result = await executeCapability(capabilityId, params, { signal: options?.signal });
     const items = result.presentation.items ?? [];
     useBlockStore.getState().updateData(instanceId, {
         capabilityId,
@@ -216,7 +217,7 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
             id: 'in',
             direction: 'input',
             dataType: portDataTypeFor(inbound.kind),
-            label: inbound.kind === 'any' ? 'Text' : 'Arguments',
+            label: manifest.inputs.length === 1 && manifest.inputs[0].schema.kind === 'string' ? 'Text' : 'Arguments',
             description: 'Capability arguments',
             schema: inbound
         });
@@ -246,15 +247,8 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
     };
 }
 
-/** A lone required string accepts any wired value and projects it to text. */
+/** The input port is the real argument contract. Projections live on the wire. */
 function inputPortSchema(manifest: CapabilityManifest): ValueType {
-    if (
-        manifest.inputs.length === 1
-        && manifest.inputs[0].required
-        && manifest.inputs[0].schema.kind === 'string'
-    ) {
-        return { kind: 'any' };
-    }
     return inputSchema(manifest);
 }
 
@@ -331,8 +325,8 @@ export function acceptRehydrated(manifests: CapabilityManifest[]): void {
 }
 
 export function ensureSpeechCapabilities(): void {
-    bindLocalHandler('speech.speak', args => runSpeechHandler('speech.speak', args));
-    bindLocalHandler('speech.listen', args => runSpeechHandler('speech.listen', args));
+    bindLocalHandler('speech.speak', (args, call) => runSpeechHandler('speech.speak', args, call));
+    bindLocalHandler('speech.listen', (args, call) => runSpeechHandler('speech.listen', args, call));
     for (const manifest of speechManifests()) {
         const current = readCapability(manifest.id);
         if (current?.digest === manifest.digest) continue;

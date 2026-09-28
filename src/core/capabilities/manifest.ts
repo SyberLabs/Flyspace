@@ -4,6 +4,7 @@
 // pair is rejected before anything is registered.
 
 import { canonicalize, sha256 } from './hash';
+import { canonicalCapabilityId, credentialSlot } from './identity';
 import { validateValueType, type ValueType } from './valueType';
 
 export const CAPABILITY_MANIFEST_VERSION = 1 as const;
@@ -46,8 +47,10 @@ export interface CapabilityOutput {
     presentation: 'items' | 'content' | 'raw';
 }
 
+export type HttpAccess = 'browser_direct';
+
 export type CapabilityTransport =
-    | { kind: 'http'; baseUrl: string; method: HttpMethod; path: string }
+    | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
     | { kind: 'mcp'; serverId: string; toolName: string }
     | { kind: 'local'; handler: string };
 
@@ -106,12 +109,15 @@ export function approvalForEffect(effect: CapabilityEffect): CapabilityApproval 
     return effect === 'read' || effect === 'compute' ? 'auto' : 'pending';
 }
 
-/** Side-effecting methods cannot be quietly relabeled as reads. */
+/**
+ * Method is the floor. An imported spec may raise the effect
+ * (GET marked destructive needs approval) and may not lower it
+ * (POST marked compute does not become auto).
+ */
 export function effectAllowedForMethod(method: HttpMethod, effect: CapabilityEffect): boolean {
-    if (method === 'GET' || method === 'HEAD') return effect === 'read' || effect === 'compute';
+    if (method === 'GET' || method === 'HEAD') return true;
     if (method === 'DELETE') return effect === 'destructive';
-    if (method === 'PUT' || method === 'PATCH') return effect === 'write' || effect === 'destructive';
-    return effect === 'compute' || effect === 'write' || effect === 'destructive';
+    return effect === 'write' || effect === 'destructive';
 }
 
 export function digestPayload(draft: ManifestDraft): unknown {
@@ -274,6 +280,9 @@ export function validateManifest(input: unknown): ManifestValidation {
         if (typeof input.transport.method !== 'string' || !METHODS.includes(input.transport.method as HttpMethod)) {
             errors.push('transport.method is invalid');
         }
+        if (input.transport.access !== 'browser_direct') {
+            errors.push('http transport access must be browser_direct');
+        }
         if (typeof input.transport.path !== 'string' || !input.transport.path.startsWith('/') || input.transport.path.includes('..')) {
             errors.push('transport.path must be an absolute path without ..');
         }
@@ -375,6 +384,18 @@ export function validateManifest(input: unknown): ManifestValidation {
         errors.push('digest must be a sha256 hex string');
     }
 
+    if (errors.length === 0 && isRecord(input.transport)) {
+        const transport = input.transport as CapabilityTransport;
+        if (typeof input.id === 'string' && input.id !== canonicalCapabilityId(transport)) {
+            errors.push(`id must be ${canonicalCapabilityId(transport)}`);
+        }
+        if (transport.kind === 'http' && isRecord(input.auth) && input.auth.kind !== 'none') {
+            const auth = input.auth as unknown as AuthBinding;
+            const slot = credentialSlot(transport.baseUrl, auth);
+            if (auth.secretRef !== slot) errors.push(`auth.secretRef must be ${slot}`);
+        }
+    }
+
     if (errors.length > 0) return { ok: false, errors };
 
     const draft = canonicalDraft(input);
@@ -435,6 +456,7 @@ function canonicalTransport(transport: CapabilityTransport): CapabilityTransport
     }
     return {
         kind: 'http',
+        access: 'browser_direct',
         baseUrl: transport.baseUrl,
         method: transport.method,
         path: transport.path

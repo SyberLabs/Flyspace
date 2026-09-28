@@ -41,6 +41,6 @@ describe('browser speech engine', () => {
         const result = await executeCapability('cap_speech_speak', { text: 'later' });
         expect(spoken).toEqual(['later']);
         expect(result.ok).toBe(true);
-        expect(result.typed?.value).toEqual({ spoken: 'later' });
+        expect(result.typed?.value).toMatchObject({ spoken: 'later' });
     });
 });

@@ -21,7 +21,7 @@ export function fromJsonSchema(
 
     if (typeof schema.$ref === 'string') {
         if (seen.includes(schema.$ref)) {
-            return { ok: true, schema: { kind: 'any', description: `cyclic ${schema.$ref}` } };
+            return { ok: false, error: `cyclic $ref ${schema.$ref} is not a typed contract` };
         }
         const resolved = resolveRef(root, schema.$ref);
         if (!resolved) return { ok: false, error: `unresolved $ref ${schema.$ref}` };
@@ -60,7 +60,7 @@ export function fromJsonSchema(
         return finish({ kind, nullable: nullable || (schema.enum as unknown[]).includes(null) }, schema);
     }
     if (rawType === undefined) {
-        return { ok: true, schema: { kind: 'any', ...(schema.description ? { description: String(schema.description) } : {}) } };
+        return { ok: false, error: 'schema does not declare a type' };
     }
     if (typeof rawType !== 'string') return { ok: false, error: 'schema type is invalid' };
 
