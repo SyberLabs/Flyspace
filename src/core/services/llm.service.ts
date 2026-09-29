@@ -23,6 +23,8 @@ export interface LLMOptions {
     stream?: boolean;
     /** Abort the in-flight fetch. Never serialized onto the request body. */
     signal?: AbortSignal;
+    /** Reuse this value when retrying the same logical inference operation. */
+    idempotencyKey?: string;
     /**
      * What fed this turn. Sent to the server for the inference ledger only —
      * providers never see it. Omitted when the caller has no provenance to
@@ -54,6 +56,17 @@ const LLM_ENDPOINT = '/api/llm';
  * disable cascade lineage without failing anything.
  */
 export const RUN_ID_HEADER = 'X-Omni-Run-Id';
+
+function idempotencyKey(value?: string): string {
+    return value ?? globalThis.crypto.randomUUID();
+}
+
+async function throwIfReplayed(res: Response, onRunId?: (runId: string) => void): Promise<void> {
+    if (res.headers.get('Idempotency-Replayed') !== 'true') return;
+    reportRunId(res, onRunId);
+    const data = await res.json().catch(() => ({}));
+    throw new Error(`Inference request was already accepted (${data.status ?? 'status unavailable'}).`);
+}
 
 /** Hand the caller the ledger row id, if the server reported one. */
 function reportRunId(res: Response, onRunId?: (runId: string) => void): void {
@@ -110,7 +123,11 @@ export class LLMService {
     async complete(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResponse> {
         const res = await fetch(LLM_ENDPOINT, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            signal: options?.signal,
+            headers: {
+                'Content-Type': 'application/json',
+                'Idempotency-Key': idempotencyKey(options?.idempotencyKey)
+            },
             body: JSON.stringify({
                 provider: this.config.provider,
                 model: this.config.model,
@@ -124,6 +141,7 @@ export class LLMService {
             })
         });
 
+        await throwIfReplayed(res, options?.onRunId);
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.error || `LLM request failed: ${res.status}`);
@@ -135,9 +153,10 @@ export class LLMService {
 
     async *stream(messages: LLMMessage[], options?: LLMOptions): AsyncGenerator<string> {
         const { signal, sources, onRunId, ...llmOptions } = options ?? {};
+        const key = idempotencyKey(llmOptions.idempotencyKey);
         const res = await fetch(LLM_ENDPOINT, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
             signal,
             body: JSON.stringify({
                 provider: this.config.provider,
@@ -153,6 +172,7 @@ export class LLMService {
             })
         });
 
+        await throwIfReplayed(res, onRunId);
         if (!res.ok || !res.body) {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.error || `LLM stream failed: ${res.status}`);
@@ -165,6 +185,7 @@ export class LLMService {
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
+        let completed = false;
         try {
             while (true) {
                 if (signal?.aborted) {
@@ -172,11 +193,14 @@ export class LLMService {
                     throw abortError();
                 }
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done) { completed = true; break; }
                 const chunk = decoder.decode(value, { stream: true });
                 if (chunk) yield chunk;
             }
         } finally {
+            if (!completed) {
+                try { await reader.cancel(); } catch { /* Upstream may already be closed. */ }
+            }
             try {
                 reader.releaseLock();
             } catch {

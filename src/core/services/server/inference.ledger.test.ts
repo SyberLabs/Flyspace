@@ -211,7 +211,7 @@ describe('openRun', () => {
         const insert = stmt(inTransaction, 'INSERT INTO inference_run');
         expect(insert.text).toContain("'running'");
         expect(insert.values).toEqual([
-            'anthropic', 'claude-opus-5', false, 3, 1234, null, null, null
+            'anthropic', 'claude-opus-5', false, 3, 1234, null, null, null, null, null, null
         ]);
     });
 
@@ -354,6 +354,7 @@ function spyRun(): MeterableRun & { calls: Array<[string, unknown]> } {
         calls,
         async succeeded(o) { calls.push(['succeeded', o]); },
         async failed(e) { calls.push(['failed', e]); },
+        async uncertain(e) { calls.push(['uncertain', e]); },
         async canceled(o) { calls.push(['canceled', o]); }
     };
 }
@@ -391,7 +392,7 @@ describe('meterStream', () => {
         expect(outcome).toMatchObject({ output: 'partial ', finishReason: 'canceled' });
     });
 
-    it('records a mid-stream break as failed and still errors the consumer', async () => {
+    it('records an ambiguous mid-stream break as uncertain and errors the consumer', async () => {
         const run = spyRun();
         const encoder = new TextEncoder();
         const broken = new ReadableStream<Uint8Array>({
@@ -404,7 +405,7 @@ describe('meterStream', () => {
         });
 
         await expect(readAll(meterStream(broken, run))).rejects.toThrow('upstream closed');
-        expect(run.calls.map(c => c[0])).toEqual(['failed']);
+        expect(run.calls.map(c => c[0])).toEqual(['uncertain']);
     });
 
     it('closes the row exactly once', async () => {
@@ -624,7 +625,7 @@ describe('recentRuns', () => {
         const seen = readback([RAW_ROW, { ...RAW_ROW, id: '10' }]);
         await recentRuns();
         expect(seen[1].text).toContain('run_id = ANY($1::bigint[])');
-        expect(seen[1].values).toEqual([['9', '10']]);
+        expect(seen[1].values).toEqual([['9', '10'], null]);
     });
 });
 
@@ -723,7 +724,7 @@ describe('runLineage', () => {
         await runLineage('9', 4);
 
         expect(seen[0].text).toContain('WITH RECURSIVE');
-        expect(seen[0].values).toEqual(['9', 4, MAX_LINEAGE_NODES]);
+        expect(seen[0].values).toEqual(['9', 4, MAX_LINEAGE_NODES, null]);
     });
 
     it('walks child to parent on parent_run_id', async () => {
@@ -787,7 +788,7 @@ describe('runLineage', () => {
     it('looks sources up for every run the walk returned', async () => {
         const seen = readback([lineageRow('9', 0, null, null), lineageRow('8', 1, '9', 'A')]);
         await runLineage('9');
-        expect(seen[1].values).toEqual([['9', '8']]);
+        expect(seen[1].values).toEqual([['9', '8'], null]);
     });
 
     it('reports a cycle the walk refused to follow', async () => {

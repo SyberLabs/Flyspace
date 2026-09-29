@@ -13,21 +13,22 @@ an IP allowlist - until the controls below are implemented. A limited public
 preview is possible with `OMNI_PUBLIC_DEMO=1`: server routes then disable
 paid text generation, keyed data, and shared inference ledger reads.
 
-That is not caution for its own sake. OmniOS has **no application
-authentication**. The only `Authorization` headers in the codebase are outbound
-to data providers. Every route is open to whoever can reach the port:
+The app's local-first mode has no account system. Production now defaults to
+hosted API authentication for inference and its ledger; `OMNI_DEPLOYMENT_MODE=local`
+is an explicit single-user opt-in and is safe only on loopback or a private
+network with a trusted boundary. Never set local mode on a public listener.
+Other API surfaces still need their own hosting review before any public URL:
 
-| Route | What an anonymous visitor gets |
+| Route | Historical anonymous behavior before hosted-boundary changes |
 |-------|-------------------------------|
 | `POST /api/llm` | Spends your Anthropic / Google credits, unmetered |
 | `GET /api/data?provider=` | Spends your FRED / BLS / NewsAPI / Alpha Vantage quota |
 | `GET /api/inference-runs` | Reads `prompt_excerpt` and `output_excerpt` from every run |
 | `GET /api/inference-runs/:id/lineage` | Reads whole cascades, several hops deep |
 
-The last two are newer than the rest. Before the inference ledger, a public
-deploy leaked API credits; now it also leaks the content of past conversations.
-The ledger made the exposure worse, which is exactly why it is written down
-here rather than left as a footnote.
+The inference-history routes are now protected by the hosted identity check
+below. `/api/data` and other surfaces remain unreviewed. This is a historical
+exposure table, not a claim about a current public deployment.
 
 `npm run dev` and `npm start` bind `127.0.0.1` for this reason. A container
 deployment binds `0.0.0.0` inside the container and is exposed only on the
@@ -71,19 +72,65 @@ keyed data, or the inference ledger.
 
 ## Before the full app is publicly accessible
 
-All four, not three:
+## Hosted identity and durable inference
 
-- [ ] **Authentication.** Next middleware gating `/` and `/api/:path*` on a
-      signed session cookie, with the password compared against a
-      `scrypt`/`argon2` hash in env. Single-user is fine; absent is not.
-- [ ] **Rate limiting on `/api/llm`.** Auth stops strangers, not a stolen
-      cookie or your own runaway cascade. Cost is unbounded without it.
-- [ ] **An identity column on `inference_run`.** The ledger records what the
-      server did, not who asked - honest for one user, wrong for several.
-      See `INFERENCE_LEDGER.md`, *Limitations*. It goes in **with** auth, never
-      before: a `user_id` with nothing to populate it is a fiction.
-- [ ] **A `running`-row reaper.** A crashed process leaves `running` rows by
-      design. Nothing reaps them today; unbounded, that is a slow leak.
+`NODE_ENV=production` requires hosted identity unless a trusted deployment
+explicitly sets `OMNI_DEPLOYMENT_MODE=local`. `OMNI_DEPLOYMENT_MODE=hosted`
+also enables it in development. Hosted API requests use an OIDC bearer token;
+the server fetches discovery metadata from the configured issuer, requires an
+exact issuer match, and verifies signing keys, audience, expiry, issue time,
+and subject. `OMNI_AUTH_AUDIENCE` must identify this API/resource; it must not
+be the browser client ID or an ID-token audience. Tokens older than five
+minutes are rejected, with 30 seconds of clock tolerance. The issuer must stop
+issuing access tokens when a user is revoked; a still-valid token can otherwise
+remain accepted within that bounded age window. Owner identity is the verified
+`iss:sub`, never a caller header. Configure `OMNI_AUTH_ISSUER` and
+`OMNI_AUTH_AUDIENCE`; absent config fails closed. The browser has no sign-in/token
+acquisition flow yet, so a real issuer and client integration remain deployment
+prerequisites.
+
+Hosted identity protects `POST /api/llm`, inference history, and lineage. It
+does not make unrelated `/api/data` routes production-ready. Local use needs no
+account and keeps the canvas available offline. Local `npm run dev` and
+`npm start` bind to `127.0.0.1`; container listeners must remain private unless
+all other API surfaces are separately protected.
+
+Hosted inference also requires `DATABASE_URL` and migration 003. Each paid
+request carries `Idempotency-Key`; the ledger stores owner, key, and digest
+with the `running` attempt before provider dispatch. Reusing a key with the
+same request returns the existing attempt and status without dispatch; a
+different request returns 409. A caller retrying the same logical turn must
+reuse its `idempotencyKey` option; an omitted client key creates a fresh value
+for each call. The key is retained as long as its ledger row.
+Historical rows stay ownerless and are not assigned to the first user who
+signs in. Stale hosted rows older than three minutes become `uncertain`, which
+means the provider outcome is unresolved and must not be blindly retried.
+The request's 60-second total deadline starts at route entry and covers auth,
+bounded body reading, ledger admission, and provider work. Hosted mode rejects
+admission when durable ledger creation fails. Stale-row reconciliation runs on
+hosted ledger reads/admission and marks abandoned `running` rows `uncertain`;
+there is no independent cleanup worker. Local mode keeps the optional ledger
+and no-database inference behavior.
+
+## Remaining before any public URL
+
+- [ ] Protect `/`, `/api/data`, and any other hosted surface; enforce abuse and
+      paid-call limits by authenticated owner. These routes have not been
+      verified as covered by the new identity boundary.
+- [ ] Configure a real OIDC issuer/audience and add browser sign-in/token
+      acquisition. No identity provider or hosted deployment was provisioned
+      or verified as part of this code change.
+- [ ] Before enabling paid browser inference, wire a per-logical-turn
+      idempotency key into the active UI and retain it across retries. The
+      current browser client does not persist/reuse that key; retries without
+      it create a new attempt and may dispatch another provider request. The
+      API contract supports caller-supplied stable keys, but active UI retries
+      are not yet safe to rely on.
+- [ ] Restrict Ollama egress in the deployed network. App code fixes the hosted
+      destination from server config and rejects redirects, but cloud firewall/
+      VPC egress enforcement has not been deployed or verified.
+- [ ] Choose retention and deletion policy for inference rows, prompt/output
+      excerpts, idempotency keys, and backups.
 
 ## What CI already guarantees
 
@@ -93,7 +140,7 @@ Every push and PR, four jobs (`.github/workflows/ci.yml`):
 |-----|-----------|
 | **Typecheck, Test & Build** | tsc, vitest, eslint (0 errors), `next build`, Playwright golden path |
 | **Client bundle carries no secrets** | Builds with a canary value for every secret env var, then fails if any reaches `.next/static` |
-| **Inference Ledger (Postgres)** | Migrations apply and re-apply cleanly against `postgres:16`; CHECK constraints, foreign keys, cascade and the recursive lineage walk all execute |
+| **Inference Ledger (Postgres)** | Migrations apply and re-apply cleanly against `postgres:16`; owner-scoped lineage, idempotency constraints, foreign keys and recursive walks execute |
 | **Dependency audit** | Production dependencies block on `high`; dev-only advisories are reported, not blocking |
 
 The bundle scan is the one worth understanding, because it guards the property

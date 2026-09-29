@@ -24,7 +24,7 @@ import { SECRET_ENV_VARS, MIN_SECRET_LENGTH } from '@/core/secrets';
 // TYPES
 // ============================================
 
-export type RunStatus = 'running' | 'succeeded' | 'failed' | 'canceled';
+export type RunStatus = 'running' | 'succeeded' | 'failed' | 'canceled' | 'uncertain';
 export type RunProvider = 'local' | 'anthropic' | 'google';
 export type SourceKind = 'wire' | 'memory' | 'inference';
 
@@ -53,6 +53,9 @@ export interface OpenRunInput {
     temperature?: number;
     maxTokens?: number;
     sources?: RunSource[];
+    ownerId?: string | null;
+    idempotencyKey?: string;
+    requestDigest?: string;
 }
 
 export interface RunOutcome {
@@ -70,15 +73,20 @@ export interface RunOutcome {
 export interface LedgerRun {
     /** Row id, or null when nothing was recorded. */
     readonly id: string | null;
+    readonly replay?: boolean;
+    readonly idempotencyConflict?: boolean;
+    readonly status?: RunStatus;
+    readonly parentRejected?: boolean;
     succeeded(outcome: RunOutcome): Promise<void>;
     failed(error: unknown): Promise<void>;
     /** User halted the stream. The partial output is kept, as on the canvas. */
     canceled(outcome: RunOutcome): Promise<void>;
+    uncertain(error: unknown): Promise<void>;
     /**
      * Pipe a provider stream through the ledger. Counts what was delivered
      * and closes the row on end, cancel or mid-stream error.
      */
-    meter(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array>;
+    meter(stream: ReadableStream<Uint8Array>, onCancel?: (reason?: unknown) => void): ReadableStream<Uint8Array>;
 }
 
 /**
@@ -90,6 +98,19 @@ export const EXCERPT_LIMIT = 4_000;
 
 /** Per-run cap on recorded sources; more than this is a wiring accident. */
 export const MAX_SOURCES = 64;
+
+const POSTGRES_BIGINT_MAX = '9223372036854775807';
+
+/** Normalize decimal IDs before they can reach a PostgreSQL bigint cast. */
+export function normalizePostgresBigintId(value: string): string | undefined {
+    if (!/^\d{1,19}$/.test(value)) return undefined;
+    const normalized = value.replace(/^0+(?=\d)/, '');
+    if (normalized.length > POSTGRES_BIGINT_MAX.length) return undefined;
+    if (normalized.length === POSTGRES_BIGINT_MAX.length && normalized > POSTGRES_BIGINT_MAX) {
+        return undefined;
+    }
+    return normalized;
+}
 
 const ERROR_LIMIT = 500;
 
@@ -165,9 +186,19 @@ function dedupeSources(sources: RunSource[]): RunSource[] {
 const INSERT_RUN = `
     INSERT INTO inference_run (
         provider, model, streamed, status,
-        message_count, prompt_chars, prompt_excerpt, temperature, max_tokens
-    ) VALUES ($1, $2, $3, 'running', $4, $5, $6, $7, $8)
+        message_count, prompt_chars, prompt_excerpt, temperature, max_tokens,
+        owner_id, idempotency_key, request_digest
+    ) VALUES ($1, $2, $3, 'running', $4, $5, $6, $7, $8, $9, $10, $11)
+    ON CONFLICT (owner_id, idempotency_key)
+        WHERE owner_id IS NOT NULL AND idempotency_key IS NOT NULL
+        DO NOTHING
     RETURNING id
+`;
+
+const FIND_IDEMPOTENT_RUN = `
+    SELECT id, status, request_digest
+      FROM inference_run
+     WHERE owner_id = $1 AND idempotency_key = $2
 `;
 
 const INSERT_SOURCE = `
@@ -194,13 +225,45 @@ const FINISH_RUN = `
        AND status = 'running'
 `;
 
+const RECONCILE_STALE_HOSTED_RUNS = `
+    UPDATE inference_run
+       SET status = 'uncertain',
+           finished_at = now(),
+           latency_ms = GREATEST(0, (extract(epoch FROM (now() - started_at)) * 1000)::integer),
+           error = 'Outcome unresolved after hosted request did not finalize.'
+     WHERE status = 'running'
+       AND owner_id IS NOT NULL
+       AND started_at < now() - interval '3 minutes'
+`;
+
+async function reconcileStaleHostedRuns(): Promise<void> {
+    try {
+        await query(RECONCILE_STALE_HOSTED_RUNS);
+    } catch {
+        console.error('[ledger] stale hosted run reconciliation failed');
+    }
+}
+
 const NOOP_RUN: LedgerRun = {
     id: null,
     async succeeded() { /* nothing was opened */ },
     async failed() { /* nothing was opened */ },
     async canceled() { /* nothing was opened */ },
+    async uncertain() { /* nothing was opened */ },
     meter: (stream) => stream
 };
+
+class ParentOwnershipError extends Error {}
+
+function replayRun(id: string, status: RunStatus, conflict: boolean): LedgerRun {
+    return {
+        ...NOOP_RUN,
+        id,
+        replay: true,
+        idempotencyConflict: conflict,
+        status
+    };
+}
 
 /**
  * How long the ledger stops trying after a failed open.
@@ -226,16 +289,24 @@ export function resetLedgerCooldown(): void {
  * then leaves a visible 'running' row instead of no trace at all.
  */
 export async function openRun(input: OpenRunInput): Promise<LedgerRun> {
+    if (input.ownerId && input.sources?.some(source =>
+        source.kind === 'inference'
+        && source.parentRunId !== undefined
+        && normalizePostgresBigintId(source.parentRunId) === undefined
+    )) {
+        return { ...NOOP_RUN, parentRejected: true };
+    }
     if (!isDatabaseConfigured()) return NOOP_RUN;
     if (Date.now() < suppressedUntil) return NOOP_RUN;
+    if (input.ownerId) await reconcileStaleHostedRuns();
 
     const startedAt = Date.now();
-    let id: string | null = null;
+    let opened: { id: string; status?: RunStatus; replay?: boolean; conflict?: boolean } | null = null;
 
     try {
         // The run and its sources land together or not at all: a run whose
         // provenance half failed would misreport what fed it.
-        id = await transaction(async (client) => {
+        opened = await transaction(async (client) => {
             const inserted = await client.query<{ id: string }>(INSERT_RUN, [
                 input.provider,
                 input.model,
@@ -244,9 +315,35 @@ export async function openRun(input: OpenRunInput): Promise<LedgerRun> {
                 input.promptChars,
                 promptExcerpt(input.prompt),
                 input.temperature ?? null,
-                input.maxTokens ?? null
+                input.maxTokens ?? null,
+                input.ownerId ?? null,
+                input.idempotencyKey ?? null,
+                input.requestDigest ?? null
             ]);
-            const runId = inserted.rows[0].id;
+            const runId = inserted.rows[0]?.id;
+            if (!runId && input.ownerId && input.idempotencyKey) {
+                const existing = await client.query<{ id: string; status: RunStatus; request_digest: string }>(
+                    FIND_IDEMPOTENT_RUN,
+                    [input.ownerId, input.idempotencyKey]
+                );
+                const row = existing.rows[0];
+                if (!row) throw new Error('Idempotent run conflict could not be resolved');
+                return { id: row.id, status: row.status, replay: true, conflict: row.request_digest !== input.requestDigest };
+            }
+            if (!runId) throw new Error('Ledger insert returned no run id');
+
+            if (input.ownerId) {
+                const parentIds = [...new Set((input.sources ?? [])
+                    .filter(source => source.kind === 'inference' && source.parentRunId)
+                    .map(source => source.parentRunId!))];
+                if (parentIds.length) {
+                    const parents = await client.query<{ id: string }>(
+                        'SELECT id FROM inference_run WHERE id = ANY($1::bigint[]) AND owner_id = $2',
+                        [parentIds, input.ownerId]
+                    );
+                    if (parents.rows.length !== parentIds.length) throw new ParentOwnershipError();
+                }
+            }
 
             for (const source of dedupeSources(input.sources ?? [])) {
                 await client.query(INSERT_SOURCE, [
@@ -259,9 +356,10 @@ export async function openRun(input: OpenRunInput): Promise<LedgerRun> {
                     source.kind === 'inference' ? source.parentRunId ?? null : null
                 ]);
             }
-            return runId;
+            return { id: runId };
         });
     } catch (err) {
+        if (err instanceof ParentOwnershipError) return { ...NOOP_RUN, parentRejected: true };
         suppressedUntil = Date.now() + OPEN_FAILURE_COOLDOWN_MS;
         console.error(
             `[ledger] could not open run (pausing ${OPEN_FAILURE_COOLDOWN_MS}ms):`,
@@ -270,9 +368,10 @@ export async function openRun(input: OpenRunInput): Promise<LedgerRun> {
         return NOOP_RUN;
     }
 
-    if (!id) return NOOP_RUN;
+    if (!opened) return NOOP_RUN;
+    if (opened.replay) return replayRun(opened.id, opened.status!, Boolean(opened.conflict));
     suppressedUntil = 0;
-    return new OpenLedgerRun(id, startedAt);
+    return new OpenLedgerRun(opened.id, startedAt);
 }
 
 class OpenLedgerRun implements LedgerRun {
@@ -314,13 +413,18 @@ class OpenLedgerRun implements LedgerRun {
         return this.finish('canceled', outcome, null);
     }
 
-    meter(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
-        return meterStream(stream, this);
+    uncertain(error: unknown): Promise<void> {
+        return this.finish('uncertain', {}, normalizeError(error));
+    }
+
+    meter(stream: ReadableStream<Uint8Array>, onCancel?: (reason?: unknown) => void): ReadableStream<Uint8Array> {
+        return meterStream(stream, this, onCancel);
     }
 }
 
 /** What `meterStream` needs of a run. Keeps it testable without a database. */
-export type MeterableRun = Pick<LedgerRun, 'succeeded' | 'failed' | 'canceled'>;
+export type MeterableRun = Pick<LedgerRun, 'succeeded' | 'failed' | 'canceled'> &
+    Partial<Pick<LedgerRun, 'uncertain'>>;
 
 /**
  * Tee a text stream into the ledger without buffering it: chunks pass straight
@@ -332,7 +436,8 @@ export type MeterableRun = Pick<LedgerRun, 'succeeded' | 'failed' | 'canceled'>;
  */
 export function meterStream(
     stream: ReadableStream<Uint8Array>,
-    run: MeterableRun
+    run: MeterableRun,
+    onCancel?: (reason?: unknown) => void
 ): ReadableStream<Uint8Array> {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
@@ -366,7 +471,9 @@ export function meterStream(
             } catch (err) {
                 if (!closed) {
                     closed = true;
-                    await run.failed(err);
+                    // Once a provider stream has started, transport/body errors
+                    // do not prove whether the provider completed the request.
+                    await (run.uncertain?.(err) ?? run.failed(err));
                 }
                 controller.error(err);
             }
@@ -374,6 +481,7 @@ export function meterStream(
         async cancel(reason) {
             if (!closed) {
                 closed = true;
+                onCancel?.(reason);
                 await run.canceled(delivered('canceled'));
             }
             await reader.cancel(reason);
@@ -411,6 +519,7 @@ export interface RecentRunsFilter {
     limit?: number;
     provider?: RunProvider;
     status?: RunStatus;
+    ownerId?: string | null;
 }
 
 export const DEFAULT_RUN_LIMIT = 25;
@@ -470,10 +579,16 @@ const RUN_COLUMNS_QUALIFIED = RUN_COLUMNS
     .join(', ');
 
 const SELECT_SOURCES = `
-    SELECT run_id, source_id, kind, label, parent_run_id
-      FROM inference_source
-     WHERE run_id = ANY($1::bigint[])
-     ORDER BY run_id, label
+    SELECT s.run_id, s.source_id, s.kind, s.label, s.parent_run_id
+      FROM inference_source s
+      JOIN inference_run r ON r.id = s.run_id
+     WHERE s.run_id = ANY($1::bigint[])
+       AND ($2::text IS NULL OR r.owner_id = $2)
+       AND (s.parent_run_id IS NULL OR $2::text IS NULL OR EXISTS (
+           SELECT 1 FROM inference_run parent
+            WHERE parent.id = s.parent_run_id AND parent.owner_id = $2
+       ))
+     ORDER BY s.run_id, s.label
 `;
 
 function iso(value: Date | string | null): string | null {
@@ -508,6 +623,7 @@ export function clampLimit(limit?: number): number {
  */
 export async function recentRuns(filter: RecentRunsFilter = {}): Promise<LedgerRunRow[]> {
     if (!isDatabaseConfigured()) return [];
+    if (filter.ownerId) await reconcileStaleHostedRuns();
 
     const where: string[] = [];
     const values: unknown[] = [];
@@ -519,6 +635,10 @@ export async function recentRuns(filter: RecentRunsFilter = {}): Promise<LedgerR
     if (filter.status) {
         values.push(filter.status);
         where.push(`status = $${values.length}`);
+    }
+    if (filter.ownerId) {
+        values.push(filter.ownerId);
+        where.push(`owner_id = $${values.length}`);
     }
 
     values.push(clampLimit(filter.limit));
@@ -534,7 +654,7 @@ export async function recentRuns(filter: RecentRunsFilter = {}): Promise<LedgerR
     const runs = await query<RawRunRow>(sql, values);
     if (!runs || runs.rows.length === 0) return [];
 
-    const sources = await query<RawSourceRow>(SELECT_SOURCES, [runs.rows.map(r => r.id)]);
+    const sources = await query<RawSourceRow>(SELECT_SOURCES, [runs.rows.map(r => r.id), filter.ownerId ?? null]);
 
     const byRun = groupSources(sources?.rows ?? []);
 
@@ -605,6 +725,7 @@ const SELECT_LINEAGE = `
             NULL::text       AS via_label
           FROM inference_run r
          WHERE r.id = $1
+           AND ($4::text IS NULL OR r.owner_id = $4)
 
         UNION ALL
 
@@ -623,12 +744,14 @@ const SELECT_LINEAGE = `
             ON parent.id = s.parent_run_id
          WHERE l.depth < $2
            AND NOT l.is_cycle
+           AND ($4::text IS NULL OR parent.owner_id = $4)
     )
     SELECT
         l.depth, l.is_cycle, l.child_run_id, l.via_label,
         ${RUN_COLUMNS_QUALIFIED}
       FROM lineage l
       JOIN inference_run ON inference_run.id = l.id
+     WHERE ($4::text IS NULL OR inference_run.owner_id = $4)
      ORDER BY l.depth, l.id
      LIMIT $3
 `;
@@ -681,16 +804,18 @@ export function clampDepth(depth?: number): number {
  */
 export async function runLineage(
     runId: string,
-    maxDepth?: number
+    maxDepth?: number,
+    ownerId?: string | null
 ): Promise<RunLineage> {
     const empty: RunLineage = { root: null, nodes: [], hadCycle: false, truncated: false };
     if (!isDatabaseConfigured()) return empty;
+    if (ownerId) await reconcileStaleHostedRuns();
 
     const depth = clampDepth(maxDepth);
-    const result = await query<RawLineageRow>(SELECT_LINEAGE, [runId, depth, MAX_LINEAGE_NODES]);
+    const result = await query<RawLineageRow>(SELECT_LINEAGE, [runId, depth, MAX_LINEAGE_NODES, ownerId ?? null]);
     if (!result || result.rows.length === 0) return empty;
 
-    const sources = await query<RawSourceRow>(SELECT_SOURCES, [result.rows.map(r => r.id)]);
+    const sources = await query<RawSourceRow>(SELECT_SOURCES, [result.rows.map(r => r.id), ownerId ?? null]);
     const byRun = groupSources(sources?.rows ?? []);
 
     const nodes: LineageNode[] = result.rows.map(r => ({

@@ -55,6 +55,16 @@ describe('runTurn — the one turn lifecycle (apex A4)', () => {
         );
     });
 
+    it('preserves the operation idempotency key through the shared turn boundary', async () => {
+        setConfig({});
+        mockService.isAvailable.mockResolvedValue(true);
+        mockService.complete.mockResolvedValue({ content: 'x' });
+        await runTurn([{ role: 'user', content: 'q' }], { idempotencyKey: 'retry-same-operation' });
+        expect(mockService.complete).toHaveBeenCalledWith(
+            expect.anything(), expect.objectContaining({ idempotencyKey: 'retry-same-operation' })
+        );
+    });
+
     it('fails closed with the provider-specific actionable message', async () => {
         setConfig({ provider: 'local', model: 'tinyllama' });
         mockService.isAvailable.mockResolvedValue(false);
