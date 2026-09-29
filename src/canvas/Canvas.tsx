@@ -25,6 +25,7 @@ import { getBlockView } from '@/core/registry/ViewRegistry';
 import { useClientMounted } from '@/core/hooks';
 import { Atmosphere } from '@/components/brand/Atmosphere';
 import { Sigil } from '@/components/brand/Sigil';
+import { spatialSession } from '@/core/interaction/session';
 
 interface CanvasProps {
     hideEmptyState?: boolean;
@@ -37,7 +38,6 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
     const {
         blocks,
         addBlock,
-        updatePosition,
         removeBlock,
         activeShellId,
         setActiveShell
@@ -137,9 +137,9 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
             newX = Math.max(0, newX);
             newY = Math.max(0, newY);
 
-            updatePosition(blockId, { x: newX, y: newY });
+            spatialSession.pointerMove(blockId, { x: newX, y: newY });
         }
-    }, [shellBlocks, gridSnapping, gridSize, updatePosition]);
+    }, [shellBlocks, gridSnapping, gridSize]);
 
     return (
         <DndContext
@@ -329,6 +329,13 @@ function DraggableBlock({ id, isDragging, isSelected, onSelect, onClose }: Dragg
         };
 
         const handleMouseUp = () => {
+            if (resizeStart && (resizeStart.handle.includes('w') || resizeStart.handle.includes('n'))) {
+                const current = useBlockStore.getState().getBlock(id);
+                if (current) {
+                    updatePosition(id, { x: resizeStart.posX, y: resizeStart.posY });
+                    spatialSession.pointerMove(id, { x: current.position.x, y: current.position.y });
+                }
+            }
             setIsResizing(false);
             setResizeStart(null);
         };
