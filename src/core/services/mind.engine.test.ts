@@ -10,9 +10,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MindEngine } from './mind.engine';
 import { useMindStore } from '@/core/stores/mindStore';
 import { useBlockStore } from '@/core/stores/blockStore';
+import { useWireStore } from '@/core/stores/wireStore';
 import { createInitialMindState } from '@/core/schemas/mind.schema';
 import type { BlockInstance } from '@/core/schemas/block.schema';
-import { runTurn } from '@/core/cognition';
+import type { DataWire } from '@/core/schemas/wire.schema';
+import { runTurn, runTurnStream } from '@/core/cognition';
 
 vi.mock('@/core/cognition', () => ({
     runTurn: vi.fn(),
@@ -31,12 +33,16 @@ function seedBlock() {
         shellId: 'root'
     } as unknown as BlockInstance;
     useBlockStore.setState({ blocks: [block], activeShellId: 'root' });
+    // Think only sees wired or pinned blocks; pinning is the explicit way in.
+    useMindStore.getState().pinBlock('b1', 'hackernews_feed', block.data);
 }
 
 beforeEach(() => {
     useMindStore.setState(createInitialMindState());
     useBlockStore.setState({ blocks: [], activeShellId: 'root' });
+    useWireStore.setState({ wires: [] });
     vi.mocked(runTurn).mockReset();
+    vi.mocked(runTurnStream).mockReset();
 });
 
 describe('MindEngine.think', () => {
@@ -44,7 +50,7 @@ describe('MindEngine.think', () => {
         const engine = new MindEngine();
         const result = await engine.think();
         expect(result.success).toBe(false);
-        expect(result.error).toMatch(/Add blocks to the canvas/);
+        expect(result.error).toMatch(/wired or pinned/);
         expect(runTurn).not.toHaveBeenCalled();
         expect(useMindStore.getState().status).toBe('ready');
     });
@@ -96,5 +102,155 @@ describe('MindEngine.think', () => {
 
         release({ success: true, content: 'done' });
         await first;
+    });
+});
+
+// ---- Think's context is what the canvas shows ------------------------------
+
+function scopedBlock(id: string, name: string, shellId: string): BlockInstance {
+    return {
+        instance_id: id,
+        schema: { block_id: 'hackernews_feed', display_name: name, category: 'pulse' },
+        status: 'connected',
+        last_updated: Date.now(),
+        data: { items: [{ title: 'Story' }] },
+        position: { x: 0, y: 0 },
+        dimensions: { width: 1, height: 1 },
+        shellId
+    } as unknown as BlockInstance;
+}
+
+function scopedWire(id: string, from: string, to: string, shellId: string): DataWire {
+    return {
+        id,
+        sourceBlockId: from,
+        targetBlockId: to,
+        wireType: 'push',
+        status: 'active',
+        filters: { autoRefresh: true },
+        shellId
+    } as unknown as DataWire;
+}
+
+/** Everything the model was sent for the last Think. */
+function sentPrompt(): string {
+    const messages = vi.mocked(runTurn).mock.calls[0][0];
+    return messages.map(m => m.content).join('\n');
+}
+
+describe('MindEngine.think — context is what the canvas shows', () => {
+    beforeEach(() => {
+        vi.mocked(runTurn).mockResolvedValue({ success: true, content: 'ok', tokensUsed: 1 });
+    });
+
+    it('excludes a wired block in another shell and an unwired block in the active shell', async () => {
+        useBlockStore.setState({
+            blocks: [
+                scopedBlock('src', 'WiredSource', 'root'),
+                scopedBlock('sink', 'WiredSink', 'root'),
+                scopedBlock('loose', 'UnwiredLoose', 'root'),
+                scopedBlock('o-src', 'OtherShellSource', 'other'),
+                scopedBlock('o-sink', 'OtherShellSink', 'other')
+            ],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({
+            wires: [scopedWire('w1', 'src', 'sink', 'root'), scopedWire('w2', 'o-src', 'o-sink', 'other')]
+        });
+
+        const result = await new MindEngine().think();
+        expect(result.success).toBe(true);
+
+        const prompt = sentPrompt();
+        expect(prompt).toContain('WiredSource');
+        expect(prompt).toContain('WiredSink');
+        expect(prompt).not.toContain('UnwiredLoose');
+        expect(prompt).not.toContain('OtherShellSource');
+        expect(prompt).not.toContain('OtherShellSink');
+
+        const obs = useMindStore.getState().contextPools.find(p => p.id === 'observations');
+        expect(obs?.entries.at(-1)?.metadata?.blocksAnalyzed).toBe(2);
+    });
+
+    it('ignores wires that are not active', async () => {
+        useBlockStore.setState({
+            blocks: [scopedBlock('a', 'StaleA', 'root'), scopedBlock('b', 'StaleB', 'root')],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({
+            wires: [{ ...scopedWire('w1', 'a', 'b', 'root'), status: 'stale' }]
+        });
+
+        const result = await new MindEngine().think();
+        expect(result.success).toBe(false);
+        expect(runTurn).not.toHaveBeenCalled();
+    });
+
+    it('includes an explicitly pinned block in the active shell, but not a pin from another shell', async () => {
+        useBlockStore.setState({
+            blocks: [
+                scopedBlock('pin', 'PinnedHere', 'root'),
+                scopedBlock('o-pin', 'PinnedElsewhere', 'other')
+            ],
+            activeShellId: 'root'
+        });
+        useMindStore.getState().pinBlock('pin', 'hackernews_feed', { items: [] });
+        useMindStore.getState().pinBlock('o-pin', 'hackernews_feed', { items: [] });
+
+        await new MindEngine().think();
+
+        const prompt = sentPrompt();
+        expect(prompt).toContain('PinnedHere');
+        expect(prompt).not.toContain('PinnedElsewhere');
+    });
+
+    it('does not carry background awareness aggregated across shells', async () => {
+        useBlockStore.setState({
+            blocks: [scopedBlock('src', 'WiredSource', 'root'), scopedBlock('sink', 'WiredSink', 'root')],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({ wires: [scopedWire('w1', 'src', 'sink', 'root')] });
+        // useMindShellSync writes this from ALL blocks of a type, any shell.
+        useMindStore.getState().updateAwareness('hackernews_feed', 'CROSS-SHELL AWARENESS SUMMARY');
+
+        await new MindEngine().think();
+
+        expect(sentPrompt()).not.toContain('CROSS-SHELL AWARENESS SUMMARY');
+    });
+
+    it('thinkStream applies the same scope', async () => {
+        useBlockStore.setState({
+            blocks: [
+                scopedBlock('src', 'WiredSource', 'root'),
+                scopedBlock('sink', 'WiredSink', 'root'),
+                scopedBlock('loose', 'UnwiredLoose', 'root')
+            ],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({ wires: [scopedWire('w1', 'src', 'sink', 'root')] });
+        vi.mocked(runTurnStream).mockImplementation((async function* () {
+            yield 'ok';
+            return { success: true, content: 'ok' };
+        }) as unknown as typeof runTurnStream);
+
+        const stream = new MindEngine().thinkStream();
+        let step = await stream.next();
+        while (!step.done) step = await stream.next();
+
+        const messages = vi.mocked(runTurnStream).mock.calls[0][0];
+        const prompt = messages.map(m => m.content).join('\n');
+        expect(prompt).toContain('WiredSource');
+        expect(prompt).not.toContain('UnwiredLoose');
+    });
+
+    it('thinkStream refuses when nothing is wired or pinned', async () => {
+        useBlockStore.setState({
+            blocks: [scopedBlock('loose', 'UnwiredLoose', 'root')],
+            activeShellId: 'root'
+        });
+        const step = await new MindEngine().thinkStream().next();
+        expect(step.done).toBe(true);
+        expect(step.value).toMatchObject({ success: false });
+        expect(runTurnStream).not.toHaveBeenCalled();
     });
 });

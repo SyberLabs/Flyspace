@@ -130,6 +130,54 @@ describe('aggregateWireContext — wired sources', () => {
         expect(sources.filter(s => s.kind === 'wire')).toHaveLength(0);
     });
 
+    it('does NOT cite a source whose items array is empty', () => {
+        useBlockStore.setState({
+            blocks: [seedPersona(), block('empty', 'Empty Feed', { items: [] })],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({ wires: [wire('w1', 'empty', PERSONA)] });
+
+        const { sources, sourceIds, context } = aggregateWireContext(PERSONA);
+        expect(sources).toHaveLength(0);
+        expect(sourceIds).toHaveLength(0);
+        expect(context).not.toContain('(No data)');
+    });
+
+    it('still cites a source whose items array has content', () => {
+        useBlockStore.setState({
+            blocks: [
+                seedPersona(),
+                block('full', 'Full Feed', { items: [{ id: 'a', title: 'Headline', metadata: {} }] })
+            ],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({ wires: [wire('w1', 'full', PERSONA)] });
+
+        const { sources, context } = aggregateWireContext(PERSONA);
+        expect(sources.filter(s => s.kind === 'wire')).toMatchObject([
+            { id: 'full', label: 'Full Feed' }
+        ]);
+        expect(context).toContain('Headline');
+    });
+
+    it('cites only the sources that carried data when some wired sources are empty', () => {
+        useBlockStore.setState({
+            blocks: [
+                seedPersona(),
+                block('empty', 'Empty Feed', { items: [] }),
+                block('full', 'Full Feed', { items: [{ id: 'a', title: 'Headline', metadata: {} }] })
+            ],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({
+            wires: [wire('w1', 'empty', PERSONA), wire('w2', 'full', PERSONA)]
+        });
+
+        const { sources, sourceIds } = aggregateWireContext(PERSONA);
+        expect(sources.map(s => s.id)).toEqual(['full']);
+        expect(sourceIds).toEqual(['full']);
+    });
+
     it('ignores wires that are not active', () => {
         useBlockStore.setState({
             blocks: [seedPersona(), block('src-1', 'Stale Source', { value: 1 })],
@@ -193,17 +241,20 @@ describe('aggregateWireContext — memory is wired, not injected', () => {
         expect(after.sources).toHaveLength(0);
     });
 
-    it('an empty Memory block reports itself as empty, rather than vanishing', () => {
+    it('an empty Memory block is not a source — an empty pool grounds nothing', () => {
         useBlockStore.setState({
             blocks: [seedPersona(), memoryBlock('mem-1', 'Long-term memory', [])],
             activeShellId: 'root'
         });
         useWireStore.setState({ wires: [wire('w1', 'mem-1', PERSONA)] });
 
-        // It formats to '(No entries)', which is real output — so it IS cited.
-        // What matters is that the persona can see there is nothing in it.
-        const { context } = aggregateWireContext(PERSONA);
-        expect(context).toContain('(No entries)');
+        // Citing a pool that holds nothing would say "grounded in memory"
+        // about an answer that used none. The wire's stale/empty status is
+        // the UI's job; provenance only lists what carried data.
+        const { context, sources, sourceIds } = aggregateWireContext(PERSONA);
+        expect(sources).toHaveLength(0);
+        expect(sourceIds).toHaveLength(0);
+        expect(context).not.toContain('(No entries)');
     });
 
     it('a persona with no wires at all is grounded in nothing', () => {

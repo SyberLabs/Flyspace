@@ -7,6 +7,8 @@ import {
     type BlockSnapshotData
 } from './shell.snapshot';
 import { useBlockStore, useMindStore } from '@/core/stores';
+import { useWireStore } from '@/core/stores/wireStore';
+import type { DataWire } from '@/core/schemas/wire.schema';
 import type { BlockInstance } from '@/core/schemas/block.schema';
 
 function block(overrides: Partial<BlockSnapshotData> = {}): BlockSnapshotData {
@@ -50,8 +52,8 @@ describe('formatSnapshotForLLM', () => {
     it('renders the header and overview', () => {
         const out = formatSnapshotForLLM(snapshot({ totalBlocks: 3 }));
         expect(out).toContain('SHELL LANDSCAPE SNAPSHOT');
-        expect(out).toContain('Total Blocks: 3');
-        expect(out).toContain('## ALL BLOCKS ON CANVAS');
+        expect(out).toContain('Blocks in scope: 3');
+        expect(out).toContain('## WIRED OR PINNED BLOCKS IN THIS SHELL');
     });
 
     it('groups blocks by category and marks status + pin icons', () => {
@@ -100,10 +102,36 @@ describe('formatSnapshotForLLM', () => {
     });
 });
 
+function wire(id: string, from: string, to: string, shellId: string): DataWire {
+    return {
+        id,
+        sourceBlockId: from,
+        targetBlockId: to,
+        wireType: 'push',
+        status: 'active',
+        filters: { autoRefresh: true },
+        shellId
+    } as unknown as DataWire;
+}
+
+function mkScoped(id: string, shellId: string): BlockInstance {
+    return {
+        instance_id: id,
+        schema: { block_id: 'polymarket', display_name: id, category: 'truth' },
+        status: 'connected',
+        last_updated: null,
+        data: null,
+        position: { x: 0, y: 0 },
+        dimensions: { width: 320, height: 240 },
+        shellId
+    } as unknown as BlockInstance;
+}
+
 describe('captureShellSnapshot', () => {
     beforeEach(() => {
         // Reset the block store to a known empty state.
         useBlockStore.setState({ blocks: [], activeShellId: 'root' });
+        useWireStore.setState({ wires: [] });
     });
 
     it('returns an empty snapshot when no blocks exist', () => {
@@ -130,9 +158,9 @@ describe('captureShellSnapshot', () => {
 
         useBlockStore.setState({
             blocks: [mkBlock('a', 'connected'), mkBlock('b', 'error')],
-           
             activeShellId: 'root'
         });
+        useWireStore.setState({ wires: [wire('w1', 'a', 'b', 'root')] });
 
         // Ensure mind store has no pins for these.
         expect(typeof useMindStore.getState().isPinned).toBe('function');
@@ -142,5 +170,43 @@ describe('captureShellSnapshot', () => {
         expect(snap.stats.connectedBlocks).toBe(1);
         expect(snap.stats.errorBlocks).toBe(1);
         expect(snap.stats.blocksByCategory.truth).toBe(2);
+    });
+
+    it('keeps only active-shell blocks that are wired (either end) or pinned', () => {
+        useBlockStore.setState({
+            blocks: [
+                mkScoped('src', 'root'), mkScoped('sink', 'root'), mkScoped('loose', 'root'),
+                mkScoped('pinned', 'root'), mkScoped('o1', 'other'), mkScoped('o2', 'other')
+            ],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({
+            wires: [
+                wire('w1', 'src', 'sink', 'root'),
+                wire('w2', 'o1', 'o2', 'other'),
+                // A stray cross-shell wire must not pull a foreign block in.
+                wire('w3', 'loose', 'o1', 'root')
+            ]
+        });
+        useMindStore.getState().pinBlock('pinned', 'polymarket', null);
+        useMindStore.getState().pinBlock('o2', 'polymarket', null);
+
+        const snap = captureShellSnapshot();
+
+        expect(snap.blocks.map(b => b.instanceId).sort()).toEqual(['pinned', 'sink', 'src']);
+        expect(snap.totalBlocks).toBe(3);
+        expect(snap.connections).toEqual([{ sourceBlockId: 'src', targetBlockId: 'sink' }]);
+        expect(snap.focusedBlocks.map(e => e.sourceBlockId)).toEqual(['pinned']);
+    });
+
+    it('drops awareness aggregates (all blocks of a type, any shell) from observations', () => {
+        useMindStore.getState().updateAwareness('polymarket', 'ALL-SHELL AGGREGATE');
+        useMindStore.getState().addToPool('observations', {
+            type: 'analysis', content: 'a prior Think answer', importance: 0.8
+        });
+
+        const snap = captureShellSnapshot();
+
+        expect(snap.observations.map(o => o.content)).toEqual(['a prior Think answer']);
     });
 });

@@ -70,3 +70,35 @@ describe('extractBlockData — includes the signal, not just titles', () => {
         expect(out).toContain('forecasters: 120');
     });
 });
+
+describe('extractBlockData — empty content carries nothing', () => {
+    beforeEach(() => useBlockStore.setState({ blocks: [], activeShellId: 'root' }));
+
+    const empties: Array<[string, unknown]> = [
+        ['an empty items array', { items: [] }],
+        ['an empty direct array', []],
+        ['an empty Memory pool', { poolId: 'memory', limit: 10, entries: [] }],
+        ['an empty markets array', { markets: [] }],
+        ['an empty articles array', { articles: [] }],
+        ['an empty text block', { content: '' }]
+    ];
+
+    it.each(empties)('returns null for %s (no placeholder to cite)', (_label, data) => {
+        seed('empty', data);
+        expect(extractBlockData('empty', DEFAULT_WIRE_FILTERS)).toBeNull();
+        expect(extractBlockData('empty', { ...DEFAULT_WIRE_FILTERS, summaryOnly: true })).toBeNull();
+    });
+
+    it('returns null when a time window filters every market away', () => {
+        seed('old', { markets: [{
+            id: 'm', question: 'Old?', outcomes: [{ id: 'y', name: 'Yes', probability: 0.5 }],
+            volume: 1, liquidity: 0, endDate: '2001-01-01', category: 'x', tags: []
+        }] });
+        expect(extractBlockData('old', { ...DEFAULT_WIRE_FILTERS, timeWindow: 'day' })).toBeNull();
+    });
+
+    it('still returns text for non-empty content', () => {
+        seed('ok', { poolId: 'memory', limit: 10, entries: [{ content: 'Kept.' }] });
+        expect(extractBlockData('ok', DEFAULT_WIRE_FILTERS)).toBe('- Kept.');
+    });
+});

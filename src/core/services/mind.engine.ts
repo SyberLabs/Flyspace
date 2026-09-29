@@ -25,6 +25,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // MIND ENGINE
 // ============================================
 
+const NO_SCOPE_ERROR =
+    'Nothing to think about: no wired or pinned blocks in this shell. Wire a block to another block, or pin one, first.';
+
 export class MindEngine {
     private isProcessing: boolean = false;
 
@@ -49,15 +52,13 @@ export class MindEngine {
                 throw new Error('No active persona');
             }
 
-            // Capture complete Shell snapshot
+            // Snapshot of what the canvas shows: wired or pinned blocks of the
+            // active shell, nothing else.
             const snapshot = captureShellSnapshot();
 
             if (snapshot.totalBlocks === 0) {
                 mindStore.setStatus('ready');
-                return {
-                    success: false,
-                    error: 'No data blocks available. Add blocks to the canvas first.'
-                };
+                return { success: false, error: NO_SCOPE_ERROR };
             }
 
             // Build messages with rich snapshot context
@@ -141,8 +142,14 @@ export class MindEngine {
                 throw new Error('No active persona');
             }
 
-            // Capture complete Shell snapshot
+            // Same scope as think(): wired or pinned blocks of the active shell.
             const snapshot = captureShellSnapshot();
+
+            if (snapshot.totalBlocks === 0) {
+                mindStore.setStatus('ready');
+                return { success: false, error: NO_SCOPE_ERROR };
+            }
+
             const systemPrompt = getPersonaSystemPrompt(activePersona);
             const snapshotContext = formatSnapshotForLLM(snapshot);
             const userPrompt = this.buildSnapshotAnalysisPrompt(snapshotContext, question);
@@ -233,7 +240,7 @@ Rules:
      */
     private buildSnapshotAnalysisPrompt(snapshotContext: string, question?: string): string {
         const taskDescription = question ||
-            'Analyze the current Shell landscape and provide your perspective based on your persona. What patterns, insights, or concerns do you observe across the data streams?';
+            'Analyze the wired and pinned blocks in this shell and provide your perspective based on your persona. What patterns, insights, or concerns do you observe across the data streams?';
 
         return `${snapshotContext}
 
@@ -244,7 +251,7 @@ Rules:
 ${taskDescription}
 
 **Instructions:**
-- Consider the complete landscape context above, including all blocks, their relationships, and current state
+- Consider only the blocks listed above (wired or pinned in this shell), their relationships, and current state; do not assume anything about blocks that are not listed
 - Pay special attention to FOCUSED BLOCKS (📌) - these have been pinned for deep analysis
 - Note the status and freshness of data across different streams
 - Respond concisely but thoroughly, being specific about what the data tells you

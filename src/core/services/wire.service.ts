@@ -83,7 +83,9 @@ export function extractBlockData(
                 ? filterByTimeWindow(markets, filters.timeWindow)
                 : markets;
 
-            if (filters.summaryOnly) {
+            if (filtered.length === 0) {
+                extracted = '';
+            } else if (filters.summaryOnly) {
                 extracted = formatMarketsSummary(filtered);
             } else {
                 extracted = formatMarketsDetailed(filtered);
@@ -95,7 +97,9 @@ export function extractBlockData(
                 ? filterArticlesByTimeWindow(articles, filters.timeWindow)
                 : articles;
 
-            if (filters.summaryOnly) {
+            if (filtered.length === 0) {
+                extracted = '';
+            } else if (filters.summaryOnly) {
                 extracted = formatNewsSummary(filtered);
             } else {
                 extracted = formatNewsDetailed(filtered);
@@ -114,9 +118,7 @@ export function extractBlockData(
         } else if (isRecord(data) && 'poolId' in data && Array.isArray(data.entries)) {
             // Memory block — a Mind pool wired in like any other source.
             const entries = asMemoryEntries(data.entries);
-            extracted = entries.length === 0
-                ? '(No entries)'
-                : entries.map(e => `- ${e.content}`).join('\n');
+            extracted = entries.map(e => `- ${e.content}`).join('\n');
         } else if (isRecord(data) && typeof data.content === 'string') {
             // Text block
             extracted = filters.summaryOnly
@@ -131,9 +133,7 @@ export function extractBlockData(
             // hackernews, …). The useful signal lives in each item's `metadata`
             // (probability, volume, price, value, …) — include it, don't drop it.
             const items = data.items;
-            if (items.length === 0) {
-                extracted = '(No data)';
-            } else {
+            if (items.length > 0) {
                 const limit = filters.summaryOnly ? 8 : 25;
                 extracted = items.slice(0, limit)
                     .map(item => formatOmniItem(item))
@@ -176,7 +176,11 @@ export function extractBlockData(
             // For now, we'll just include everything
         }
 
-        return extracted;
+        // A source that carried nothing is not grounding. Return null, not a
+        // placeholder like '(No data)': aggregateWireContext cites every
+        // source that returns text, so a placeholder would be cited as
+        // evidence. The wire's stale/empty status is UI, not provenance.
+        return extracted.trim() === '' ? null : extracted;
     } catch (error) {
         console.error('Error extracting block data:', error);
         return null;
