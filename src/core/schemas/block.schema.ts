@@ -57,6 +57,22 @@ export type BlockExpandMode = 'resize' | 'portal' | 'fullscreen';
 export type PortDataType = 'json' | 'text' | 'media' | 'any';
 
 /**
+ * Schema-bearing port contract. Optional so existing catalog ports stay
+ * visual hints. When both ends of a wire declare one, the wire is checked.
+ */
+export interface PortValueSchema {
+  kind: 'string' | 'number' | 'integer' | 'boolean' | 'null' | 'object' | 'array' | 'any';
+  description?: string;
+  enum?: Array<string | number | boolean | null>;
+  properties?: Record<string, PortValueSchema>;
+  required?: string[];
+  items?: PortValueSchema;
+  additionalProperties?: boolean | PortValueSchema;
+  format?: string;
+  nullable?: boolean;
+}
+
+/**
  * Port direction
  */
 export type PortDirection = 'input' | 'output';
@@ -71,8 +87,11 @@ export interface PortSchema {
   /** Port direction */
   direction: PortDirection;
 
-  /** Displayed data type; wires do not enforce or convert it. */
+  /** Displayed data type. Without `schema`, wires do not enforce it. */
   dataType: PortDataType;
+
+  /** Native value contract. Present on capability ports. */
+  schema?: PortValueSchema;
 
   /** Human-readable label */
   label?: string;
@@ -130,6 +149,9 @@ export interface OmniBlockSchema {
 
   /** For System Blocks: map block data keys to graph node IDs */
   graphNodeMapping?: Record<string, string>;
+
+  /** Set when this block type was compiled from a CapabilityManifest. */
+  capabilityId?: string;
 }
 
 /**

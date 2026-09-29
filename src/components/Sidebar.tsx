@@ -24,10 +24,12 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
+import { useCapabilityStore } from '@/core/capabilities/store';
 import { OmniBlockSchema, BlockCategory } from '@/core/schemas/block.schema';
 import { useBlockStore, useUIStore } from '@/core/stores';
 import { cn } from '@/lib/utils';
 import { BlockGlyph } from '@/components/blockIcons';
+import { CapabilityInstall } from '@/components/CapabilityInstall';
 
 // Icon mapping
 const CATEGORY_ICONS: Record<BlockCategory, React.ReactNode> = {
@@ -88,6 +90,9 @@ const CATEGORY_LABELS: Record<BlockCategory, string> = {
 export function Sidebar() {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedCategories, setExpandedCategories] = useState<BlockCategory[]>(DEFAULT_EXPANDED_CATEGORIES);
+    // Capability installs mutate the block registry outside React. Subscribing
+    // here redraws the Armory when a manifest is added or removed.
+    useCapabilityStore(state => state.manifests.length);
 
     const allBlocks = blockRegistry.getAll();
     const filteredBlocks = searchQuery
@@ -130,6 +135,8 @@ export function Sidebar() {
                     />
                 </div>
             </div>
+
+            <CapabilityInstall />
 
             {/* Block Categories */}
             <div className="sidebar-content space-y-2">
