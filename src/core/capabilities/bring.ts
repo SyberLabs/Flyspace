@@ -15,7 +15,7 @@ import {
     type HttpMethod
 } from './manifest';
 import type { ValueType } from './valueType';
-import { slug } from './openapi';
+import { canonicalCapabilityId, credentialSlot } from './identity';
 import type { CompileResult } from './openapi';
 
 export interface BringApiDescription {
@@ -49,9 +49,17 @@ export function compileBring(description: BringApiDescription): CompileResult {
         return { manifests: [], errors: [{ message: `${method} cannot be declared ${effect}` }] };
     }
 
-    const id = typeof description.id === 'string' && description.id.startsWith('cap_')
-        ? description.id
-        : `cap_bring_${slug(description.title)}`;
+    const provided = description.auth;
+    const auth = provided && provided.kind !== 'none'
+        ? { ...provided, secretRef: credentialSlot(description.baseUrl, provided) }
+        : { kind: 'none' as const };
+    const transport = {
+        kind: 'http' as const,
+        access: 'browser_direct' as const,
+        baseUrl: description.baseUrl,
+        method,
+        path: description.path
+    };
 
     const schema = description.output?.schema;
     const presentation = description.output?.presentation
@@ -59,20 +67,16 @@ export function compileBring(description: BringApiDescription): CompileResult {
 
     const sealed = sealManifest({
         version: 1,
-        id,
+        id: canonicalCapabilityId(transport),
         title: description.title.trim().slice(0, 120),
         ...(description.description ? { description: description.description.slice(0, 2000) } : {}),
         source: { kind: 'bring', locator: 'bring' },
         effect,
         effectSource: description.effect ? 'declared' : 'method',
         approval: approvalForEffect(effect),
-        auth: description.auth ?? { kind: 'none' },
-        transport: {
-            kind: 'http',
-            baseUrl: description.baseUrl,
-            method,
-            path: description.path
-        },
+        invocation: 'manual',
+        auth,
+        transport,
         inputs: description.inputs ?? [],
         output: {
             schema,

@@ -4,6 +4,7 @@
 // pair is rejected before anything is registered.
 
 import { canonicalize, sha256 } from './hash';
+import { canonicalCapabilityId, credentialSlot } from './identity';
 import { validateValueType, type ValueType } from './valueType';
 
 export const CAPABILITY_MANIFEST_VERSION = 1 as const;
@@ -12,6 +13,12 @@ export type CapabilityEffect = 'read' | 'compute' | 'write' | 'destructive';
 export type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
 export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring';
 export type CapabilityInvocation = 'auto' | 'manual';
+export type CapabilityTrigger =
+    | { kind: 'manual' }
+    | { kind: 'on_create' }
+    | { kind: 'on_input_change' }
+    | { kind: 'interval'; everyMs: number }
+    | { kind: 'event'; name: string };
 export type HttpMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export type InputLocation = 'path' | 'query' | 'header' | 'body' | 'argument';
 export type EffectSource = 'method' | 'extension' | 'annotation' | 'declared';
@@ -46,8 +53,10 @@ export interface CapabilityOutput {
     presentation: 'items' | 'content' | 'raw';
 }
 
+export type HttpAccess = 'browser_direct' | 'server_broker';
+
 export type CapabilityTransport =
-    | { kind: 'http'; baseUrl: string; method: HttpMethod; path: string }
+    | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
     | { kind: 'mcp'; serverId: string; toolName: string }
     | { kind: 'local'; handler: string };
 
@@ -61,11 +70,12 @@ export interface CapabilityManifest {
     effectSource: EffectSource;
     approval: CapabilityApproval;
     /**
-     * `auto` runs read/compute when the block opens.
-     * `manual` waits for an explicit action (speech, and anything else
-     * that must not fire because a block was merely placed).
+     * Derived from `trigger`. `manual` waits for the user. Anything else is
+     * a schedule the trigger runner owns. Mounting a view is not a trigger.
      */
     invocation?: CapabilityInvocation;
+    /** When this capability may run. Write and destructive stay manual. */
+    trigger?: CapabilityTrigger;
     auth: AuthBinding;
     transport: CapabilityTransport;
     inputs: CapabilityInput[];
@@ -85,7 +95,7 @@ const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring'];
 
 const MANIFEST_KEYS = new Set([
     'version', 'id', 'title', 'description', 'source', 'effect', 'effectSource',
-    'approval', 'invocation', 'auth', 'transport', 'inputs', 'output', 'digest'
+    'approval', 'invocation', 'trigger', 'auth', 'transport', 'inputs', 'output', 'digest'
 ]);
 
 const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
@@ -106,12 +116,52 @@ export function approvalForEffect(effect: CapabilityEffect): CapabilityApproval 
     return effect === 'read' || effect === 'compute' ? 'auto' : 'pending';
 }
 
-/** Side-effecting methods cannot be quietly relabeled as reads. */
+/**
+ * Method is the floor. An imported spec may raise the effect
+ * (GET marked destructive needs approval) and may not lower it
+ * (POST marked compute does not become auto).
+ */
 export function effectAllowedForMethod(method: HttpMethod, effect: CapabilityEffect): boolean {
-    if (method === 'GET' || method === 'HEAD') return effect === 'read' || effect === 'compute';
+    if (method === 'GET' || method === 'HEAD') return true;
     if (method === 'DELETE') return effect === 'destructive';
-    if (method === 'PUT' || method === 'PATCH') return effect === 'write' || effect === 'destructive';
-    return effect === 'compute' || effect === 'write' || effect === 'destructive';
+    return effect === 'write' || effect === 'destructive';
+}
+
+export const MIN_TRIGGER_INTERVAL_MS = 5_000;
+export const MAX_TRIGGER_INTERVAL_MS = 86_400_000;
+
+export function normalizeTrigger(trigger: CapabilityTrigger | undefined, invocation?: CapabilityInvocation): CapabilityTrigger {
+    if (trigger && validTriggerShape(trigger)) return trigger;
+    if (invocation === 'auto') return { kind: 'on_create' };
+    return { kind: 'manual' };
+}
+
+export function triggerInvocation(trigger: CapabilityTrigger): CapabilityInvocation {
+    return trigger.kind === 'manual' ? 'manual' : 'auto';
+}
+
+function validTriggerShape(trigger: CapabilityTrigger): boolean {
+    if (trigger.kind === 'manual' || trigger.kind === 'on_create' || trigger.kind === 'on_input_change') return true;
+    if (trigger.kind === 'interval') return Number.isInteger(trigger.everyMs);
+    if (trigger.kind === 'event') return typeof trigger.name === 'string';
+    return false;
+}
+
+export function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrigger): string | null {
+    if ((effect === 'write' || effect === 'destructive') && trigger.kind !== 'manual') {
+        return 'write and destructive capabilities only run manually';
+    }
+    if (trigger.kind === 'interval' && (
+        !Number.isInteger(trigger.everyMs)
+        || trigger.everyMs < MIN_TRIGGER_INTERVAL_MS
+        || trigger.everyMs > MAX_TRIGGER_INTERVAL_MS
+    )) {
+        return `interval must be between ${MIN_TRIGGER_INTERVAL_MS} and ${MAX_TRIGGER_INTERVAL_MS} ms`;
+    }
+    if (trigger.kind === 'event' && !/^[a-z][a-z0-9._-]{0,63}$/.test(trigger.name)) {
+        return 'event name is invalid';
+    }
+    return null;
 }
 
 export function digestPayload(draft: ManifestDraft): unknown {
@@ -123,7 +173,8 @@ export function digestPayload(draft: ManifestDraft): unknown {
         source: draft.source,
         effect: draft.effect,
         effectSource: draft.effectSource,
-        invocation: draft.invocation === 'manual' ? 'manual' : 'auto',
+        invocation: triggerInvocation(normalizeTrigger(draft.trigger, draft.invocation)),
+        trigger: normalizeTrigger(draft.trigger, draft.invocation),
         auth: draft.auth,
         transport: draft.transport,
         inputs: draft.inputs,
@@ -132,8 +183,9 @@ export function digestPayload(draft: ManifestDraft): unknown {
 }
 
 export function sealManifest(draft: ManifestDraft): CapabilityManifest {
-    const invocation = draft.invocation === 'manual' ? 'manual' : 'auto';
-    const body = { ...draft, invocation } as ManifestDraft;
+    const trigger = normalizeTrigger(draft.trigger, draft.invocation);
+    const invocation = triggerInvocation(trigger);
+    const body = { ...draft, invocation, trigger } as ManifestDraft;
     return {
         ...body,
         digest: sha256(canonicalize(digestPayload(body)))
@@ -265,6 +317,20 @@ export function validateManifest(input: unknown): ManifestValidation {
     if (input.invocation !== undefined && input.invocation !== 'auto' && input.invocation !== 'manual') {
         errors.push('invocation must be auto or manual');
     }
+    const trigger = normalizeTrigger(
+        input.trigger as CapabilityTrigger | undefined,
+        input.invocation === 'auto' ? 'auto' : input.invocation === 'manual' ? 'manual' : undefined
+    );
+    if (input.trigger !== undefined && !validTriggerShape(input.trigger as CapabilityTrigger)) {
+        errors.push('trigger is invalid');
+    }
+    if (EFFECTS.includes(effect)) {
+        const triggerError = triggerProblem(effect, trigger);
+        if (triggerError) errors.push(triggerError);
+        if ((effect === 'write' || effect === 'destructive') && isRecord(input.transport) && input.transport.access === 'server_broker') {
+            errors.push('server_broker cannot carry a write or destructive effect');
+        }
+    }
 
     if (!isRecord(input.transport) || (input.transport.kind !== 'http' && input.transport.kind !== 'mcp' && input.transport.kind !== 'local')) {
         errors.push('transport.kind must be http, mcp, or local');
@@ -273,6 +339,9 @@ export function validateManifest(input: unknown): ManifestValidation {
         else validateHttpUrl(input.transport.baseUrl, errors);
         if (typeof input.transport.method !== 'string' || !METHODS.includes(input.transport.method as HttpMethod)) {
             errors.push('transport.method is invalid');
+        }
+        if (input.transport.access !== 'browser_direct' && input.transport.access !== 'server_broker') {
+            errors.push('http transport access must be browser_direct or server_broker');
         }
         if (typeof input.transport.path !== 'string' || !input.transport.path.startsWith('/') || input.transport.path.includes('..')) {
             errors.push('transport.path must be an absolute path without ..');
@@ -375,6 +444,18 @@ export function validateManifest(input: unknown): ManifestValidation {
         errors.push('digest must be a sha256 hex string');
     }
 
+    if (errors.length === 0 && isRecord(input.transport)) {
+        const transport = input.transport as CapabilityTransport;
+        if (typeof input.id === 'string' && input.id !== canonicalCapabilityId(transport)) {
+            errors.push(`id must be ${canonicalCapabilityId(transport)}`);
+        }
+        if (transport.kind === 'http' && isRecord(input.auth) && input.auth.kind !== 'none') {
+            const auth = input.auth as unknown as AuthBinding;
+            const slot = credentialSlot(transport.baseUrl, auth);
+            if (auth.secretRef !== slot) errors.push(`auth.secretRef must be ${slot}`);
+        }
+    }
+
     if (errors.length > 0) return { ok: false, errors };
 
     const draft = canonicalDraft(input);
@@ -402,7 +483,8 @@ function canonicalDraft(input: Record<string, unknown>): ManifestDraft {
         effect: input.effect as CapabilityEffect,
         effectSource: input.effectSource as EffectSource,
         approval: input.approval as CapabilityApproval,
-        invocation: input.invocation === 'manual' ? 'manual' : 'auto',
+        invocation: triggerInvocation(normalizeTrigger(input.trigger as CapabilityTrigger | undefined, input.invocation === 'manual' ? 'manual' : 'auto')),
+        trigger: normalizeTrigger(input.trigger as CapabilityTrigger | undefined, input.invocation === 'manual' ? 'manual' : 'auto'),
         auth: canonicalAuth(input.auth as AuthBinding),
         transport: canonicalTransport(input.transport as CapabilityTransport),
         inputs: (input.inputs as CapabilityInput[]).map(entry => ({
@@ -435,6 +517,7 @@ function canonicalTransport(transport: CapabilityTransport): CapabilityTransport
     }
     return {
         kind: 'http',
+        access: transport.access === 'server_broker' ? 'server_broker' : 'browser_direct',
         baseUrl: transport.baseUrl,
         method: transport.method,
         path: transport.path

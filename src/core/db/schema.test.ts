@@ -19,6 +19,7 @@ const MIGRATIONS_DIR = path.join(process.cwd(), 'db', 'migrations');
 const sql = readFileSync(path.join(MIGRATIONS_DIR, '001_inference_ledger.sql'), 'utf8');
 const lineageSql = readFileSync(path.join(MIGRATIONS_DIR, '002_run_lineage.sql'), 'utf8');
 const hostedSql = readFileSync(path.join(MIGRATIONS_DIR, '003_hosted_ownership_idempotency.sql'), 'utf8');
+const capabilitySql = readFileSync(path.join(MIGRATIONS_DIR, '004_capability_execution.sql'), 'utf8');
 
 const flat = (s: string) => s.replace(/\s+/g, ' ').toLowerCase();
 
@@ -42,7 +43,7 @@ describe('migration files', () => {
     });
 
     it('are re-runnable, so a half-applied database can be repaired', () => {
-        for (const text of [sql, lineageSql, hostedSql]) {
+        for (const text of [sql, lineageSql, hostedSql, capabilitySql]) {
             expect(text).not.toMatch(/CREATE TABLE(?! IF NOT EXISTS)/i);
             expect(text).not.toMatch(/CREATE INDEX(?! IF NOT EXISTS)/i);
             expect(text).not.toMatch(/ADD COLUMN(?! IF NOT EXISTS)/i);
@@ -106,6 +107,14 @@ describe('003 — hosted identity and idempotency', () => {
         expect(flat(hostedSql)).toContain('on inference_run (owner_id, idempotency_key)');
         expect(flat(hostedSql)).toContain("'uncertain'");
         expect(flat(hostedSql)).toContain("status in ('failed', 'uncertain') or error is null");
+    });
+});
+
+describe('004 — capability execution', () => {
+    it('gives capability runs the same terminal words and an idempotency key', () => {
+        expect(flat(capabilitySql)).toContain('create table if not exists capability_execution');
+        expect(flat(capabilitySql)).toContain('capability_execution_idempotency_idx');
+        expect(flat(capabilitySql)).toContain("status in ('admitted', 'running', 'succeeded', 'failed', 'canceled', 'uncertain')");
     });
 });
 

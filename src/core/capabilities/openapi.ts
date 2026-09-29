@@ -2,6 +2,7 @@
 // This compiler does not install anything. A manifest becomes callable only
 // after validateManifest + installProposal.
 
+import { canonicalCapabilityId, credentialSlot } from './identity';
 import { fromJsonSchema } from './jsonSchema';
 import {
     approvalForEffect,
@@ -58,7 +59,6 @@ export function compileOpenApi(spec: unknown, options: CompileOpenApiOptions = {
             : 'openapi');
 
     const manifests: CapabilityManifest[] = [];
-    const usedIds = new Set<string>();
     let count = 0;
 
     for (const [path, pathItem] of Object.entries(spec.paths)) {
@@ -85,8 +85,7 @@ export function compileOpenApi(spec: unknown, options: CompileOpenApiOptions = {
                 operationId,
                 label,
                 baseUrl: base.url,
-                locator,
-                usedIds
+                locator
             });
             if ('error' in compiled) errors.push({ operation: label, message: compiled.error });
             else manifests.push(compiled.manifest);
@@ -106,12 +105,11 @@ function compileOperation(args: {
     label: string;
     baseUrl: string;
     locator: string;
-    usedIds: Set<string>;
 }): { manifest: CapabilityManifest } | { error: string } {
     const effectChoice = chooseEffect(args.method, args.operation);
     if ('error' in effectChoice) return effectChoice;
 
-    const auth = resolveAuth(args.spec, args.operation);
+    const auth = resolveAuth(args.spec, args.operation, args.baseUrl);
     if ('error' in auth) return auth;
 
     const inputs = collectInputs(args.spec, args.path, args.pathItem, args.operation, args.method);
@@ -120,7 +118,13 @@ function compileOperation(args: {
     const output = collectOutput(args.spec, args.operation);
     if ('error' in output) return output;
 
-    const id = uniqueId(args.operationId ?? `${args.method}_${args.path}`, args.usedIds);
+    const transport = {
+        kind: 'http' as const,
+        access: 'browser_direct' as const,
+        baseUrl: args.baseUrl,
+        method: args.method,
+        path: args.path
+    };
     const title = typeof args.operation.summary === 'string' && args.operation.summary.trim()
         ? args.operation.summary.trim().slice(0, 120)
         : args.label.slice(0, 120);
@@ -130,7 +134,7 @@ function compileOperation(args: {
 
     const sealed = sealManifest({
         version: 1,
-        id,
+        id: canonicalCapabilityId(transport),
         title,
         ...(description ? { description } : {}),
         source: {
@@ -141,8 +145,9 @@ function compileOperation(args: {
         effect: effectChoice.effect,
         effectSource: effectChoice.source,
         approval: approvalForEffect(effectChoice.effect),
+        invocation: 'manual',
         auth: auth.auth,
-        transport: { kind: 'http', baseUrl: args.baseUrl, method: args.method, path: args.path },
+        transport,
         inputs: inputs.inputs,
         output: output.output
     });
@@ -185,7 +190,8 @@ function stripTrailingSlash(url: string): string {
 
 function resolveAuth(
     spec: Record<string, unknown>,
-    operation: Record<string, unknown>
+    operation: Record<string, unknown>,
+    baseUrl: string
 ): { auth: CapabilityManifest['auth'] } | { error: string } {
     const requirements = operation.security !== undefined ? operation.security : spec.security;
     if (!Array.isArray(requirements) || requirements.length === 0) return { auth: { kind: 'none' } };
@@ -201,23 +207,28 @@ function resolveAuth(
         const name = names[0];
         const scheme = schemes[name];
         if (!isRecord(scheme)) return { error: `security scheme ${name} is not defined` };
-        const binding = schemeToAuth(name, scheme);
+        const binding = schemeToAuth(baseUrl, name, scheme);
         if ('error' in binding) continue;
         return binding;
     }
     return { error: 'no supported security scheme (apiKey, http bearer, http basic)' };
 }
 
-function schemeToAuth(name: string, scheme: Record<string, unknown>): { auth: CapabilityManifest['auth'] } | { error: string } {
-    const secretRef = `auth_${slug(name)}`;
-    if (scheme.type === 'apiKey' && (scheme.in === 'header' || scheme.in === 'query') && typeof scheme.name === 'string') {
-        return { auth: { kind: 'apiKey', in: scheme.in, name: scheme.name, secretRef } };
+function schemeToAuth(baseUrl: string, name: string, scheme: Record<string, unknown>): { auth: CapabilityManifest['auth'] } | { error: string } {
+    const secretRef = (auth: { kind: 'apiKey' | 'bearer' | 'basic'; in?: 'header' | 'query'; name?: string }) =>
+        credentialSlot(baseUrl, auth);
+    const placement = scheme.in === 'header' ? 'header' as const : scheme.in === 'query' ? 'query' as const : undefined;
+    if (scheme.type === 'apiKey' && placement && typeof scheme.name === 'string') {
+        const auth = { kind: 'apiKey' as const, in: placement, name: scheme.name };
+        return { auth: { ...auth, secretRef: secretRef(auth) } };
     }
     if (scheme.type === 'http' && scheme.scheme === 'bearer') {
-        return { auth: { kind: 'bearer', secretRef } };
+        const auth = { kind: 'bearer' as const };
+        return { auth: { ...auth, secretRef: secretRef(auth) } };
     }
     if (scheme.type === 'http' && scheme.scheme === 'basic') {
-        return { auth: { kind: 'basic', secretRef } };
+        const auth = { kind: 'basic' as const };
+        return { auth: { ...auth, secretRef: secretRef(auth) } };
     }
     return { error: `unsupported scheme ${name}` };
 }
@@ -254,6 +265,9 @@ function collectInputs(
         }
         const converted = fromJsonSchema(isRecord(parameter.schema) || Array.isArray(parameter.schema) ? parameter.schema : { type: 'string' }, spec);
         if (!converted.ok) return { error: `${String(parameter.name)}: ${converted.error}` };
+        if ((location === 'query' || location === 'header') && (converted.schema.kind === 'object' || converted.schema.kind === 'array')) {
+            return { error: `${String(parameter.name)}: compound ${location} parameters are outside the supported subset` };
+        }
         inputs.push({
             name: String(parameter.name),
             in: location,
@@ -289,22 +303,17 @@ function collectOutput(
 ): { output: CapabilityManifest['output'] } | { error: string } {
     const responses = isRecord(operation.responses) ? operation.responses : {};
     const status = Object.keys(responses).filter(code => /^2\d\d$/.test(code)).sort()[0];
-    if (!status) {
-        return { output: { schema: { kind: 'any' }, presentation: 'raw' } };
-    }
+    if (!status) return { error: 'operation has no success response' };
     const response = deref(spec, responses[status]);
     if (!isRecord(response)) return { error: 'success response is invalid' };
     if (status === '204' || !isRecord(response.content)) {
         return { output: { schema: { kind: 'null' }, presentation: 'raw' } };
     }
     const json = jsonContent(response.content);
-    if (!json) {
-        return { output: { schema: { kind: 'any' }, presentation: 'raw' } };
-    }
-    const converted = fromJsonSchema(json.schema ?? {}, spec);
-    if (!converted.ok) {
-        return { output: { schema: { kind: 'any', description: converted.error }, presentation: 'raw' } };
-    }
+    if (!json) return { error: 'only application/json responses are in the supported subset' };
+    if (json.schema === undefined) return { error: 'response schema is required' };
+    const converted = fromJsonSchema(json.schema, spec);
+    if (!converted.ok) return { error: converted.error };
     return { output: presentationFor(converted.schema) };
 }
 
@@ -335,18 +344,6 @@ function deref(spec: Record<string, unknown>, value: unknown): unknown {
         current = current[part];
     }
     return current ?? value;
-}
-
-function uniqueId(seed: string, used: Set<string>): string {
-    const base = `cap_${slug(seed)}`.slice(0, 84);
-    let id = base;
-    let n = 2;
-    while (used.has(id)) {
-        id = `${base.slice(0, 76)}_${n}`;
-        n += 1;
-    }
-    used.add(id);
-    return id;
 }
 
 export function slug(value: string): string {

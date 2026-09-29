@@ -14,6 +14,7 @@ import { createOmniError } from '../gateway/omnidata.schema';
 import { validateManifest, type CapabilityManifest } from './manifest';
 import { allCapabilities, capabilityIds, claimHydration, deleteCapability, readCapability, writeCapability } from './state';
 import { bindLocalHandler, executeCapability, clearLastResult } from './execute';
+import { clearExecutionLedger } from './executionLedger';
 import { isCapabilityResult, type CapabilityResult } from './project';
 import { onCapabilityRehydrate, useCapabilityStore } from './store';
 import { portDataTypeFor } from './compatibility';
@@ -148,13 +149,15 @@ export function restoreSnapshot(snapshot: unknown): RestoreReport {
 }
 
 export function clearCapabilities(): void {
+    clearExecutionLedger();
     for (const id of capabilityIds()) uninstallCapability(id);
 }
 
 /** Run an installed capability for a canvas instance and store both values. */
 export async function runInstalledCapability(
     instanceId: string,
-    input?: Record<string, unknown>
+    input?: Record<string, unknown>,
+    options?: { signal?: AbortSignal; idempotencyKey?: string }
 ): Promise<CapabilityResult> {
     const block = useBlockStore.getState().getBlock(instanceId);
     const capabilityId = block?.schema.capabilityId;
@@ -173,7 +176,10 @@ export async function runInstalledCapability(
         ...(isPlain(block.params) ? block.params : {}),
         ...(input ?? {})
     };
-    const result = await executeCapability(capabilityId, params);
+    const result = await executeCapability(capabilityId, params, {
+        signal: options?.signal,
+        idempotencyKey: options?.idempotencyKey
+    });
     const items = result.presentation.items ?? [];
     useBlockStore.getState().updateData(instanceId, {
         capabilityId,
@@ -216,7 +222,7 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
             id: 'in',
             direction: 'input',
             dataType: portDataTypeFor(inbound.kind),
-            label: inbound.kind === 'any' ? 'Text' : 'Arguments',
+            label: manifest.inputs.length === 1 && manifest.inputs[0].schema.kind === 'string' ? 'Text' : 'Arguments',
             description: 'Capability arguments',
             schema: inbound
         });
@@ -246,15 +252,8 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
     };
 }
 
-/** A lone required string accepts any wired value and projects it to text. */
+/** The input port is the real argument contract. Projections live on the wire. */
 function inputPortSchema(manifest: CapabilityManifest): ValueType {
-    if (
-        manifest.inputs.length === 1
-        && manifest.inputs[0].required
-        && manifest.inputs[0].schema.kind === 'string'
-    ) {
-        return { kind: 'any' };
-    }
     return inputSchema(manifest);
 }
 
@@ -331,8 +330,8 @@ export function acceptRehydrated(manifests: CapabilityManifest[]): void {
 }
 
 export function ensureSpeechCapabilities(): void {
-    bindLocalHandler('speech.speak', args => runSpeechHandler('speech.speak', args));
-    bindLocalHandler('speech.listen', args => runSpeechHandler('speech.listen', args));
+    bindLocalHandler('speech.speak', (args, call) => runSpeechHandler('speech.speak', args, call));
+    bindLocalHandler('speech.listen', (args, call) => runSpeechHandler('speech.listen', args, call));
     for (const manifest of speechManifests()) {
         const current = readCapability(manifest.id);
         if (current?.digest === manifest.digest) continue;

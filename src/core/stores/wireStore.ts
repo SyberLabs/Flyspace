@@ -11,6 +11,7 @@ import { DataWire, WireFilters, WireStatus, DEFAULT_WIRE_FILTERS } from '../sche
 // shell — but every use is a lazy .getState() inside a function body, so the
 // cycle never resolves at module-init.
 import { useBlockStore } from './blockStore';
+import { admitConnection } from '../capabilities/compatibility';
 import { vaultStorage } from '../vault';
 
 interface WireStoreState {
@@ -63,6 +64,9 @@ export const useWireStore = create<WireStoreState>()(
             wires: [],
 
             addWire: (sourceBlockId, targetBlockId, filters, shellId) => {
+                const admission = admitConnection(sourceBlockId, targetBlockId);
+                if (!admission.ok) return '';
+
                 // Don't create duplicate wires
                 if (get().wireExists(sourceBlockId, targetBlockId)) {
                     const existing = get().wires.find(
@@ -76,10 +80,13 @@ export const useWireStore = create<WireStoreState>()(
                     id: wireId,
                     sourceBlockId,
                     targetBlockId,
+                    ...(admission.sourcePortId ? { sourcePortId: admission.sourcePortId } : {}),
+                    ...(admission.targetPortId ? { targetPortId: admission.targetPortId } : {}),
+                    projection: admission.projection,
                     wireType: 'push', // Default: auto-send on source update
                     filters: { ...DEFAULT_WIRE_FILTERS, ...filters },
                     status: 'active',
-                    shellId: shellId || useBlockStore.getState().activeShellId  // Use active shell when not specified
+                    shellId: shellId || useBlockStore.getState().activeShellId
                 };
 
                 set(state => ({
@@ -110,11 +117,21 @@ export const useWireStore = create<WireStoreState>()(
             },
 
             replaceWiresForShell: (shellId, wires) => {
+                const admitted = wires.flatMap(wire => {
+                    const admission = admitConnection(wire.sourceBlockId, wire.targetBlockId);
+                    if (!admission.ok) return [];
+                    return [{
+                        ...wire,
+                        shellId,
+                        ...(admission.sourcePortId ? { sourcePortId: admission.sourcePortId } : {}),
+                        ...(admission.targetPortId ? { targetPortId: admission.targetPortId } : {}),
+                        projection: admission.projection
+                    }];
+                });
                 set(state => ({
                     wires: [
                         ...state.wires.filter(w => w.shellId !== shellId),
-                        // Force shell ownership so restored wires can't leak across shells
-                        ...wires.map(w => ({ ...w, shellId }))
+                        ...admitted
                     ]
                 }));
             },

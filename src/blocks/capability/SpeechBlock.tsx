@@ -1,14 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBlockStore } from '@/core/stores';
 import {
     getSpeechEngine,
     resolveWiredInputs,
     runInstalledCapability,
     useCapabilityStore,
+    type SpeechSource,
     type SpeechSupport
 } from '@/core/capabilities';
+
+function localityLabel(source: SpeechSource): string {
+    if (source === 'on_device') return 'on device';
+    if (source === 'browser_service') return 'browser service';
+    if (source === 'remote') return 'remote';
+    return 'locality unknown';
+}
 
 function readField(data: unknown, field: 'spoken' | 'transcript'): string {
     if (!data || typeof data !== 'object' || !('typed' in data)) return '';
@@ -30,6 +38,9 @@ export function SpeechBlockView({ instanceId }: { instanceId: string }) {
     const manifest = useCapabilityStore(state => state.manifests.find(entry => entry.id === capabilityId));
     const listening = capabilityId === 'cap_speech_listen';
     const [support, setSupport] = useState<SpeechSupport>(() => getSpeechEngine().supported());
+    const cancelRef = useRef<AbortController | null>(null);
+    const locality = getSpeechEngine().locality?.() ?? { speak: 'unknown' as SpeechSource, listen: 'unknown' as SpeechSource };
+    const where = localityLabel(listening ? locality.listen : locality.speak);
     useEffect(() => {
         const synth = typeof window === 'undefined' ? undefined : window.speechSynthesis;
         if (!synth || typeof synth.addEventListener !== 'function') return;
@@ -50,15 +61,24 @@ export function SpeechBlockView({ instanceId }: { instanceId: string }) {
     const run = () => {
         if (!manifest || running || !available) return;
         const text = (draft.trim() || wiredText).trim();
+        const controller = new AbortController();
+        cancelRef.current = controller;
         setRunning(true);
         const input = listening ? {} : { text };
-        void runInstalledCapability(instanceId, input).finally(() => setRunning(false));
+        void runInstalledCapability(instanceId, input, { signal: controller.signal }).finally(() => {
+            cancelRef.current = null;
+            setRunning(false);
+        });
+    };
+
+    const stop = () => {
+        cancelRef.current?.abort();
     };
 
     return (
         <div className="flex h-full flex-col gap-2 p-3 text-sm text-[var(--text-primary)]">
             <div className="text-xs text-[var(--text-muted)]">
-                {listening ? 'Listen' : 'Speak'} · {available ? 'ready' : 'unavailable'}
+                {listening ? 'Listen' : 'Speak'} · {available ? where : 'unavailable'}
             </div>
             {!available ? (
                 <p className="text-xs text-[var(--truth-red)]">
@@ -85,11 +105,11 @@ export function SpeechBlockView({ instanceId }: { instanceId: string }) {
             {!listening && spoken ? <p className="truncate text-xs text-[var(--text-muted)]">Spoke: {spoken}</p> : null}
             <button
                 type="button"
-                onClick={run}
-                disabled={!manifest || running || !available || (!listening && !(draft.trim() || wiredText.trim()))}
+                onClick={running ? stop : run}
+                disabled={!manifest || !available || (!running && !listening && !(draft.trim() || wiredText.trim()))}
                 className="rounded border border-[var(--citadel-border)] px-2 py-1 text-xs disabled:opacity-50"
             >
-                {running ? 'Running…' : listening ? 'Listen' : 'Speak'}
+                {running ? 'Stop' : listening ? 'Listen' : 'Speak'}
             </button>
         </div>
     );

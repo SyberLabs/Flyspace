@@ -67,6 +67,19 @@ export interface DataWire {
     /** Shell isolation - ID of the shell this wire belongs to */
     shellId: string;
 
+    /** Output port the wire leaves, when the block declares one. */
+    sourcePortId?: string;
+
+    /** Input port the wire enters, when the block declares one. */
+    targetPortId?: string;
+
+    /**
+     * How the source value becomes the target input.
+     * `identity` keeps the typed value. `text` and `join_titles` are
+     * explicit projections, not silent type equality.
+     */
+    projection?: { kind: 'identity' | 'text' | 'join_titles' };
+
 }
 
 /**

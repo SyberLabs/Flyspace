@@ -4,6 +4,7 @@
 
 import { useBlockStore } from '../stores/blockStore';
 import { useWireStore } from '../stores/wireStore';
+import type { WireProjection } from './compatibility';
 import type { CapabilityManifest } from './manifest';
 import { readCapability } from './state';
 import { isRecord, validateValue } from './valueType';
@@ -21,19 +22,31 @@ export function resolveWiredInputs(instanceId: string): Record<string, unknown> 
     for (const wire of wires) {
         const source = useBlockStore.getState().getBlock(wire.sourceBlockId);
         if (!source?.data) continue;
-        Object.assign(merged, contributionFrom(source.data, manifest));
+        Object.assign(merged, contributionFrom(source.data, manifest, wire.projection));
     }
     return merged;
 }
 
-function contributionFrom(data: unknown, manifest: CapabilityManifest): Record<string, unknown> {
+function contributionFrom(
+    data: unknown,
+    manifest: CapabilityManifest,
+    projection?: WireProjection
+): Record<string, unknown> {
     if (!isRecord(data)) return {};
+    const kind = projection?.kind;
+
+    if (kind === 'join_titles') {
+        const textInput = stringSink(manifest);
+        const text = joinedTitles(data);
+        return textInput && text ? { [textInput]: text } : {};
+    }
 
     const typed = isRecord(data.typed) ? data.typed.value : undefined;
     if (typed !== undefined) {
         const fromTyped = matchValue(typed, manifest);
         if (Object.keys(fromTyped).length > 0) return fromTyped;
     }
+    if (kind === 'identity') return {};
 
     const textInput = stringSink(manifest);
     if (!textInput) return {};
@@ -45,14 +58,18 @@ function contributionFrom(data: unknown, manifest: CapabilityManifest): Record<s
         return { [textInput]: data.content };
     }
 
-    if (Array.isArray(data.items)) {
-        const lines = data.items
-            .map(item => isRecord(item) && typeof item.title === 'string' ? item.title : '')
-            .filter(Boolean);
-        if (lines.length > 0) return { [textInput]: lines.join('\n') };
-    }
+    const titles = joinedTitles(data);
+    if (titles) return { [textInput]: titles };
 
     return {};
+}
+
+function joinedTitles(data: Record<string, unknown>): string | null {
+    if (!Array.isArray(data.items)) return null;
+    const lines = data.items
+        .map(item => isRecord(item) && typeof item.title === 'string' ? item.title : '')
+        .filter(Boolean);
+    return lines.length > 0 ? lines.join('\n') : null;
 }
 
 function matchValue(value: unknown, manifest: CapabilityManifest): Record<string, unknown> {

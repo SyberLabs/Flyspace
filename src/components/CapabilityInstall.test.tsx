@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { CapabilityInstall } from './CapabilityInstall';
-import { clearCapabilities, getCapability } from '@/core/capabilities/registry';
+import { clearCapabilities, listCapabilities } from '@/core/capabilities/registry';
 import { capabilitySecrets } from '@/core/capabilities/secrets';
 import { useCapabilityStore } from '@/core/capabilities/store';
 
@@ -49,7 +49,7 @@ describe('CapabilityInstall', () => {
         fireEvent.change(screen.getByLabelText('OpenAPI document'), { target: { value: '{not json' } });
         fireEvent.click(screen.getByRole('button', { name: 'Compile' }));
         expect(screen.getByText('OpenAPI document must be JSON')).toBeTruthy();
-        expect(getCapability('cap_listposts')).toBeUndefined();
+        expect(listCapabilities().some(manifest => manifest.source.operationId === 'listPosts')).toBe(false);
     });
 
     it('installs a compiled operation without writing the secret into the store', () => {
@@ -62,14 +62,15 @@ describe('CapabilityInstall', () => {
         expect(screen.getByLabelText('List posts')).toBeTruthy();
         expect(screen.getByLabelText('Create post')).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Secret auth_boardkey'), {
-            target: { value: 'super-secret-value' }
-        });
+        const secret = screen.getByLabelText(/^Secret cred_/) as HTMLInputElement;
+        fireEvent.change(secret, { target: { value: 'super-secret-value' } });
         fireEvent.click(screen.getByRole('button', { name: 'Install selected' }));
 
-        expect(getCapability('cap_listposts')?.approval).toBe('auto');
-        expect(getCapability('cap_createpost')?.approval).toBe('pending');
-        expect(capabilitySecrets.get('auth_boardkey')).toBe('super-secret-value');
+        const list = listCapabilities().find(manifest => manifest.source.operationId === 'listPosts');
+        const create = listCapabilities().find(manifest => manifest.source.operationId === 'createPost');
+        expect(list?.approval).toBe('auto');
+        expect(create?.approval).toBe('pending');
+        expect(capabilitySecrets.get(list!.auth.secretRef!)).toBe('super-secret-value');
         expect(JSON.stringify(useCapabilityStore.getState())).not.toContain('super-secret-value');
         expect(screen.getByRole('button', { name: 'Approve Create post' })).toBeTruthy();
         expect(screen.queryByText('Speak')).toBeNull();
@@ -83,9 +84,8 @@ describe('CapabilityInstall', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Compile' }));
         fireEvent.click(screen.getByRole('button', { name: 'Install selected' }));
-        expect(screen.getByText('Secret auth_boardkey is required')).toBeTruthy();
-        expect(getCapability('cap_listposts')).toBeUndefined();
-        expect(JSON.stringify(useCapabilityStore.getState())).not.toContain('auth_boardkey');
+        expect(screen.getByText(/Secret cred_.+ is required/)).toBeTruthy();
+        expect(listCapabilities().some(manifest => manifest.source.operationId === 'listPosts')).toBe(false);
     });
 
     it('approves and removes through separate controls', () => {
@@ -95,20 +95,20 @@ describe('CapabilityInstall', () => {
             target: { value: JSON.stringify(SPEC) }
         });
         fireEvent.click(screen.getByRole('button', { name: 'Compile' }));
-        fireEvent.change(screen.getByLabelText('Secret auth_boardkey'), {
+        fireEvent.change(screen.getByLabelText(/^Secret cred_/), {
             target: { value: 'session-only' }
         });
         fireEvent.click(screen.getByLabelText('List posts'));
         fireEvent.click(screen.getByRole('button', { name: 'Install selected' }));
 
-        expect(getCapability('cap_listposts')).toBeUndefined();
-        expect(getCapability('cap_createpost')?.approval).toBe('pending');
+        expect(listCapabilities().some(manifest => manifest.source.operationId === 'listPosts')).toBe(false);
+        expect(listCapabilities().find(manifest => manifest.source.operationId === 'createPost')?.approval).toBe('pending');
 
         fireEvent.click(screen.getByRole('button', { name: 'Approve Create post' }));
-        expect(getCapability('cap_createpost')?.approval).toBe('approved');
+        expect(listCapabilities().find(manifest => manifest.source.operationId === 'createPost')?.approval).toBe('approved');
         expect(screen.queryByRole('button', { name: 'Approve Create post' })).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove Create post' }));
-        expect(getCapability('cap_createpost')).toBeUndefined();
+        expect(listCapabilities().some(manifest => manifest.source.operationId === 'createPost')).toBe(false);
     });
 });

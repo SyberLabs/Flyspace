@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { sha256 } from './hash';
+import { credentialSlot } from './identity';
 import { compileOpenApi } from './openapi';
 import { compileMcpTools } from './mcp';
 import { compileBring } from './bring';
@@ -82,22 +83,11 @@ const SPEC = {
             }
         },
         '/search': {
-            post: {
+            get: {
                 operationId: 'searchPosts',
                 summary: 'Search posts',
                 'x-omni-effect': 'compute',
-                requestBody: {
-                    required: true,
-                    content: {
-                        'application/json': {
-                            schema: {
-                                type: 'object',
-                                required: ['q'],
-                                properties: { q: { type: 'string' } }
-                            }
-                        }
-                    }
-                },
+                parameters: [{ name: 'q', in: 'query', required: true, schema: { type: 'string' } }],
                 responses: {
                     '200': {
                         description: 'hits',
@@ -147,6 +137,12 @@ const SPEC = {
 
 const POSTS = [{ id: 'p1', title: 'Hello from the board', body: 'A note' }];
 
+function byOp(operationId: string) {
+    const manifest = manifests().manifests.find(entry => entry.source.operationId === operationId);
+    if (!manifest) throw new Error(`missing ${operationId}`);
+    return manifest;
+}
+
 function manifests() {
     return compileOpenApi(SPEC);
 }
@@ -174,41 +170,51 @@ describe('capability compiler', () => {
 
     it('compiles an unknown OpenAPI document into checked manifests', () => {
         const compiled = manifests();
-        const ids = compiled.manifests.map(manifest => manifest.id).sort();
-        expect(ids).toEqual([
-            'cap_createpost',
-            'cap_deletepost',
-            'cap_getpost',
-            'cap_listposts',
-            'cap_searchposts'
+        const operations = compiled.manifests.map(manifest => manifest.source.operationId).sort();
+        expect(operations).toEqual([
+            'createPost',
+            'dangerousGet',
+            'deletePost',
+            'getPost',
+            'listPosts',
+            'searchPosts'
         ]);
-        expect(compiled.errors.map(issue => issue.operation)).toContain('dangerousGet');
+        expect(compiled.errors).toEqual([]);
 
-        const list = compiled.manifests.find(manifest => manifest.id === 'cap_listposts');
-        const create = compiled.manifests.find(manifest => manifest.id === 'cap_createpost');
-        const search = compiled.manifests.find(manifest => manifest.id === 'cap_searchposts');
-        const remove = compiled.manifests.find(manifest => manifest.id === 'cap_deletepost');
-        expect(list).toMatchObject({ effect: 'read', approval: 'auto', effectSource: 'method' });
+        const list = byOp('listPosts');
+        const create = byOp('createPost');
+        const search = byOp('searchPosts');
+        const remove = byOp('deletePost');
+        const danger = byOp('dangerousGet');
+        expect(list).toMatchObject({ effect: 'read', approval: 'auto', effectSource: 'method', invocation: 'manual' });
         expect(create).toMatchObject({ effect: 'write', approval: 'pending' });
         expect(search).toMatchObject({ effect: 'compute', approval: 'auto', effectSource: 'extension' });
         expect(remove).toMatchObject({ effect: 'destructive', approval: 'pending' });
-        expect(list?.output.schema.kind).toBe('array');
-        expect(list?.auth).toEqual({ kind: 'apiKey', in: 'header', name: 'X-Board-Key', secretRef: 'auth_boardkey' });
+        expect(danger).toMatchObject({ effect: 'destructive', approval: 'pending', effectSource: 'extension' });
+        expect(list.output.schema.kind).toBe('array');
+        expect(list.transport).toMatchObject({ kind: 'http', access: 'browser_direct' });
+        expect(list.auth).toEqual({
+            kind: 'apiKey',
+            in: 'header',
+            name: 'X-Board-Key',
+            secretRef: credentialSlot('https://board.example.test/v1', { kind: 'apiKey', in: 'header', name: 'X-Board-Key' })
+        });
+        expect(byOp('listPosts').id).not.toBe(byOp('createPost').id);
+        expect(list.id.startsWith('cap_')).toBe(true);
         expect(JSON.stringify(compiled.manifests)).not.toContain('super-secret');
     });
 
     it('rejects a tampered proposal and will not auto-approve a write', () => {
-        const create = manifests().manifests.find(manifest => manifest.id === 'cap_createpost');
-        expect(create).toBeDefined();
-        const tampered = { ...create!, title: 'Overwrite' };
+        const create = byOp('createPost');
+        const tampered = { ...create, title: 'Overwrite' };
         expect(validateManifest(tampered).ok).toBe(false);
 
-        const claimed = { ...create!, approval: 'approved' as const, apiKey: 'super-secret' };
+        const claimed = { ...create, approval: 'approved' as const, apiKey: 'super-secret' };
         const installed = installProposal(claimed);
         expect(installed.ok).toBe(false);
-        expect(apiGateway.isRegistered('cap_createpost')).toBe(false);
+        expect(apiGateway.isRegistered(create.id)).toBe(false);
 
-        const blessed = { ...create!, approval: 'approved' as const };
+        const blessed = { ...create, approval: 'approved' as const };
         expect(validateManifest(blessed).ok).toBe(true);
         expect(installProposal(blessed).manifest?.approval).toBe('pending');
     });
@@ -217,10 +223,10 @@ describe('capability compiler', () => {
         expect(apiGateway.isRegistered('polymarket')).toBe(true);
         expect(blockRegistry.has('polymarket_live_odds')).toBe(true);
 
-        const list = manifests().manifests.find(manifest => manifest.id === 'cap_listposts');
+        const list = byOp('listPosts');
         expect(installProposal(list).ok).toBe(true);
-        expect(blockRegistry.get('cap_listposts')?.capabilityId).toBe('cap_listposts');
-        expect(blockRegistry.get('cap_listposts')?.ports?.find(port => port.id === 'out')?.schema?.kind).toBe('array');
+        expect(blockRegistry.get(list.id)?.capabilityId).toBe(list.id);
+        expect(blockRegistry.get(list.id)?.ports?.find(port => port.id === 'out')?.schema?.kind).toBe('array');
 
         const calls: Array<{ url: string; init?: RequestInit }> = [];
         vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -231,12 +237,12 @@ describe('capability compiler', () => {
             });
         }));
 
-        const unbound = await executeCapability('cap_listposts', {});
+        const unbound = await executeCapability(byOp('listPosts').id, {});
         expect(unbound.error?.code).toBe('AUTH_UNBOUND');
         expect(calls).toHaveLength(0);
 
-        capabilitySecrets.set('auth_boardkey', 'super-secret');
-        const result = await executeCapability('cap_listposts', {});
+        capabilitySecrets.set(byOp('listPosts').auth.secretRef!, 'super-secret');
+        const result = await executeCapability(byOp('listPosts').id, {});
         expect(result.ok).toBe(true);
         expect(result.typed?.value).toEqual(POSTS);
         expect(result.presentation.items?.[0]?.title).toBe('Hello from the board');
@@ -244,12 +250,12 @@ describe('capability compiler', () => {
         expect(calls[0]?.url).toBe('https://board.example.test/v1/posts');
         expect(new Headers(calls[0]?.init?.headers).get('X-Board-Key')).toBe('super-secret');
 
-        const viaGateway = await apiGateway.fetch('cap_listposts', {}, true);
+        const viaGateway = await apiGateway.fetch(byOp('listPosts').id, {}, true);
         expect(viaGateway.items?.[0]?.title).toBe('Hello from the board');
         expect(viaGateway).not.toHaveProperty('typed');
         expect(apiGateway.isRegistered('polymarket')).toBe(true);
 
-        const schema = blockRegistry.get('cap_listposts');
+        const schema = blockRegistry.get(byOp('listPosts').id);
         expect(schema).toBeDefined();
         const instanceId = useBlockStore.getState().addBlock(schema!, { x: 0, y: 0 });
         const personaSchema = blockRegistry.get('persona_analyst');
@@ -267,7 +273,6 @@ describe('capability compiler', () => {
             baseUrl: 'https://board.example.test/v1',
             method: 'POST',
             path: '/count',
-            effect: 'compute',
             inputs: [{
                 name: 'count',
                 in: 'body',
@@ -282,9 +287,10 @@ describe('capability compiler', () => {
         expect(wireService.createWire(instanceId, countId)).toBe('');
         expect(useWireStore.getState().wireExists(instanceId, countId)).toBe(false);
 
-        expect(uninstallCapability('cap_listposts')).toBe(true);
-        expect(apiGateway.isRegistered('cap_listposts')).toBe(false);
-        expect(blockRegistry.has('cap_listposts')).toBe(false);
+        const listId = byOp('listPosts').id;
+        expect(uninstallCapability(listId)).toBe(true);
+        expect(apiGateway.isRegistered(listId)).toBe(false);
+        expect(blockRegistry.has(listId)).toBe(false);
         expect(useBlockStore.getState().getBlock(instanceId)).toBeUndefined();
         expect(apiGateway.isRegistered('polymarket')).toBe(true);
         expect(blockRegistry.has('polymarket_live_odds')).toBe(true);
@@ -292,12 +298,11 @@ describe('capability compiler', () => {
     });
 
     it('refuses write and destructive calls until an explicit approval', async () => {
-        const compiled = manifests();
-        const create = compiled.manifests.find(manifest => manifest.id === 'cap_createpost');
-        const remove = compiled.manifests.find(manifest => manifest.id === 'cap_deletepost');
+        const create = byOp('createPost');
+        const remove = byOp('deletePost');
         installProposal(create);
         installProposal(remove);
-        capabilitySecrets.set('auth_boardkey', 'super-secret');
+        capabilitySecrets.set(create.auth.secretRef!, 'super-secret');
 
         const calls: string[] = [];
         vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -308,30 +313,30 @@ describe('capability compiler', () => {
             });
         }));
 
-        const refused = await executeCapability('cap_createpost', { body: { title: 'Hi' } });
+        const refused = await executeCapability(byOp('createPost').id, { body: { title: 'Hi' } });
         expect(refused.error?.code).toBe('EFFECT_NOT_APPROVED');
         expect(calls).toHaveLength(0);
 
-        expect(approveCapability('cap_createpost').manifest?.approval).toBe('approved');
-        const created = await executeCapability('cap_createpost', { body: { title: 'Hi' } });
+        expect(approveCapability(byOp('createPost').id).manifest?.approval).toBe('approved');
+        const created = await executeCapability(byOp('createPost').id, { body: { title: 'Hi' } });
         expect(created.ok).toBe(true);
         expect(calls[0]).toBe('POST https://board.example.test/v1/posts');
 
-        const deleted = await executeCapability('cap_deletepost', { id: 'p2' });
+        const deleted = await executeCapability(byOp('deletePost').id, { id: 'p2' });
         expect(deleted.error?.code).toBe('EFFECT_NOT_APPROVED');
         expect(calls).toHaveLength(1);
     });
 
     it('fails closed when the response does not match the output schema', async () => {
-        const list = manifests().manifests.find(manifest => manifest.id === 'cap_listposts');
+        const list = byOp('listPosts');
         installProposal(list);
-        capabilitySecrets.set('auth_boardkey', 'super-secret');
+        capabilitySecrets.set(list.auth.secretRef!, 'super-secret');
         vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ nope: true }), {
             status: 200,
             headers: { 'content-type': 'application/json' }
         })));
 
-        const result = await executeCapability('cap_listposts', {});
+        const result = await executeCapability(list.id, {});
         expect(result.ok).toBe(false);
         expect(result.error?.code).toBe('TYPED_OUTPUT_MISMATCH');
         expect(result.typed).toBeNull();
@@ -339,24 +344,24 @@ describe('capability compiler', () => {
     });
 
     it('keeps an approval across a snapshot and still revalidates', async () => {
-        const create = manifests().manifests.find(manifest => manifest.id === 'cap_createpost');
+        const create = byOp('createPost');
         installProposal(create);
-        approveCapability('cap_createpost');
+        approveCapability(create.id);
         const snapshot = exportSnapshot();
         expect(JSON.stringify(snapshot)).not.toContain('super-secret');
 
         clearCapabilities();
-        expect(getCapability('cap_createpost')).toBeUndefined();
+        expect(getCapability(create.id)).toBeUndefined();
         const restored = restoreSnapshot(snapshot);
-        expect(restored.installed).toContain('cap_createpost');
-        expect(getCapability('cap_createpost')?.approval).toBe('approved');
+        expect(restored.installed).toContain(create.id);
+        expect(getCapability(create.id)?.approval).toBe('approved');
 
         const forged = {
             version: 1 as const,
             manifests: [{ ...snapshot.manifests[0], title: 'Forged' }]
         };
         const rejected = restoreSnapshot(forged);
-        expect(rejected.installed).not.toContain('cap_createpost');
+        expect(rejected.installed).not.toContain(create.id);
         expect(rejected.rejected[0]?.errors.join(' ')).toMatch(/digest/);
     });
 
@@ -376,15 +381,25 @@ describe('capability compiler', () => {
             {
                 serverId: 'board',
                 name: 'wipe_board',
-                annotations: { readOnlyHint: true, destructiveHint: true }
+                annotations: { readOnlyHint: true, destructiveHint: true },
+                outputSchema: { type: 'boolean' }
             }
         ]);
         expect(compiled.errors).toEqual([]);
         const read = compiled.manifests.find(manifest => manifest.source.operationId === 'list_board');
         const wipe = compiled.manifests.find(manifest => manifest.source.operationId === 'wipe_board');
-        expect(read).toMatchObject({ effect: 'read', approval: 'auto' });
+        expect(read).toMatchObject({ effect: 'write', approval: 'pending' });
+        const trusted = compileMcpTools([{
+            serverId: 'board',
+            name: 'list_board',
+            annotations: { readOnlyHint: true },
+            inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
+            outputSchema: { type: 'array', items: { type: 'string' } }
+        }], { trustedAnnotations: true });
+        expect(trusted.manifests[0]).toMatchObject({ effect: 'read', approval: 'auto' });
         expect(wipe).toMatchObject({ effect: 'destructive', approval: 'pending' });
-        installProposal(read);
+        const trustedRead = trusted.manifests[0];
+        installProposal(trustedRead);
         installProposal(wipe);
 
         const calls: unknown[] = [];
@@ -399,13 +414,13 @@ describe('capability compiler', () => {
         expect(wiped.error?.code).toBe('EFFECT_NOT_APPROVED');
         expect(calls).toHaveLength(0);
 
-        const listed = await executeCapability(read!.id, { q: 'alpha' });
+        const listed = await executeCapability(trustedRead.id, { q: 'alpha' });
         expect(listed.ok).toBe(true);
         expect(listed.typed?.value).toEqual(['alpha']);
         expect(calls).toEqual([{ tool: 'list_board', args: { q: 'alpha' } }]);
 
         unbindMcpTransport('board');
-        const unbound = await executeCapability(read!.id, {});
+        const unbound = await executeCapability(trustedRead.id, {});
         expect(unbound.error?.code).toBe('TRANSPORT_NOT_BOUND');
 
         const brought = compileBring({

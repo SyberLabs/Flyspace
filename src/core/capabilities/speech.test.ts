@@ -8,7 +8,7 @@ import {
     uninstallCapability
 } from './registry';
 import { executeCapability, unbindLocalHandler } from './execute';
-import { setSpeechEngine, type SpeechEngine } from './speech';
+import { setSpeechEngine, speechRecognitionMessage, type SpeechEngine } from './speech';
 
 function fakeEngine(transcript = 'hello there'): SpeechEngine & { spoken: string[]; langs: Array<string | undefined> } {
     const spoken: string[] = [];
@@ -51,7 +51,7 @@ describe('speech capabilities', () => {
         expect(listen?.invocation).toBe('manual');
         expect(blockRegistry.get('cap_speech_speak')?.icon).toBe('Volume2');
         expect(blockRegistry.get('cap_speech_listen')?.icon).toBe('Mic');
-        expect(blockRegistry.get('cap_speech_speak')?.ports?.find(port => port.id === 'in')?.schema).toEqual({ kind: 'any' });
+        expect(blockRegistry.get('cap_speech_speak')?.ports?.find(port => port.id === 'in')?.schema?.kind).toBe('object');
         expect(apiGateway.isRegistered('polymarket')).toBe(true);
     });
 
@@ -61,7 +61,7 @@ describe('speech capabilities', () => {
         const result = await executeCapability('cap_speech_speak', { text: '  board is quiet  ' });
         expect(result.ok).toBe(true);
         expect(engine.spoken).toEqual(['board is quiet']);
-        expect(result.typed?.value).toEqual({ spoken: 'board is quiet' });
+        expect(result.typed?.value).toMatchObject({ spoken: 'board is quiet', source: 'unknown' });
         expect(result.presentation.items?.[0]?.title).toBe('board is quiet');
         expect(result.presentation.items?.[0]?.title).not.toContain('typed');
     });
@@ -86,13 +86,19 @@ describe('speech capabilities', () => {
         const heard = await executeCapability('cap_speech_listen', { lang: 'en-GB' });
         expect(heard.ok).toBe(true);
         expect(engine.langs).toEqual(['en-GB']);
-        expect(heard.typed?.value).toEqual({ transcript: 'noted' });
+        expect(heard.typed?.value).toMatchObject({ transcript: 'noted', source: 'unknown' });
         expect(heard.presentation.items?.[0]?.title).toBe('noted');
 
         setSpeechEngine(fakeEngine('   '));
         const silent = await executeCapability('cap_speech_listen', {});
         expect(silent.error?.code).toBe('UPSTREAM_ERROR');
         expect(silent.error?.message).toBe('No speech recognized');
+    });
+
+    it('names a denied microphone as permission denied', () => {
+        expect(speechRecognitionMessage('not-allowed')).toBe('Permission denied');
+        expect(speechRecognitionMessage('service-not-allowed')).toBe('Permission denied');
+        expect(speechRecognitionMessage('network')).toBe('Speech recognition service is unreachable');
     });
 
     it('brings builtins back after they are cleared', () => {
