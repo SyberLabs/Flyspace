@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start -H 127.0.0.1",
     "lint": "eslint",
+    "postinstall": "node scripts/patch-eslint-react-filename.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
