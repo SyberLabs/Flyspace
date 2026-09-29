@@ -21,7 +21,7 @@ import { ContextCaptureModal } from '@/components/mind/ContextCaptureModal';
 import { useBlockStore, useToolStore } from '@/core/stores';
 import { useApiStore } from '@/core/stores/apiStore';
 import { useMindShellSync, useShellNavigation } from '@/core/hooks';
-import { SpatialLab } from '@/components/spatial/SpatialLab';
+import { VoiceControl } from '@/components/voice/VoiceControl';
 
 export default function CitadelApp() {
     const { activeShellId } = useBlockStore();
@@ -33,7 +33,6 @@ export default function CitadelApp() {
     const [isApiOpen, setIsApiOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isShellsOpen, setIsShellsOpen] = useState(false);
-    const [isSpatialOpen, setIsSpatialOpen] = useState(false);
 
     // Initialize Mind-Shell synchronization
     useMindShellSync();
@@ -69,7 +68,6 @@ export default function CitadelApp() {
                 onOpenApi={() => setIsApiOpen(true)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenShells={() => setIsShellsOpen(true)}
-                onOpenSpatial={() => setIsSpatialOpen(true)}
             />
 
             {process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1' && (
@@ -87,7 +85,7 @@ export default function CitadelApp() {
                     or a template-spawned shell after using the Shell Store) */}
                 <main className="flex-1 overflow-hidden relative">
                     <Canvas shellId={activeShellId} onBrowseShells={() => setIsShellsOpen(true)} />
-                    {isSpatialOpen && <SpatialLab onClose={() => setIsSpatialOpen(false)} />}
+                    <VoiceControl />
 
                     {/* Mind Dock - Always Visible */}
                     <MindDock onExpandPanel={() => setIsMindOpen(true)} />

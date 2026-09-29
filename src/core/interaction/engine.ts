@@ -4,7 +4,8 @@
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import { evaluateWireAdmission } from './ports';
 import { clearSeparated, isSeparated, markSeparated } from './separation';
-import { parseSpeech, type SpeechIntent } from './speech';
+import { defaultSpeechCatalog, parseSpeech, type SpeechCatalog, type SpeechIntent, type SpeechShellKind } from './speech';
+import { describeCommand } from './speechReply';
 import { resolveReferents } from './referent';
 import { stepPinch, pinchSpan, initialPinch, type PinchMachine } from './pinch';
 import { cameraNormalizedToCanvas, point, type Viewport } from './coordinates';
@@ -30,6 +31,7 @@ export interface CanvasMutator {
     connect(sourceId: string, targetId: string): { ok: true; wireId: string } | { ok: false; reason: string };
     disconnect(wireId: string): void;
     setGroup(ids: string[], groupId: string | null): void;
+    openShell(target: SpeechShellKind): { ok: true; name: string; previousShellId: string } | { ok: false; reason: string };
 }
 
 interface UndoEntry {
@@ -69,7 +71,10 @@ export class InteractionEngine {
     private activeMove: { subject: string; origin: { x: number; y: number } } | null = null;
     private viewport: Viewport = { width: 1280, height: 720, panX: 0, panY: 0, zoom: 1 };
 
-    constructor(private readonly canvas: CanvasMutator) {}
+    constructor(
+        private readonly canvas: CanvasMutator,
+        private readonly catalog: () => SpeechCatalog = defaultSpeechCatalog
+    ) {}
 
     setViewport(viewport: Viewport): void {
         this.viewport = viewport;
@@ -81,7 +86,7 @@ export class InteractionEngine {
 
     snapshot(): EngineSnapshot {
         return {
-            commands: this.commands.map(command => ({ ...command, subjects: [...command.subjects], evidence: [...command.evidence], modalities: [...command.modalities] })),
+            commands: this.commands.map(command => ({ ...command, subjects: [...command.subjects], evidence: [...command.evidence], modalities: [...command.modalities], summary: command.summary })),
             traces: this.traces.map(trace => ({ ...trace })),
             preview: this.preview ? { ...this.preview } : null,
             held: this.held ? { ...this.held } : null,
@@ -122,14 +127,31 @@ export class InteractionEngine {
     }
 
     speak(transcript: string, timestampMs = Date.now()): SpatialCommand {
-        const intent = parseSpeech(transcript);
-        const proposal = this.proposal(intent?.action ?? 'select', [], {
+        const names = new Map(this.canvas.listBlocks().map(block => [block.id, block.name]));
+        const command = this.interpretSpeech(transcript, timestampMs);
+        for (const block of this.canvas.listBlocks()) names.set(block.id, block.name);
+        command.summary = describeCommand(command, id => names.get(id) ?? 'that block');
+        return command;
+    }
+
+    private interpretSpeech(transcript: string, timestampMs: number): SpatialCommand {
+        const intent = parseSpeech(transcript, this.catalog());
+        const proposalAction = intent && intent.action !== 'confirm' ? intent.action : 'select';
+        const proposal = this.proposal(proposalAction, [], {
             modalities: ['speech'],
             confidence: intent ? 0.9 : 0,
             timestampMs,
             evidence: [`speech:${transcript}`]
         });
         if (!intent) return this.refuse(proposal, 'unrecognized-speech');
+        if (intent.ambiguous) return this.refuse(proposal, `ambiguous-${intent.ambiguous}`);
+        if (intent.action === 'confirm') {
+            if (!this.preview || this.preview.lifecycle !== 'previewing') {
+                return this.refuse(proposal, 'nothing-pending');
+            }
+            return this.confirm(timestampMs) ?? this.refuse(proposal, 'nothing-pending');
+        }
+        if (this.preview || this.held) this.cancel();
         if (intent.action === 'undo') {
             this.undo();
             return this.commit(proposal, { command: 'UNDO', modalities: ['speech'], committedAt: timestampMs });
@@ -137,6 +159,24 @@ export class InteractionEngine {
         if (intent.action === 'cancel') {
             this.cancel();
             return this.commit(proposal, { command: 'CANCEL', modalities: ['speech'], committedAt: timestampMs });
+        }
+        if (intent.action === 'open-shell' && intent.shell) {
+            const opened = this.canvas.openShell(intent.shell);
+            if (!opened.ok) return this.refuse(proposal, opened.reason);
+            proposal.action = 'open-shell';
+            proposal.create = { blockId: intent.shell.id, displayName: opened.name };
+            return this.commitTracked(proposal, {
+                command: 'OPEN_SHELL',
+                modalities: ['speech'],
+                committedAt: timestampMs
+            }, () => {
+                this.canvas.openShell({
+                    id: opened.previousShellId,
+                    name: 'previous',
+                    kind: opened.previousShellId === 'root' ? 'root' : 'saved',
+                    aliases: []
+                });
+            });
         }
         return this.applyIntent(intent, proposal, timestampMs);
     }
@@ -314,6 +354,46 @@ export class InteractionEngine {
             noun: intent.targetName,
             allowSet: intent.deixis === 'these'
         });
+
+        if (intent.action === 'delete' && intent.targetName && intent.deixis === 'none') {
+            const named = resolveReferents({
+                shellId: this.canvas.activeShell(),
+                blocks: this.canvas.listBlocks(),
+                selection: [],
+                recentInteraction: [],
+                recentDiscourse: [],
+                noun: intent.targetName
+            });
+            if (named.status !== 'resolved') return this.hold(proposal, named.reason);
+            proposal.subjects = [{ id: named.ids[0] }];
+            proposal.action = 'delete';
+            return this.previewDestructive(proposal);
+        }
+
+        if (intent.action === 'connect' && intent.sourceName) {
+            const source = resolveReferents({
+                shellId: this.canvas.activeShell(),
+                blocks: this.canvas.listBlocks(),
+                selection: [],
+                recentInteraction: [],
+                recentDiscourse: [],
+                noun: intent.sourceName
+            });
+            const target = resolveReferents({
+                shellId: this.canvas.activeShell(),
+                blocks: this.canvas.listBlocks(),
+                selection: [],
+                recentInteraction: [],
+                recentDiscourse: [],
+                noun: intent.targetName
+            });
+            if (source.status !== 'resolved') return this.hold(proposal, source.reason);
+            if (target.status !== 'resolved') return this.hold(proposal, 'ambiguous-target');
+            proposal.subjects = [{ id: source.ids[0] }];
+            proposal.target = { id: target.ids[0] };
+            proposal.action = 'connect';
+            return this.execute(proposal, timestampMs, false);
+        }
 
         if (intent.action === 'create') {
             const at = intent.deixis === 'here' ? pointHit : point('canvas', 160, 160);
@@ -584,7 +664,10 @@ export class InteractionEngine {
     }
 
     private latestPoint(now: number): FramedPoint | undefined {
-        const recent = [...this.points].reverse().find(item => now - item.timestampMs <= 2500);
+        const recent = [...this.points].reverse().find(item => {
+            const age = now - item.timestampMs;
+            return item.modality === 'pointer' ? age <= 60_000 : age <= 2500;
+        });
         return recent?.at;
     }
 

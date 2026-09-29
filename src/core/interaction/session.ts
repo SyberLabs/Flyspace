@@ -2,9 +2,12 @@
 
 import { blockRegistry } from '@/core/registry/BlockRegistry';
 import { useBlockStore } from '@/core/stores/blockStore';
+import { useShellStore } from '@/core/stores/shellStore';
 import { useWireStore } from '@/core/stores/wireStore';
+import { getShellTemplate, SHELL_TEMPLATES } from '@/core/shells/templates';
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import { InteractionEngine, type CanvasMutator } from './engine';
+import type { SpeechCatalog, SpeechShellKind } from './speech';
 import type { CanvasBlockView } from './types';
 
 function view(block: BlockInstance): CanvasBlockView {
@@ -66,8 +69,66 @@ export function createStoreMutator(): CanvasMutator {
             for (const id of ids) {
                 useBlockStore.getState().setParams(id, { spatialGroupId: groupId });
             }
+        },
+        openShell(target: SpeechShellKind) {
+            const previousShellId = useBlockStore.getState().activeShellId;
+            if (target.kind === 'root') {
+                useBlockStore.getState().setActiveShell('root');
+                return { ok: true as const, name: target.name, previousShellId };
+            }
+            if (target.kind === 'saved') {
+                const ok = useShellStore.getState().loadShell(target.id);
+                return ok
+                    ? { ok: true as const, name: target.name, previousShellId }
+                    : { ok: false as const, reason: 'missing-shell' };
+            }
+            const template = getShellTemplate(target.id);
+            if (!template) return { ok: false as const, reason: 'missing-shell' };
+            const existing = useShellStore.getState().shells
+                .filter(shell => shell.name === template.name)
+                .sort((left, right) => (right.lastAccessedAt ?? 0) - (left.lastAccessedAt ?? 0));
+            if (existing[0]) {
+                const ok = useShellStore.getState().loadShell(existing[0].id);
+                return ok
+                    ? { ok: true as const, name: existing[0].name, previousShellId }
+                    : { ok: false as const, reason: 'missing-shell' };
+            }
+            const created = useShellStore.getState().instantiateTemplate(template);
+            return created
+                ? { ok: true as const, name: template.name, previousShellId }
+                : { ok: false as const, reason: 'missing-shell' };
         }
     };
 }
 
-export const spatialSession = new InteractionEngine(createStoreMutator());
+function aliasesFor(displayName: string): string[] {
+    return [displayName.toLowerCase()];
+}
+
+export function productionSpeechCatalog(): SpeechCatalog {
+    const saved = useShellStore.getState().shells.map(shell => ({
+        id: shell.id,
+        name: shell.name,
+        kind: 'saved' as const,
+        aliases: [shell.name.toLowerCase()]
+    }));
+    return {
+        blocks: blockRegistry.getAll().map(block => ({
+            blockId: block.block_id,
+            displayName: block.display_name,
+            aliases: aliasesFor(block.display_name)
+        })),
+        shells: [
+            { id: 'root', name: 'Root', kind: 'root', aliases: ['root', 'home', 'root shell'] },
+            ...SHELL_TEMPLATES.map(template => ({
+                id: template.id,
+                name: template.name,
+                kind: 'template' as const,
+                aliases: [template.name.toLowerCase(), template.name.toLowerCase().replace(/ shell$/, '')]
+            })),
+            ...saved
+        ]
+    };
+}
+
+export const spatialSession = new InteractionEngine(createStoreMutator(), productionSpeechCatalog);

@@ -26,6 +26,7 @@ import { useClientMounted } from '@/core/hooks';
 import { Atmosphere } from '@/components/brand/Atmosphere';
 import { Sigil } from '@/components/brand/Sigil';
 import { spatialSession } from '@/core/interaction/session';
+import { point } from '@/core/interaction/coordinates';
 
 interface CanvasProps {
     hideEmptyState?: boolean;
@@ -156,6 +157,17 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
                 onDragOver={handleSidebarDragOver}
                 onDragLeave={handleSidebarDragLeave}
                 onDrop={handleSidebarDrop}
+                onPointerDown={event => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest('.block-card')) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    spatialSession.select([]);
+                    spatialSession.notePoint(
+                        point('canvas', event.clientX - rect.left, event.clientY - rect.top),
+                        Date.now(),
+                        'pointer'
+                    );
+                }}
             >
                 {/* Grid overlay */}
                 <div className="canvas-grid" />
@@ -167,7 +179,15 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
                         id={block.instance_id}
                         isDragging={activeDragId === block.instance_id}
                         isSelected={selectedBlockId === block.instance_id}
-                        onSelect={() => setSelectedBlock(block.instance_id)}
+                        onSelect={() => {
+                            setSelectedBlock(block.instance_id);
+                            spatialSession.select([block.instance_id]);
+                            spatialSession.notePoint(
+                                point('canvas', block.position.x + 8, block.position.y + 8),
+                                Date.now(),
+                                'pointer'
+                            );
+                        }}
                         onClose={() => removeBlock(block.instance_id)}
                     />
                 ))}
@@ -218,7 +238,7 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
                                     </button>
                                 )}
                                 <p className="text-[var(--text-muted)] text-xs mt-6">
-                                    Or drag a block from the sidebar &middot; press{' '}
+                                    Or drag a block from the sidebar, hold Talk or Space, or press{' '}
                                     <kbd className="px-2 py-0.5 border border-[var(--citadel-border)] rounded-full text-xs font-mono text-[var(--text-secondary)]">
                                         &#8984;K
                                     </kbd>{' '}
