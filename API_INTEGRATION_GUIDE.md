@@ -1,3 +1,5 @@
+> **Status (2026-09-29):** historical — it describes NewsAPI keys entered in Settings and stored in localStorage and a `src/app/api/news` route, but keys now come from server-side `process.env` and that route does not exist; see README.md Configuration. Current roadmap: APEX_PLAN.md.
+
 # 🚀 Omni OS API Integration Guide
 
 ## ✅ What We've Built

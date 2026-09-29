@@ -1,3 +1,5 @@
+> **Status (2026-09-29):** historical — this is the 2026-06-18 remediation plan and its Progress table stopped there; it refers to the deleted Garden, `life_systems.md`, and port helpers (`validateWire`, `convertWireData`) that no longer exist. Current roadmap: APEX_PLAN.md.
+
 # OMNI_OS — Implementation & Remediation Plan
 
 > Created: 2026-06-18 · Owner: engineering · Status: **In progress**

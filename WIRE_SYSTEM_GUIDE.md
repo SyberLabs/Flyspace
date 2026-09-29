@@ -1,3 +1,5 @@
+> **Status (2026-09-29):** historical — it describes a 2-second auto-refresh, `wireService.cleanup`, persona-only drop targets, and localStorage persistence that the code no longer has; wires are now admitted at creation (see TYPED_PORT_SYSTEM.md) and persist through the OmniVault (IndexedDB). Current roadmap: APEX_PLAN.md.
+
 # OmniOS Wire System - Implementation Guide
 
 ## Overview

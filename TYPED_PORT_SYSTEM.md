@@ -1,30 +1,83 @@
-# Port metadata and wire behavior
+# Ports and wire admission
 
-## What ports do
+Declared ports are enforced when a wire is created. A wire is an admitted edge,
+not a line the canvas draws first. Blocks that declare no ports are untyped and
+still connect (see below).
 
-Block schemas can declare a port ID, direction, data type, label, and description.
-`BlockCard` uses the input/output declarations to render the left and right wire
-handles. `WireHandle` displays the first port's type and label as a visual hint.
+## What a port is
 
-These fields do not currently enforce a data contract. The canvas resolves a
-drop to a target **block ID** and creates a wire between block IDs. Template
-connections and crystallized-memory wires also create block-to-block edges.
-Restored shells load their saved block-to-block wires. None of these paths runs
-port compatibility validation.
+A block schema may declare ports (`PortSchema` in
+`src/core/schemas/block.schema.ts`): an ID, a direction, a `dataType`
+(`json`, `text`, `media`, `any`), and optionally a native `schema` (a
+`ValueType` from `src/core/capabilities/valueType.ts`, present on capability
+ports). Only the **first** declared output port of the source and the **first**
+declared input port of the target take part in admission. `BlockCard` and
+`WireHandle` render the same first port as the visible handle.
 
-## Data flow
+## What is checked
 
-`aggregateWireContext` reads active inbound wires for a persona, extracts each
-source block's data, and formats it as text for the persona prompt. It does not
-look up port IDs or convert data according to a port type. The old standalone
-compatibility and conversion helpers had no production callers and have been
-removed.
+`wireStore.addWire` runs three checks in order. Any refusal returns `''` and
+leaves the graph unchanged.
 
-## Current limitation
+1. **Kept separate** (`src/core/interaction/separation.ts`). A pair the user
+   asked to keep apart is refused. This list is in memory only.
+2. **`admitConnection`** (`src/core/capabilities/compatibility.ts`):
+   - refuses a self-wire, a missing block, and a wire between two shells;
+   - when both ports carry a `schema` and the target is not `any`, the source
+     must be assignable to the target (`isAssignable`), otherwise the wire is
+     refused with a sentence naming both ports and kinds;
+   - returns the projection to record on the wire (below).
+3. **`evaluateWireAdmission`** (`src/core/interaction/ports.ts`), on
+   `dataType`: an `any` input accepts every output, an `any` output feeds only an
+   `any` input, otherwise the types must be equal. A mismatch is refused unless
+   check 2 already chose a `text` or `join_titles` projection.
 
-Any block card can be a wire target, and the canvas accepts the connection
-without checking whether that target consumes the data. Current persona inputs
-are declared `any`, so the shipped data-to-persona path does not need type
-conversion. Strict type validation would require a real port-level contract and
-enforcement on every wire creation and restore path; the current code does not
-provide that contract.
+## Untyped blocks
+
+A block with no declared ports is treated as an `any` output and an `any`
+input. As a target it accepts anything. As a source it feeds `any` inputs
+(persona and chat blocks declare `any` inputs, so data-to-persona wires need no
+conversion). It is refused by a target that declares a typed `text`, `json`, or
+`media` input with no string-sink schema.
+
+## String sinks and projections
+
+A target is a string sink if its input schema is a `string`, or an object with
+exactly one required property that is a `string`. Each admitted wire records a
+`projection` (`DataWire.projection`):
+
+| Projection | When |
+| --- | --- |
+| `identity` | source is assignable to target, or nothing is declared |
+| `text` | string-sink target, and the source declares no `schema` |
+| `join_titles` | string-sink target, and the source is an array |
+
+If both ends declare a `schema` and they are not assignable, the wire is refused
+even for a string sink, unless the source is an array (`join_titles`). `text` and
+`join_titles` are explicit conversions, not type equality. They are applied only
+by capability execution (`resolveWiredInputs` in
+`src/core/capabilities/wireInputs.ts`). Persona context
+(`aggregateWireContext`) formats each source block's data as text and does not
+read ports or projections.
+
+## What a refusal looks like
+
+`addWire` sets `useWireStore.getState().lastAdmissionRefusal`. It is a sentence
+from `admitConnection` (for example `wires stay inside one shell`), a code from
+`evaluateWireAdmission` (`incompatible-type`, `no-output`, `no-input`), or
+`kept-separate`. Spoken and pointer input read it and answer "I can't wire
+those." `wireService.createWire` returns `''` on an `admitConnection` refusal
+without setting it.
+
+## Restore and templates
+
+Shell restore and template instantiation write wires through
+`replaceWiresForShell`, which re-runs `admitConnection` and silently drops any
+wire it refuses. It does not re-run the `dataType` check or the kept-separate
+list. Wires already in persisted storage are not re-validated on load.
+
+## Tests
+
+`src/core/interaction/interaction.test.ts` (typed wire admission, refusal in the
+store) and `src/core/capabilities/boundary.test.ts` (`join_titles` projection,
+typed mismatch refused).

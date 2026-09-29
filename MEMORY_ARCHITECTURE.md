@@ -1,3 +1,5 @@
+> **Status (2026-09-29):** historical — the per-persona `PersonaContextSettings` imports it describes do not exist (a persona's context is its inbound wires), and pool state persists through the OmniVault (IndexedDB), not localStorage. Current roadmap: APEX_PLAN.md.
+
 # OmniOS Memory Architecture
 
 ## Three-Tier Memory Hierarchy

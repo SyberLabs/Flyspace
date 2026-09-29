@@ -1,3 +1,5 @@
+> **Status (2026-09-29):** historical — steps 2 and 6 name registration points that moved; normalizers register in `normalizerRegistry` in `src/core/gateway/ApiGateway.ts`, and block views register through `src/core/registry/ViewRegistry.tsx`, not a switch in `Canvas.tsx`. Current roadmap: APEX_PLAN.md.
+
 [ ] 1. Create normalizer in `src/core/gateway/normalizers/{api}.ts`
     - Define raw response interface
     - Implement fetchFn (with logging)
