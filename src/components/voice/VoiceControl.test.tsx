@@ -64,6 +64,17 @@ describe('VoiceControl', () => {
         expect(useBlockStore.getState().blocks).toHaveLength(0);
     });
 
+    it('starts listening even if pointer capture is unavailable', () => {
+        render(<VoiceControl listen={() => new ScriptedDictation('create a researcher')} voice={voice()} />);
+        const button = screen.getByRole('button', { name: 'Hold to talk' });
+        button.setPointerCapture = () => {
+            throw new Error('No active pointer with the given id is found.');
+        };
+        fireEvent.pointerDown(button);
+        expect(button.getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByRole('status').textContent).toBe('Listening');
+    });
+
     it('does not steal space from another button', () => {
         render(
             <div>

@@ -172,7 +172,11 @@ export function VoiceControl({
                     aria-keyshortcuts="Space"
                     onPointerDown={event => {
                         event.preventDefault();
-                        event.currentTarget.setPointerCapture(event.pointerId);
+                        try {
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                        } catch {
+                            // A pointer without an active id still has to start listening.
+                        }
                         press();
                     }}
                     onPointerUp={() => { void release(); }}
