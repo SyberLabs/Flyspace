@@ -113,6 +113,11 @@ class MemoryCanvas implements CanvasMutator {
     }
     disconnect(wireId: string) { this.wires = this.wires.filter(wire => wire.id !== wireId); }
     setGroup() {}
+    openShell(target: { id: string; name: string; kind: 'root' | 'template' | 'saved' }) {
+        const previousShellId = this.shell;
+        this.shell = target.kind === 'root' ? 'root' : target.id;
+        return { ok: true as const, name: target.name, previousShellId };
+    }
 }
 
 function hand(distance: number, confidence = 0.9): HandObservationFrame {
@@ -270,6 +275,87 @@ describe('pinch hysteresis and deixis', () => {
         expect(parseSpeech('give these to the analyst')?.action).toBe('connect');
         expect(parseSpeech('compare these')?.action).toBe('compare');
         expect(parseSpeech('wave at the canvas')).toBeNull();
+    });
+
+    it('controls the canvas by naming any block, shell, wire, or confirm', () => {
+        const catalog = {
+            blocks: [
+                { blockId: 'hackernews_feed', displayName: 'Hacker News', aliases: ['hacker news'] },
+                { blockId: 'newsapi_feed', displayName: 'News Feed', aliases: ['news feed'] },
+                { blockId: 'polymarket_live_odds', displayName: 'Polymarket', aliases: ['polymarket'] },
+                { blockId: 'persona_analyst', displayName: 'Analyst', aliases: ['analyst'] }
+            ],
+            shells: [
+                { id: 'root', name: 'Root', kind: 'root' as const, aliases: ['root', 'home'] },
+                { id: 'tmpl_investor', name: 'Investor Shell', kind: 'template' as const, aliases: ['investor', 'investor shell'] }
+            ]
+        };
+        const board = new MemoryCanvas();
+        const voiced = new InteractionEngine(board, () => catalog);
+
+        const added = voiced.speak('add hacker news');
+        expect(added.lifecycle).toBe('committed');
+        expect(added.summary).toBe('Added Hacker News.');
+        expect(board.blocks.some(item => item.schema.block_id === 'hackernews_feed')).toBe(true);
+
+        voiced.speak('add an analyst');
+        const wired = voiced.speak('wire hacker news to the analyst');
+        expect(wired.lifecycle).toBe('committed');
+        expect(wired.summary).toBe('Wired Hacker News to Analyst.');
+        expect(board.wires).toHaveLength(1);
+        voiced.speak('undo');
+        expect(board.wires).toHaveLength(0);
+        voiced.speak('wire hacker news to the analyst');
+
+        const waiting = voiced.speak('put polymarket here');
+        expect(waiting.lifecycle).toBe('held');
+        expect(waiting.summary).toBe('Point at the canvas, then say it again.');
+        voiced.notePoint(point('canvas', 48, 64), Date.now());
+        expect(voiced.speak('put polymarket here').lifecycle).toBe('committed');
+
+        const opened = voiced.speak('open the investor shell');
+        expect(opened.lifecycle).toBe('committed');
+        expect(opened.summary).toBe('Opened Investor Shell.');
+        expect(board.shell).toBe('tmpl_investor');
+        voiced.speak('go to root');
+        expect(board.shell).toBe('root');
+
+        expect(parseSpeech('add news', catalog)?.ambiguous).toBe('block');
+        expect(parseSpeech('confirm')?.action).toBe('confirm');
+
+        voiced.speak('undo');
+        expect(board.shell).toBe('tmpl_investor');
+        voiced.speak('undo');
+        expect(board.shell).toBe('root');
+
+        const refused = voiced.speak('wire hacker news to polymarket');
+        expect(refused.lifecycle).toBe('refused');
+        expect(refused.summary).toBe("I can't wire those.");
+
+        const preview = voiced.speak('delete hacker news');
+        expect(preview.lifecycle).toBe('previewing');
+        expect(preview.summary).toContain('Say confirm to delete');
+        const replaced = voiced.speak('add polymarket');
+        expect(replaced.lifecycle).toBe('committed');
+        expect(board.blocks.some(item => item.schema.display_name === 'Hacker News')).toBe(true);
+        expect(voiced.speak('yes').summary).toBe('Nothing is waiting for confirm.');
+    });
+
+    it('deletes a block only after a spoken confirm, and a mumble leaves the preview', () => {
+        const board = new MemoryCanvas();
+        board.blocks.push(block('news', [jsonOut]));
+        board.blocks[0].schema.display_name = 'News Feed';
+        const voiced = new InteractionEngine(board);
+        voiced.select(['news']);
+        const preview = voiced.speak('delete this');
+        expect(preview.lifecycle).toBe('previewing');
+        expect(preview.summary).toBe('Say confirm to delete News Feed.');
+        voiced.speak('asdfgh');
+        expect(board.getInstance('news')).toBeTruthy();
+        expect(voiced.snapshot().preview?.lifecycle).toBe('previewing');
+        const confirmed = voiced.speak('confirm');
+        expect(confirmed.summary).toBe('Deleted News Feed.');
+        expect(board.getInstance('news')).toBeUndefined();
     });
 
     it('maps camera-normalized points explicitly into canvas space', () => {

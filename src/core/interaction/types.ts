@@ -81,7 +81,8 @@ export type SpatialAction =
     | 'delete'
     | 'separate'
     | 'cancel'
-    | 'undo';
+    | 'undo'
+    | 'open-shell';
 
 export interface EntityRef {
     id: string;
@@ -132,6 +133,7 @@ export interface SpatialCommand {
     confidence: number;
     lifecycle: CommandLifecycle;
     reason?: string;
+    summary?: string;
     shellId: string;
     timestampMs: number;
 }

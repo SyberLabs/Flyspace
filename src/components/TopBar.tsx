@@ -14,7 +14,6 @@ import {
     Key,
     MousePointer2,
     Highlighter,
-    Hand,
     ChevronRight,
     Layers
 } from 'lucide-react';
@@ -31,7 +30,6 @@ export function TopBar({
     onOpenApi,
     onOpenSettings,
     onOpenShells,
-    onOpenSpatial,
     children,
     customRight
 }: {
@@ -39,7 +37,6 @@ export function TopBar({
     onOpenApi?: () => void;
     onOpenSettings?: () => void;
     onOpenShells?: () => void;
-    onOpenSpatial?: () => void;
     children?: React.ReactNode;
     customRight?: React.ReactNode;
 }) {
@@ -170,16 +167,6 @@ export function TopBar({
                                 <MousePointer2 className="w-3.5 h-3.5" />
                                 <span className="hidden sm:inline">Navigate</span>
                             </button>
-                            {onOpenSpatial && (
-                                <button
-                                    onClick={onOpenSpatial}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--citadel-elevated)] transition-colors"
-                                    title="Spatial input lab"
-                                >
-                                    <Hand className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">Spatial</span>
-                                </button>
-                            )}
                             <button
                                 onClick={() => setTool('highlighter')}
                                 className={cn(
