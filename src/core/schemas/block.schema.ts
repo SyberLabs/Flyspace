@@ -87,7 +87,7 @@ export interface PortSchema {
   /** Port direction */
   direction: PortDirection;
 
-  /** Displayed data type. Without `schema`, wires do not enforce it. */
+  /** Declared data type. An identity wire enforces it. A string sink may project. */
   dataType: PortDataType;
 
   /** Native value contract. Present on capability ports. */
@@ -126,7 +126,7 @@ export interface OmniBlockSchema {
   /** Logic for wiring to AI personas */
   wiring_logic: string;
 
-  /** Port metadata shown on wire handles; compatibility is not enforced. */
+  /** Declared ports. A wire is admitted only when an output is compatible with an input. */
   ports?: PortSchema[];
 
   /** Optional icon identifier */

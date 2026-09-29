@@ -6,6 +6,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { DataWire, WireFilters, WireStatus, DEFAULT_WIRE_FILTERS } from '../schemas/wire.schema';
+import { evaluateWireAdmission } from '../interaction/ports';
+import { isSeparated } from '../interaction/separation';
 // Direct, not via the barrel. blockStore and wireStore are genuinely mutual —
 // deleting a block clears its wires, and a new wire defaults to the active
 // shell — but every use is a lazy .getState() inside a function body, so the
@@ -17,6 +19,9 @@ import { vaultStorage } from '../vault';
 interface WireStoreState {
     /** All wires in the system */
     wires: DataWire[];
+
+    /** Why the last addWire call was refused. Null after a successful add. */
+    lastAdmissionRefusal: string | null;
 
     /** Add a new wire connection */
     addWire: (sourceBlockId: string, targetBlockId: string, filters?: Partial<WireFilters>, shellId?: string) => string;
@@ -62,10 +67,29 @@ export const useWireStore = create<WireStoreState>()(
     persist(
         (set, get) => ({
             wires: [],
+            lastAdmissionRefusal: null,
 
             addWire: (sourceBlockId, targetBlockId, filters, shellId) => {
+                if (isSeparated(sourceBlockId, targetBlockId)) {
+                    set({ lastAdmissionRefusal: 'kept-separate' });
+                    return '';
+                }
+                const blocks = useBlockStore.getState();
+                const typed = evaluateWireAdmission(
+                    blocks.getBlock(sourceBlockId),
+                    blocks.getBlock(targetBlockId)
+                );
                 const admission = admitConnection(sourceBlockId, targetBlockId);
-                if (!admission.ok) return '';
+                if (!admission.ok) {
+                    set({ lastAdmissionRefusal: admission.reason });
+                    return '';
+                }
+                // A string sink may project across declared data types. An identity
+                // wire may not.
+                if (!typed.ok && admission.projection.kind === 'identity') {
+                    set({ lastAdmissionRefusal: typed.reason });
+                    return '';
+                }
 
                 // Don't create duplicate wires
                 if (get().wireExists(sourceBlockId, targetBlockId)) {
@@ -90,7 +114,8 @@ export const useWireStore = create<WireStoreState>()(
                 };
 
                 set(state => ({
-                    wires: [...state.wires, newWire]
+                    wires: [...state.wires, newWire],
+                    lastAdmissionRefusal: null
                 }));
 
                 return wireId;

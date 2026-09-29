@@ -46,7 +46,7 @@ export function createAnyInputPort(id: string = 'in', label?: string): PortSchem
         direction: 'input',
         dataType: 'any',
         label: label || 'Input',
-        description: 'Untyped context input; compatibility is not enforced'
+        description: 'Accepts any admitted output type'
     };
 }
 
