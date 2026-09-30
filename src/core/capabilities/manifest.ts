@@ -57,7 +57,18 @@ export type HttpAccess = 'browser_direct' | 'server_broker';
 export type CapabilityTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
     | { kind: 'mcp'; serverId: string; toolName: string }
-    | { kind: 'local'; handler: string };
+    | { kind: 'local'; handler: string }
+    /** A host-bound job runtime: start returns an external run id, poll observes it. */
+    | { kind: 'async'; runtimeId: string; operation: string };
+
+export const MIN_POLL_INTERVAL_MS = 1_000;
+export const MAX_POLL_INTERVAL_MS = 300_000;
+export const MAX_ASYNC_DURATION_MS = 3_600_000;
+
+/** How an admitted capability completes. Absent means synchronous. */
+export type CapabilityExecutionProfile =
+    | { kind: 'sync' }
+    | { kind: 'async_poll'; pollIntervalMs: number; maxDurationMs: number };
 
 export type CapabilityProviderKind = 'openapi' | 'mcp' | 'managed_integration' | 'web_data' | 'manual';
 
@@ -97,6 +108,7 @@ export interface CapabilityManifest {
     trigger?: CapabilityTrigger;
     auth: AuthBinding;
     transport: CapabilityTransport;
+    execution?: CapabilityExecutionProfile;
     inputs: CapabilityInput[];
     output: CapabilityOutput;
     /** SHA-256 of the canonical execution identity. Approval is excluded. */
@@ -116,8 +128,11 @@ const PROVIDER_KINDS: CapabilityProviderKind[] = ['openapi', 'mcp', 'managed_int
 
 const MANIFEST_KEYS = new Set([
     'version', 'id', 'title', 'description', 'source', 'provenance', 'effect', 'effectSource',
-    'approval', 'invocation', 'trigger', 'auth', 'transport', 'inputs', 'output', 'digest'
+    'approval', 'invocation', 'trigger', 'auth', 'transport', 'execution', 'inputs', 'output', 'digest'
 ]);
+
+const RUNTIME_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/;
+const OPERATION_PATTERN = /^[A-Za-z0-9_.:-]{1,120}$/;
 
 const PROVENANCE_KEYS = new Set([
     'providerId', 'providerKind', 'externalId', 'sourceLocator', 'sourceRevision',
@@ -208,9 +223,14 @@ export function digestPayload(draft: ManifestDraft): unknown {
         trigger: normalizeTrigger(draft.trigger, draft.invocation),
         auth: draft.auth,
         transport: draft.transport,
+        ...(isAsyncProfile(draft.execution) ? { execution: draft.execution } : {}),
         inputs: draft.inputs,
         output: draft.output
     };
+}
+
+function isAsyncProfile(profile: CapabilityExecutionProfile | undefined): profile is Extract<CapabilityExecutionProfile, { kind: 'async_poll' }> {
+    return profile?.kind === 'async_poll';
 }
 
 export function sealManifest(draft: ManifestDraft): CapabilityManifest {
@@ -254,6 +274,34 @@ function validateAuth(auth: unknown, errors: string[]): void {
     }
     if (auth.prefix !== undefined && (typeof auth.prefix !== 'string' || auth.prefix.length > 32)) {
         errors.push('auth.prefix must be a short string');
+    }
+}
+
+function validateExecution(execution: unknown, transportKind: unknown, errors: string[]): void {
+    const async = transportKind === 'async';
+    if (execution === undefined || (isRecord(execution) && execution.kind === 'sync' && Object.keys(execution).length === 1)) {
+        if (async) errors.push('async transports need an async_poll execution profile');
+        return;
+    }
+    if (!isRecord(execution) || execution.kind !== 'async_poll') {
+        errors.push('execution must be sync or async_poll');
+        return;
+    }
+    for (const key of Object.keys(execution)) {
+        if (key !== 'kind' && key !== 'pollIntervalMs' && key !== 'maxDurationMs') errors.push(`execution.${key} is not a manifest field`);
+    }
+    if (!async) errors.push('async_poll needs an async transport');
+    const interval = execution.pollIntervalMs;
+    const duration = execution.maxDurationMs;
+    if (typeof interval !== 'number' || !Number.isInteger(interval) || interval < MIN_POLL_INTERVAL_MS || interval > MAX_POLL_INTERVAL_MS) {
+        errors.push(`execution.pollIntervalMs must be between ${MIN_POLL_INTERVAL_MS} and ${MAX_POLL_INTERVAL_MS} ms`);
+    }
+    if (
+        typeof duration !== 'number' || !Number.isInteger(duration)
+        || duration > MAX_ASYNC_DURATION_MS
+        || (typeof interval === 'number' && duration < interval)
+    ) {
+        errors.push(`execution.maxDurationMs must be at least one poll interval and at most ${MAX_ASYNC_DURATION_MS} ms`);
     }
 }
 
@@ -394,13 +442,26 @@ export function validateManifest(input: unknown): ManifestValidation {
     if (EFFECTS.includes(effect)) {
         const triggerError = triggerProblem(effect, trigger);
         if (triggerError) errors.push(triggerError);
+        if (isRecord(input.transport) && input.transport.kind === 'async' && trigger.kind !== 'manual') {
+            errors.push('async capabilities only run manually; each run starts an external job');
+        }
         if ((effect === 'write' || effect === 'destructive') && isRecord(input.transport) && input.transport.access === 'server_broker') {
             errors.push('server_broker cannot carry a write or destructive effect');
         }
     }
 
-    if (!isRecord(input.transport) || (input.transport.kind !== 'http' && input.transport.kind !== 'mcp' && input.transport.kind !== 'local')) {
-        errors.push('transport.kind must be http, mcp, or local');
+    if (
+        !isRecord(input.transport)
+        || (input.transport.kind !== 'http' && input.transport.kind !== 'mcp' && input.transport.kind !== 'local' && input.transport.kind !== 'async')
+    ) {
+        errors.push('transport.kind must be http, mcp, local, or async');
+    } else if (input.transport.kind === 'async') {
+        if (typeof input.transport.runtimeId !== 'string' || !RUNTIME_ID_PATTERN.test(input.transport.runtimeId)) {
+            errors.push('transport.runtimeId is invalid');
+        }
+        if (typeof input.transport.operation !== 'string' || !OPERATION_PATTERN.test(input.transport.operation)) {
+            errors.push('transport.operation is invalid');
+        }
     } else if (input.transport.kind === 'http') {
         if (typeof input.transport.baseUrl !== 'string') errors.push('transport.baseUrl is required');
         else validateHttpUrl(input.transport.baseUrl, errors);
@@ -432,6 +493,8 @@ export function validateManifest(input: unknown): ManifestValidation {
         errors.push('transport.handler is invalid');
     }
 
+    validateExecution(input.execution, isRecord(input.transport) ? input.transport.kind : undefined, errors);
+
     if (!Array.isArray(input.inputs)) {
         errors.push('inputs must be a list');
     } else if (isRecord(input.transport)) {
@@ -460,7 +523,7 @@ export function validateManifest(input: unknown): ManifestValidation {
             if (transportKind === 'http' && entry.in === 'argument') {
                 errors.push('http transports cannot take argument inputs');
             }
-            if ((transportKind === 'mcp' || transportKind === 'local') && entry.in !== 'argument') {
+            if ((transportKind === 'mcp' || transportKind === 'local' || transportKind === 'async') && entry.in !== 'argument') {
                 errors.push(`${String(transportKind)} transports only take argument inputs`);
             }
             if ((method === 'GET' || method === 'HEAD') && entry.in === 'body') {
@@ -531,9 +594,9 @@ export function validateManifest(input: unknown): ManifestValidation {
             const slot = credentialSlot(transport.baseUrl, auth);
             if (auth.secretRef !== slot) errors.push(`auth.secretRef must be ${slot}`);
         }
-        if (transport.kind === 'mcp' && isRecord(input.auth) && input.auth.kind !== 'none') {
+        if ((transport.kind === 'mcp' || transport.kind === 'async') && isRecord(input.auth) && input.auth.kind !== 'none') {
             const auth = input.auth as unknown as AuthBinding;
-            if (auth.kind === 'apiKey' && auth.in !== 'header') errors.push('mcp credentials travel in a header');
+            if (auth.kind === 'apiKey' && auth.in !== 'header') errors.push(`${transport.kind} credentials travel in a header`);
             const slot = transportCredentialSlot(transport, auth);
             if (auth.secretRef !== slot) errors.push(`auth.secretRef must be ${slot}`);
         }
@@ -571,6 +634,15 @@ function canonicalDraft(input: Record<string, unknown>): ManifestDraft {
         trigger: normalizeTrigger(input.trigger as CapabilityTrigger | undefined, input.invocation === 'manual' ? 'manual' : 'auto'),
         auth: canonicalAuth(input.auth as AuthBinding),
         transport: canonicalTransport(input.transport as CapabilityTransport),
+        ...(isRecord(input.execution) && input.execution.kind === 'async_poll'
+            ? {
+                execution: {
+                    kind: 'async_poll' as const,
+                    pollIntervalMs: input.execution.pollIntervalMs as number,
+                    maxDurationMs: input.execution.maxDurationMs as number
+                }
+            }
+            : {}),
         inputs: (input.inputs as CapabilityInput[]).map(canonicalInput),
         output: canonicalOutput(input.output as CapabilityOutput)
     };
@@ -615,6 +687,9 @@ function canonicalTransport(transport: CapabilityTransport): CapabilityTransport
     }
     if (transport.kind === 'local') {
         return { kind: 'local', handler: transport.handler };
+    }
+    if (transport.kind === 'async') {
+        return { kind: 'async', runtimeId: transport.runtimeId, operation: transport.operation };
     }
     return {
         kind: 'http',

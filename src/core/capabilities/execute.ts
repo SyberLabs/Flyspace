@@ -4,11 +4,26 @@
 import { sha256 } from './hash';
 import {
     admitExecution,
+    executionRecord,
+    executionRecords,
     finishExecution,
     markExecutionDispatched,
+    observeExecution,
+    recordExternalRun,
+    settleUncertainExecution,
     type ExecutionPhase,
+    type ExecutionReceipt,
     type ExecutionRecord
 } from './executionLedger';
+import {
+    AsyncStartRejected,
+    EXTERNAL_RUN_ID_PATTERN,
+    asyncRuntime,
+    pollUntilSettled,
+    systemClock,
+    type AsyncClock,
+    type PollOutcome
+} from './asyncRuntime';
 import { readCapability } from './state';
 import { capabilitySecrets } from './secrets';
 import {
@@ -17,7 +32,7 @@ import {
     type CapabilityResult,
     type TypedValue
 } from './project';
-import type { CapabilityManifest } from './manifest';
+import type { CapabilityExecutionProfile, CapabilityManifest } from './manifest';
 import { isRecord, validateValue } from './valueType';
 
 const MAX_BODY_CHARS = 1_000_000;
@@ -69,6 +84,249 @@ export interface ExecuteOptions {
     signal?: AbortSignal;
     /** Same key and same input replays. Same key and different input conflicts. */
     idempotencyKey?: string;
+    /** Time source for async_poll waits. Tests inject one instead of sleeping. */
+    clock?: AsyncClock;
+}
+
+type AsyncProfile = Extract<CapabilityExecutionProfile, { kind: 'async_poll' }>;
+
+const UNOBSERVED = 'The external run started and its outcome was not observed. Do not retry automatically.';
+
+/** Runs this session is polling right now. Recovery leaves them alone. */
+const activeAsyncRuns = new Set<string>();
+
+async function executeAsync(
+    manifest: CapabilityManifest,
+    profile: AsyncProfile,
+    input: Record<string, unknown>,
+    headers: Record<string, string>,
+    record: ExecutionRecord,
+    idempotencyKey: string,
+    signal: AbortSignal | undefined,
+    clock: AsyncClock
+): Promise<CapabilityResult> {
+    const runId = record.runId;
+    const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
+    if (manifest.transport.kind !== 'async') {
+        return finish(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an async capability', false), runId, 'failed', clock.now());
+    }
+    const { runtimeId, operation } = manifest.transport;
+    const runtime = asyncRuntime(runtimeId);
+    if (!runtime) {
+        return finish(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No async runtime bound for ${runtimeId}`, false), runId, 'failed', clock.now());
+    }
+    if (signal?.aborted) {
+        return finish(failure(manifest.id, 'CANCELED', 'Execution was canceled', false), runId, 'canceled', clock.now());
+    }
+
+    activeAsyncRuns.add(runId);
+    try {
+        markExecutionDispatched(runId, clock.now());
+        let externalRunId: unknown;
+        try {
+            const started = await runtime.start(operation, argumentsFor(manifest, input), {
+                headers: { ...headers },
+                signal: bounded(signal),
+                idempotencyKey
+            });
+            externalRunId = started?.externalRunId;
+        } catch (error) {
+            if (error instanceof AsyncStartRejected) {
+                return finish(failure(manifest.id, 'ASYNC_START_REJECTED', error.message, false), runId, 'failed', clock.now());
+            }
+            if (sideEffect || signal?.aborted) {
+                return finish(failure(manifest.id, 'EFFECT_UNCERTAIN', UNOBSERVED, false), runId, 'uncertain', clock.now());
+            }
+            return finish(failure(
+                manifest.id,
+                'UPSTREAM_ERROR',
+                error instanceof Error ? error.message : 'The start request failed',
+                false
+            ), runId, 'failed', clock.now());
+        }
+        if (typeof externalRunId !== 'string' || !EXTERNAL_RUN_ID_PATTERN.test(externalRunId)) {
+            return sideEffect
+                ? finish(failure(manifest.id, 'EFFECT_UNCERTAIN', `The start returned no usable run id. ${UNOBSERVED}`, false), runId, 'uncertain', clock.now())
+                : finish(failure(manifest.id, 'UPSTREAM_PARSE', 'The start returned no usable run id', false), runId, 'failed', clock.now());
+        }
+        recordExternalRun(runId, externalRunId, clock.now());
+        const outcome = await pollUntilSettled({
+            runtime,
+            operation,
+            externalRunId,
+            headers,
+            idempotencyKey,
+            pollIntervalMs: profile.pollIntervalMs,
+            deadlineAt: record.startedAt + profile.maxDurationMs,
+            requestTimeoutMs: REQUEST_TIMEOUT_MS,
+            clock,
+            signal,
+            onObserve: (status, at) => observeExecution(runId, status, at)
+        });
+        return settleAsync(manifest, runId, outcome, 'running', clock.now());
+    } finally {
+        activeAsyncRuns.delete(runId);
+    }
+}
+
+function settleAsync(
+    manifest: CapabilityManifest,
+    runId: string,
+    outcome: PollOutcome,
+    from: 'running' | 'uncertain',
+    at: number
+): CapabilityResult {
+    const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
+    let result: CapabilityResult;
+    let status: 'succeeded' | 'failed' | 'uncertain';
+    if (outcome.kind === 'succeeded') {
+        const schemaErrors = validateValue(manifest.output.schema, outcome.value);
+        if (schemaErrors.length > 0) {
+            result = failure(manifest.id, 'TYPED_OUTPUT_MISMATCH', schemaErrors.slice(0, 6).join('; '), false);
+            status = 'failed';
+        } else {
+            const typed: TypedValue = { schema: manifest.output.schema, value: outcome.value };
+            result = { ok: true, capabilityId: manifest.id, typed, presentation: projectSuccess(manifest, typed) };
+            status = 'succeeded';
+        }
+    } else if (outcome.kind === 'failed') {
+        result = failure(manifest.id, 'ASYNC_RUN_FAILED', outcome.message, false);
+        status = 'failed';
+    } else if (outcome.kind === 'canceled') {
+        result = failure(manifest.id, 'EFFECT_UNCERTAIN', `Polling was canceled. ${UNOBSERVED}`, false);
+        status = 'uncertain';
+    } else if (sideEffect) {
+        result = failure(manifest.id, 'EFFECT_UNCERTAIN', UNOBSERVED, false);
+        status = 'uncertain';
+    } else {
+        const code = outcome.kind === 'deadline' ? 'DEADLINE' : 'UNOBSERVABLE';
+        result = failure(manifest.id, code, outcome.kind === 'deadline' ? 'The run did not finish within its profile' : outcome.message, false);
+        status = 'failed';
+    }
+
+    if (from === 'running') return finish(result, runId, status, at);
+    if ((outcome.kind === 'succeeded' || outcome.kind === 'failed') && status !== 'uncertain') {
+        settleUncertainExecution(runId, status, receiptFor(result), at);
+    }
+    result.runId = runId;
+    return result;
+}
+
+export interface ReconcileReport {
+    runId: string;
+    status: ExecutionPhase;
+    observed: boolean;
+    reason?: string;
+    result?: CapabilityResult;
+}
+
+/**
+ * Query the destination for one async run by its external run id. This
+ * observes; it never starts the job again. An uncertain run closes only if
+ * the destination reports a terminal status.
+ */
+export async function reconcileAsyncExecution(
+    runId: string,
+    options: { clock?: AsyncClock; signal?: AbortSignal } = {}
+): Promise<ReconcileReport> {
+    const clock = options.clock ?? systemClock;
+    const record = executionRecord(runId);
+    if (!record || record.executionProfile !== 'async_poll') {
+        return { runId, status: record?.status ?? 'failed', observed: false, reason: 'not an async run' };
+    }
+    if (activeAsyncRuns.has(runId)) return { runId, status: record.status, observed: false, reason: 'polling in this session' };
+    const sideEffect = record.effect === 'write' || record.effect === 'destructive';
+
+    if (record.status === 'admitted') {
+        finishExecution(runId, 'failed', { ok: false, code: 'INTERRUPTED', message: 'The start was never dispatched' }, clock.now());
+        return { runId, status: 'failed', observed: false, reason: 'never dispatched' };
+    }
+    if (record.status !== 'running' && record.status !== 'uncertain') {
+        return { runId, status: record.status, observed: false, reason: 'already settled' };
+    }
+    if (!record.externalRunId) {
+        if (record.status === 'running') {
+            const status = sideEffect ? 'uncertain' : 'failed';
+            finishExecution(runId, status, {
+                ok: false,
+                code: sideEffect ? 'EFFECT_UNCERTAIN' : 'UNOBSERVABLE',
+                message: `The start was dispatched and no external run id was recorded. ${UNOBSERVED}`
+            }, clock.now());
+            return { runId, status, observed: false, reason: 'no external run id' };
+        }
+        return { runId, status: record.status, observed: false, reason: 'no external run id' };
+    }
+
+    const manifest = readCapability(record.capabilityId);
+    if (!manifest || manifest.digest !== record.manifestDigest || manifest.transport.kind !== 'async' || manifest.execution?.kind !== 'async_poll') {
+        return { runId, status: record.status, observed: false, reason: 'the manifest that started this run is not installed' };
+    }
+    if (manifest.approval === 'denied' || manifest.approval === 'pending') {
+        return { runId, status: record.status, observed: false, reason: `capability is ${manifest.approval}` };
+    }
+    const runtime = asyncRuntime(manifest.transport.runtimeId);
+    if (!runtime) return { runId, status: record.status, observed: false, reason: 'runtime not bound' };
+    const auth = applyAuth(manifest);
+    if ('error' in auth) return { runId, status: record.status, observed: false, reason: 'credential slot is empty' };
+
+    activeAsyncRuns.add(runId);
+    try {
+        const outcome = await pollUntilSettled({
+            runtime,
+            operation: manifest.transport.operation,
+            externalRunId: record.externalRunId,
+            headers: auth.headers,
+            idempotencyKey: record.idempotencyKey,
+            pollIntervalMs: manifest.execution.pollIntervalMs,
+            deadlineAt: record.startedAt + manifest.execution.maxDurationMs,
+            requestTimeoutMs: REQUEST_TIMEOUT_MS,
+            clock,
+            signal: options.signal,
+            onObserve: (status, at) => observeExecution(runId, status, at)
+        });
+        const result = settleAsync(manifest, runId, outcome, record.status, clock.now());
+        const after = executionRecord(runId);
+        return {
+            runId,
+            status: after?.status ?? record.status,
+            observed: outcome.kind === 'succeeded' || outcome.kind === 'failed',
+            result
+        };
+    } finally {
+        activeAsyncRuns.delete(runId);
+    }
+}
+
+/**
+ * After a reload: every async run the ledger still shows open, and every
+ * uncertain one with an external run id, is observed through that id.
+ * Nothing is dispatched again.
+ */
+export async function recoverAsyncExecutions(
+    options: { clock?: AsyncClock; signal?: AbortSignal } = {}
+): Promise<ReconcileReport[]> {
+    const open = executionRecords().filter(record =>
+        record.executionProfile === 'async_poll'
+        && (record.status === 'admitted' || record.status === 'running'
+            || (record.status === 'uncertain' && record.externalRunId !== undefined))
+        && !activeAsyncRuns.has(record.runId)
+    );
+    const reports: ReconcileReport[] = [];
+    for (const record of open) reports.push(await reconcileAsyncExecution(record.runId, options));
+    return reports;
+}
+
+function bounded(signal: AbortSignal | undefined): AbortSignal {
+    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+function argumentsFor(manifest: CapabilityManifest, input: Record<string, unknown>): Record<string, unknown> {
+    const args: Record<string, unknown> = {};
+    for (const entry of manifest.inputs) {
+        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
+    }
+    return args;
 }
 
 export async function executeCapability(
@@ -101,15 +359,21 @@ export async function executeCapability(
     }
     const idempotencyKey = options.idempotencyKey
         ?? `once_${sha256(`${manifest.digest}|${Date.now()}|${Math.random()}`).slice(0, 32)}`;
+    const profile = manifest.execution?.kind === 'async_poll' ? manifest.execution : undefined;
+    const clock = options.clock ?? systemClock;
     const admission = admitExecution({
         capabilityId,
         manifestDigest: manifest.digest,
         effect: manifest.effect,
         input,
         idempotencyKey,
-        deadlineMs: REQUEST_TIMEOUT_MS + 5_000
+        // An async job's budget is its profile, not the per-request timeout.
+        deadlineMs: profile ? profile.maxDurationMs + REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS + 5_000,
+        ...(profile ? { now: clock.now(), executionProfile: 'async_poll' as const } : {}),
+        ...(manifest.provenance ? { providerId: manifest.provenance.providerId } : {})
     });
     if (admission.kind !== 'admit') return replay(manifest, admission.record, admission.kind);
+    if (profile) return executeAsync(manifest, profile, input, auth.headers, admission.record, idempotencyKey, options.signal, clock);
 
     const runId = admission.record.runId;
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
@@ -503,16 +767,20 @@ function failure(capabilityId: string, code: string, message: string, retryable:
     };
 }
 
+function receiptFor(result: CapabilityResult): ExecutionReceipt {
+    return result.ok
+        ? { ok: true, value: result.typed?.value }
+        : { ok: false, code: result.error?.code, message: result.error?.message };
+}
+
 function finish(
     result: CapabilityResult,
     runId?: string,
-    status?: Exclude<ExecutionPhase, 'admitted' | 'running'>
+    status?: Exclude<ExecutionPhase, 'admitted' | 'running'>,
+    at?: number
 ): CapabilityResult {
     if (runId && status) {
-        const receipt = result.ok
-            ? { ok: true, value: result.typed?.value }
-            : { ok: false, code: result.error?.code, message: result.error?.message };
-        finishExecution(runId, status, receipt);
+        finishExecution(runId, status, receiptFor(result), at);
         result.runId = runId;
     }
     return result;

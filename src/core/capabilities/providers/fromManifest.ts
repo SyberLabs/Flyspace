@@ -40,7 +40,7 @@ export function proposalFromManifest(manifest: CapabilityManifest, source: Propo
         transport,
         inputs: manifest.inputs.map(entry => ({ ...entry })),
         output: { ...manifest.output },
-        execution: { kind: 'sync' },
+        execution: manifest.execution?.kind === 'async_poll' ? { ...manifest.execution } : { kind: 'sync' },
         provenance: {
             providerId: source.providerId,
             sourceLocator: source.sourceLocator.slice(0, 200),
@@ -80,6 +80,9 @@ function proposedTransport(manifest: CapabilityManifest): ProposedTransport {
     }
     if (transport.kind === 'mcp') {
         return { kind: 'mcp', serverId: transport.serverId, toolName: transport.toolName };
+    }
+    if (transport.kind === 'async') {
+        return { kind: 'async', runtimeId: transport.runtimeId, operation: transport.operation };
     }
     throw new ProviderMaterializeError('local transports are host builtins, not provider proposals');
 }

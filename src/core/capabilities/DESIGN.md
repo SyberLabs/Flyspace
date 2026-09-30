@@ -36,7 +36,8 @@ refuses a proposal that includes one.
 
 `admitProposal` derives what a provider may not claim: the id from the
 transport, the effect from the method floor (an MCP read hint counts only for
-a server on the host's `trustedEffectHints` list), the approval from the
+a server on the host's `trustedEffectHints` list, and the same holds for an
+async runtime), the approval from the
 effect, and the credential slot from the destination. It seals provenance
 (provider, external id, source locator and revision, discovery and admission
 time, schema digest) into the digest, then calls `installProposal`. Admission
@@ -62,6 +63,7 @@ A manifest describes a capability. It does not grant itself authority.
 - Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
 - HTTP capabilities are `browser_direct` or `server_broker`. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
 - MCP tools compile from schemas and run through `mcpClient.ts`, a thin adapter over the official TypeScript SDK v2 (`@modelcontextprotocol/client`). The SDK negotiates the protocol era (`auto`: probe 2026-07-28, fall back to the 2025 handshake) and forwards cancellation. An MCP credential slot is keyed by server id; execution resolves it and passes it as per-call headers, so revoking the slot stops the next call. A sync MCP call is bounded by the same 15 s request timeout as HTTP.
+- Long work uses the `async_poll` profile, never a longer request timeout. The transport is `{ kind: 'async', runtimeId, operation }`: the host binds the runtime (`asyncRuntime.ts`) and its endpoint, and a proposal cannot name one. `start` returns an external run id, which the vault ledger records before polling. Each start and each poll is still one 15 s request, and the whole run is bounded by the profile's `maxDurationMs` (at most one hour). Omni never repeats a start. A write that was started and not observed to finish (deadline, repeated poll failures, or cancel) is `uncertain`. `reconcileAsyncExecution` and `recoverAsyncExecutions` read the ledger after a reload and poll the external run id; an uncertain run closes only when the destination reports a terminal status. Async capabilities run manually only. An untrusted async runtime lands at `write`, like an untrusted MCP server. The server ledger carries the same fields (`db/migrations/005_capability_async.sql`).
 - Speech has a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. A denied microphone is `Permission denied`, not the browser error code.
 
 ## Effects

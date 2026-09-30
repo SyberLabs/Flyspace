@@ -44,12 +44,16 @@ export type ProposedAuthRequirement =
 
 export type ProposedTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
-    | { kind: 'mcp'; serverId: string; toolName: string };
+    | { kind: 'mcp'; serverId: string; toolName: string }
+    /** Names a runtime the host binds. The provider cannot supply its endpoint. */
+    | { kind: 'async'; runtimeId: string; operation: string };
 
 export type ProposedInput = CapabilityInput;
 export type ProposedOutput = CapabilityOutput;
 
-export type ProposedExecutionProfile = { kind: 'sync' };
+export type ProposedExecutionProfile =
+    | { kind: 'sync' }
+    | { kind: 'async_poll'; pollIntervalMs: number; maxDurationMs: number };
 
 export interface CapabilityProposalProvenance {
     providerId: string;

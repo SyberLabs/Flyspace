@@ -18,6 +18,11 @@ export interface ExecutionReceipt {
     value?: unknown;
 }
 
+export type ExecutionProfileKind = 'sync' | 'async_poll';
+
+/** What the destination last reported. `accepted` means start returned a run id. */
+export type ObservedStatus = 'accepted' | 'running' | 'succeeded' | 'failed';
+
 export interface ExecutionRecord {
     runId: string;
     capabilityId: string;
@@ -31,6 +36,14 @@ export interface ExecutionRecord {
     finishedAt?: number;
     status: ExecutionPhase;
     receipt?: ExecutionReceipt;
+    /** Absent on records written before execution profiles; read as `sync`. */
+    executionProfile?: ExecutionProfileKind;
+    providerId?: string;
+    externalRunId?: string;
+    lastObservedStatus?: ObservedStatus;
+    lastObservedAt?: number;
+    /** Dispatch is never repeated by Omni. Only observation (poll) repeats. */
+    retryPolicy?: 'no_redispatch';
 }
 
 const MAX_RECORDS = 200;
@@ -118,6 +131,8 @@ export function admitExecution(input: {
     idempotencyKey: string;
     deadlineMs: number;
     now?: number;
+    executionProfile?: ExecutionProfileKind;
+    providerId?: string;
 }): Admission {
     const now = input.now ?? Date.now();
     reconcileExecutions(now);
@@ -141,7 +156,9 @@ export function admitExecution(input: {
         idempotencyKey: input.idempotencyKey,
         startedAt: now,
         deadlineAt: now + input.deadlineMs,
-        status: 'admitted'
+        status: 'admitted',
+        ...(input.executionProfile === 'async_poll' ? { executionProfile: 'async_poll' as const, retryPolicy: 'no_redispatch' as const } : {}),
+        ...(input.providerId ? { providerId: input.providerId } : {})
     };
     useExecutionLedger.setState({ records: trim([...executionRecords(), record]) });
     return { kind: 'admit', record };
@@ -171,6 +188,43 @@ export function finishExecution(
                 : record
         )
     });
+}
+
+function update(runId: string, change: (record: ExecutionRecord) => ExecutionRecord): void {
+    useExecutionLedger.setState({
+        records: executionRecords().map(record => (record.runId === runId ? change(record) : record))
+    });
+}
+
+/** Start returned. The external run id is what reconciliation queries later. */
+export function recordExternalRun(runId: string, externalRunId: string, at = Date.now()): void {
+    update(runId, record => (record.externalRunId
+        ? record
+        : { ...record, externalRunId, lastObservedStatus: 'accepted', lastObservedAt: at }));
+}
+
+export function observeExecution(runId: string, status: ObservedStatus, at = Date.now()): void {
+    update(runId, record => ({ ...record, lastObservedStatus: status, lastObservedAt: at }));
+}
+
+/**
+ * An uncertain async run may close only on a terminal status the destination
+ * reported for its external run id. Nothing else moves it.
+ */
+export function settleUncertainExecution(
+    runId: string,
+    observed: 'succeeded' | 'failed',
+    receipt: ExecutionReceipt,
+    at = Date.now()
+): void {
+    const stored = boundReceipt(receipt);
+    update(runId, record => (record.status === 'uncertain' && record.externalRunId
+        ? { ...record, status: observed, finishedAt: at, receipt: stored, lastObservedStatus: observed, lastObservedAt: at }
+        : record));
+}
+
+export function executionRecord(runId: string): ExecutionRecord | undefined {
+    return executionRecords().find(record => record.runId === runId);
 }
 
 /** One on_create firing per block instance. A remount does not claim again. */

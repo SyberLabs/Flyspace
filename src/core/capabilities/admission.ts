@@ -35,6 +35,7 @@ export interface AdmissionPolicy {
      */
     trustedEffectHints?: {
         mcpServers?: readonly string[];
+        asyncRuntimes?: readonly string[];
     };
     nowMs?: number;
 }
@@ -48,7 +49,9 @@ const IDENTITY_KEYS = new Set(['origin', 'operationId', 'sourceLocator', 'source
 const AUTH_KEYS = new Set(['kind', 'in', 'name', 'prefix']);
 const HTTP_TRANSPORT_KEYS = new Set(['kind', 'access', 'baseUrl', 'method', 'path']);
 const MCP_TRANSPORT_KEYS = new Set(['kind', 'serverId', 'toolName']);
-const EXECUTION_KEYS = new Set(['kind']);
+const ASYNC_TRANSPORT_KEYS = new Set(['kind', 'runtimeId', 'operation']);
+const SYNC_EXECUTION_KEYS = new Set(['kind']);
+const ASYNC_EXECUTION_KEYS = new Set(['kind', 'pollIntervalMs', 'maxDurationMs']);
 const PROVENANCE_KEYS = new Set(['providerId', 'sourceLocator', 'discoveredAtMs']);
 const INPUT_KEYS = new Set(['name', 'in', 'required', 'schema']);
 const OUTPUT_KEYS = new Set(['schema', 'itemsPath', 'titlePath', 'presentation']);
@@ -107,6 +110,15 @@ export function manifestFromProposal(proposal: unknown, policy: AdmissionPolicy 
         trigger: { kind: 'manual' },
         auth: auth.auth,
         transport: transport.transport,
+        ...(typed.execution.kind === 'async_poll'
+            ? {
+                execution: {
+                    kind: 'async_poll' as const,
+                    pollIntervalMs: typed.execution.pollIntervalMs,
+                    maxDurationMs: typed.execution.maxDurationMs
+                }
+            }
+            : {}),
         inputs,
         output
     };
@@ -135,7 +147,10 @@ function hostTransport(transport: ProposedTransport): { transport: CapabilityTra
     if (transport.kind === 'mcp') {
         return { transport: { kind: 'mcp', serverId: transport.serverId, toolName: transport.toolName } };
     }
-    return { error: 'providers may propose http or mcp transports only' };
+    if (transport.kind === 'async') {
+        return { transport: { kind: 'async', runtimeId: transport.runtimeId, operation: transport.operation } };
+    }
+    return { error: 'providers may propose http, mcp, or async transports only' };
 }
 
 function hostEffect(
@@ -151,8 +166,11 @@ function hostEffect(
         }
         return { effect: hint, source: proposal.provider.kind === 'openapi' ? 'extension' : 'declared' };
     }
-    if (transport.kind === 'mcp') {
-        const trusted = policy.trustedEffectHints?.mcpServers?.includes(transport.serverId) === true;
+    if (transport.kind === 'mcp' || transport.kind === 'async') {
+        // No method floor exists here, so an untrusted source lands at write.
+        const trusted = transport.kind === 'mcp'
+            ? policy.trustedEffectHints?.mcpServers?.includes(transport.serverId) === true
+            : policy.trustedEffectHints?.asyncRuntimes?.includes(transport.runtimeId) === true;
         const source: EffectSource = trusted ? 'annotation' : 'declared';
         if (hint === 'destructive') return { effect: 'destructive', source };
         if (trusted && hint === 'read') return { effect: 'read', source };
@@ -247,8 +265,16 @@ function shapeErrors(input: unknown): string[] {
         }
     } else if (input.transport.kind === 'mcp') {
         closed(input.transport, MCP_TRANSPORT_KEYS, 'proposal.transport', errors);
+    } else if (input.transport.kind === 'async') {
+        closed(input.transport, ASYNC_TRANSPORT_KEYS, 'proposal.transport', errors, {
+            baseUrl: 'async endpoints are bound by the host runtime',
+            url: 'async endpoints are bound by the host runtime'
+        });
+        if (isRecord(input.externalIdentity) && input.externalIdentity.origin !== undefined) {
+            errors.push('proposal.externalIdentity.origin is not used by async transports');
+        }
     } else {
-        errors.push('providers may propose http or mcp transports only');
+        errors.push('providers may propose http, mcp, or async transports only');
     }
 
     if (!Array.isArray(input.inputs)) {
@@ -259,14 +285,26 @@ function shapeErrors(input: unknown): string[] {
             else closed(entry, INPUT_KEYS, `proposal.inputs.${String(entry.name)}`, errors);
         }
     }
-    if (!isRecord(input.output)) errors.push('proposal.output is required');
-    else closed(input.output, OUTPUT_KEYS, 'proposal.output', errors);
+    if (!isRecord(input.output)) {
+        errors.push('proposal.output is required');
+    } else {
+        closed(input.output, OUTPUT_KEYS, 'proposal.output', errors);
+        if (containsAny(input.output.schema)) {
+            errors.push('proposal.output.schema must be typed; an untyped result is not admitted as any');
+        }
+    }
 
     if (!isRecord(input.execution)) {
         errors.push('proposal.execution is required');
     } else {
-        closed(input.execution, EXECUTION_KEYS, 'proposal.execution', errors);
-        if (input.execution.kind !== 'sync') errors.push('proposal.execution.kind is not supported');
+        const kind = input.execution.kind;
+        if (kind === 'sync') closed(input.execution, SYNC_EXECUTION_KEYS, 'proposal.execution', errors);
+        else if (kind === 'async_poll') closed(input.execution, ASYNC_EXECUTION_KEYS, 'proposal.execution', errors);
+        else errors.push('proposal.execution.kind is not supported');
+        const asyncTransport = isRecord(input.transport) && input.transport.kind === 'async';
+        if (asyncTransport !== (kind === 'async_poll')) {
+            errors.push('proposal.execution must be async_poll exactly when the transport is async');
+        }
     }
 
     if (!isRecord(input.provenance)) {
@@ -298,6 +336,15 @@ function closed(
         if (allowed.has(key)) continue;
         errors.push(`${path}.${key} is not a proposal field${reasons[key] ? `; ${reasons[key]}` : ''}`);
     }
+}
+
+function containsAny(schema: unknown, depth = 0): boolean {
+    if (!isRecord(schema) || depth > 32) return false;
+    if (schema.kind === 'any') return true;
+    if (containsAny(schema.items, depth + 1)) return true;
+    if (isRecord(schema.additionalProperties) && containsAny(schema.additionalProperties, depth + 1)) return true;
+    return isRecord(schema.properties)
+        && Object.values(schema.properties).some(child => containsAny(child, depth + 1));
 }
 
 function originOf(baseUrl: unknown): string | undefined {
