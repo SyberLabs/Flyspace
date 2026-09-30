@@ -51,9 +51,6 @@ interface ApiStoreState {
     /** Get all installed configs with provider details */
     getInstalledConfigs: () => (ApiConfig & { provider: ApiProvider })[];
 
-    /** Get config for a provider */
-    getConfig: (providerId: string) => ApiConfig | undefined;
-
     /** Initialize default APIs if store is empty */
     initializeDefaults: () => void;
 }
@@ -285,10 +282,6 @@ export const useApiStore = create<ApiStoreState>()(
                         : config.status;
                     return { ...config, status, provider: provider! };
                 }).filter(c => c.provider);
-            },
-
-            getConfig: (providerId) => {
-                return get().configs[providerId];
             }
         }),
         {
@@ -325,19 +318,3 @@ export function getStatusColor(status: ApiStatus): string {
         default: return 'var(--text-muted)';
     }
 }
-
-/**
- * Get status icon name
- */
-export function getStatusIcon(status: ApiStatus): string {
-    switch (status) {
-        case 'connected': return 'CheckCircle';
-        case 'idle': return 'Circle';
-        case 'error': return 'XCircle';
-        case 'testing': return 'Loader2';
-        case 'not_configured': return 'CircleDashed';
-        default: return 'Circle';
-    }
-}
-
-export default useApiStore;
