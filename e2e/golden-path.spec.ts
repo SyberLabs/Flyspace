@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { freshStart, spawnInvestor, waitForMockAnswer } from './helpers';
 
 /**
  * THE GOLDEN PATH (apex A3)
@@ -14,29 +15,14 @@ import { test, expect } from '@playwright/test';
  * The LLM is the OMNI_E2E server double (deterministic; no keys, no network).
  */
 test('golden path: spawn Investor → live wires → Think streams → persists', async ({ page }) => {
-    // Fresh state: clear BOTH persistence engines (localStorage + the
-    // OmniVault IndexedDB) so runs are deterministic, then reload so the
-    // app boots from scratch. Without the vault wipe, the later persistence
-    // assertions could pass vacuously on prior-run data.
-    await page.goto('/');
-    await page.evaluate(async () => {
-        localStorage.clear();
-        await new Promise<void>((resolve) => {
-            const req = indexedDB.deleteDatabase('omni-vault');
-            req.onsuccess = () => resolve();
-            req.onerror = () => resolve();
-            req.onblocked = () => resolve();
-        });
-    });
-    await page.reload();
+    // 1 · Boot from scratch (both persistence engines wiped, so the later
+    //     persistence assertions cannot pass vacuously on prior-run data), then
+    //     spawn the Investor shell from the Store.
+    await freshStart(page);
+    await spawnInvestor(page);
 
-    // 1 · Open the Shell Manager and spawn the Investor shell from the Store.
-    await page.getByTitle('Shell Manager').click();
-    await page.locator('.group').filter({ hasText: 'Investor Shell' }).getByRole('button', { name: 'Use this shell' }).click();
-    await expect(page.getByText('Shell Store')).toBeHidden();
-
-    // 2 · Blocks render on the canvas (data cluster + personas).
-    await expect(page.getByText('Analyst').first()).toBeVisible();
+    // 2 · Blocks render on the canvas (data cluster + personas; spawnInvestor
+    //     already saw the Analyst).
     await expect(page.getByText('Strategist').first()).toBeVisible();
 
     // 3 · Wires are LIVE — drawn from the single wire system (A1 regression:
@@ -45,14 +31,12 @@ test('golden path: spawn Investor → live wires → Think streams → persists'
     expect(await page.getByTestId('wire').count()).toBeGreaterThanOrEqual(5);
 
     // 4 · Think — the persona streams a (mock) LLM response grounded in the
-    //     wired context. This exercises ping → stream → token-render.
+    //     wired context. This exercises ping → stream → token-render. Wait for
+    //     the stream to COMPLETE before reloading — reloading mid-stream aborts
+    //     the fetch and the draft is replaced with an error message (defensible
+    //     app behavior; a test race).
     await page.getByTitle('Think').first().click();
-    await expect(page.getByText('E2E MOCK RESPONSE')).toBeVisible({ timeout: 20_000 });
-    // Wait for the stream to COMPLETE (final words rendered, Think re-enabled)
-    // before reloading — reloading mid-stream aborts the fetch and the draft
-    // is replaced with an error message (defensible app behavior; a test race).
-    await expect(page.getByText(/grounded analysis of the wired data\./)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTitle('Think').first()).toBeEnabled();
+    await waitForMockAnswer(page);
 
     // 5 · Persistence — reload and the spawned shell (blocks + wires + the
     //     conversation) survives via the persisted stores.

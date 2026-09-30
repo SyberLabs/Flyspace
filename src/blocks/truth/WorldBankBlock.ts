@@ -74,5 +74,3 @@ export function useWorldBankBlock(instanceId: string, params?: WorldBankBlockPar
         error
     };
 }
-
-export default useWorldBankBlock;

@@ -24,7 +24,7 @@ function view(block: BlockInstance): CanvasBlockView {
     };
 }
 
-export function createStoreMutator(): CanvasMutator {
+function createStoreMutator(): CanvasMutator {
     return {
         listBlocks() {
             return useBlockStore.getState().blocks.map(view);
@@ -65,11 +65,6 @@ export function createStoreMutator(): CanvasMutator {
         disconnect(wireId) {
             useWireStore.getState().removeWire(wireId);
         },
-        setGroup(ids, groupId) {
-            for (const id of ids) {
-                useBlockStore.getState().setParams(id, { spatialGroupId: groupId });
-            }
-        },
         openShell(target: SpeechShellKind) {
             const previousShellId = useBlockStore.getState().activeShellId;
             if (target.kind === 'root') {
@@ -105,7 +100,7 @@ function aliasesFor(displayName: string): string[] {
     return [displayName.toLowerCase()];
 }
 
-export function productionSpeechCatalog(): SpeechCatalog {
+function productionSpeechCatalog(): SpeechCatalog {
     const saved = useShellStore.getState().shells.map(shell => ({
         id: shell.id,
         name: shell.name,

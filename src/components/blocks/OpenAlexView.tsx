@@ -168,5 +168,3 @@ function WorkCard({ item, index }: { item: OmniItem; index: number }) {
         </motion.a>
     );
 }
-
-export default OpenAlexView;

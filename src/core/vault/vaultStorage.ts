@@ -18,7 +18,7 @@ import { openDB, type IDBPDatabase } from 'idb';
 import type { StateStorage } from 'zustand/middleware';
 
 export const VAULT_DB_NAME = 'omni-vault';
-export const VAULT_STORE_NAME = 'kv';
+const VAULT_STORE_NAME = 'kv';
 const VAULT_DB_VERSION = 1;
 
 function idbAvailable(): boolean {

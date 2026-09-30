@@ -60,7 +60,7 @@ The Citadel remembers how you like to think.
 │ Polymarket  │──────▶│                         │
 └─────────────┘       │   🎯 ANALYST PERSONA    │
 ┌─────────────┐       │                         │
-│ NewsAPI     │──────▶│   "Based on market odds │
+│ Hacker News │──────▶│   "Based on market odds │
 └─────────────┘       │    and recent news..."  │
                       └─────────────────────────┘
                                  │
@@ -101,7 +101,7 @@ The Citadel rejects all of this. It is:
 
 You open The Citadel in the morning.
 
-Your *Morning Briefing* shell loads: Polymarket on the left, NewsAPI in the center, your Analyst persona on the right. The wires are already connected. You click "Think". The Analyst pulses, reads the connected data, and offers observations.
+Your *Morning Briefing* shell loads: Polymarket on the left, Hacker News in the center, your Analyst persona on the right. The wires are already connected. You click "Think". The Analyst pulses, reads the connected data, and offers observations.
 
 You notice something interesting. You ask a follow-up question. The Analyst responds, citing which data sources informed its answer.
 
@@ -110,28 +110,6 @@ You crystallize the insight — it becomes a new block. You wire it to your Stra
 The Strategist thinks. Wires pulse. An answer emerges.
 
 This is not "using AI." This is *thinking with AI*.
-
----
-
-## Current Status
-
-### Implemented
-- [x] Block canvas with drag-and-drop
-- [x] 5 Persona blocks (Analyst, Strategist, Researcher, Creative, Guardian)
-- [x] Wire system (schema, store, visual rendering)
-- [x] Drag-to-wire interaction
-- [x] Context gathering from wired blocks
-- [x] Inline chat with personas
-- [x] API Dashboard & Marketplace (50+ APIs)
-- [x] Workspace blocks (Text, Code, Media, Embed)
-- [x] Mind Panel for settings and memory
-
-### Next
-- [ ] LLM integration via API Dashboard
-- [ ] Memory crystallization
-- [ ] Persona-to-persona wiring
-- [ ] Full shell save/load
-- [ ] Mobile companion
 
 ---
 

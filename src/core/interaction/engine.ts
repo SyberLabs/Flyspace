@@ -1,19 +1,16 @@
-// One commit boundary for pointer, speech, camera, and later XR.
+// One commit boundary for pointer and speech.
 // Adapters never call the canvas stores.
 
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import { evaluateWireAdmission } from './ports';
-import { clearSeparated, isSeparated, markSeparated } from './separation';
 import { defaultSpeechCatalog, parseSpeech, type SpeechCatalog, type SpeechIntent, type SpeechShellKind } from './speech';
 import { describeCommand } from './speechReply';
 import { resolveReferents } from './referent';
-import { stepPinch, pinchSpan, initialPinch, type PinchMachine } from './pinch';
-import { cameraNormalizedToCanvas, point, type Viewport } from './coordinates';
+import { point } from './coordinates';
 import type {
     CanvasBlockView,
     CommandLifecycle,
     FramedPoint,
-    HandObservationFrame,
     InputModality,
     InteractionTrace,
     MultimodalInteractionProposal,
@@ -30,7 +27,6 @@ export interface CanvasMutator {
     restore(block: BlockInstance): void;
     connect(sourceId: string, targetId: string): { ok: true; wireId: string } | { ok: false; reason: string };
     disconnect(wireId: string): void;
-    setGroup(ids: string[], groupId: string | null): void;
     openShell(target: SpeechShellKind): { ok: true; name: string; previousShellId: string } | { ok: false; reason: string };
 }
 
@@ -44,8 +40,6 @@ export interface EngineSnapshot {
     traces: InteractionTrace[];
     preview: SpatialCommand | null;
     held: SpatialCommand | null;
-    groups: Record<string, string[]>;
-    separated: Array<[string, string]>;
 }
 
 let sequence = 0;
@@ -63,35 +57,19 @@ export class InteractionEngine {
     private selection: string[] = [];
     private recentInteraction: string[] = [];
     private recentDiscourse: string[] = [];
-    private points: Array<{ at: FramedPoint; timestampMs: number; modality: InputModality }> = [];
-    private region: FramedPoint[] | null = null;
-    private groups = new Map<string, string[]>();
-    private separated: Array<[string, string]> = [];
-    private pinches = new Map<string, PinchMachine>();
-    private activeMove: { subject: string; origin: { x: number; y: number } } | null = null;
-    private viewport: Viewport = { width: 1280, height: 720, panX: 0, panY: 0, zoom: 1 };
+    private points: Array<{ at: FramedPoint; timestampMs: number }> = [];
 
     constructor(
         private readonly canvas: CanvasMutator,
         private readonly catalog: () => SpeechCatalog = defaultSpeechCatalog
     ) {}
 
-    setViewport(viewport: Viewport): void {
-        this.viewport = viewport;
-    }
-
-    getSelection(): string[] {
-        return [...this.selection];
-    }
-
     snapshot(): EngineSnapshot {
         return {
             commands: this.commands.map(command => ({ ...command, subjects: [...command.subjects], evidence: [...command.evidence], modalities: [...command.modalities], summary: command.summary })),
             traces: this.traces.map(trace => ({ ...trace })),
             preview: this.preview ? { ...this.preview } : null,
-            held: this.held ? { ...this.held } : null,
-            groups: Object.fromEntries(this.groups),
-            separated: this.separated.map(pair => [pair[0], pair[1]] as [string, string])
+            held: this.held ? { ...this.held } : null
         };
     }
 
@@ -181,122 +159,6 @@ export class InteractionEngine {
         return this.applyIntent(intent, proposal, timestampMs);
     }
 
-    observeHand(frame: HandObservationFrame, timestampMs = Date.now()): SpatialCommand | null {
-        if (frame.trackingConfidence <= 0 || frame.landmarks.length === 0) {
-            const machine = this.pinches.get(frame.handId);
-            if (machine && (machine.phase === 'active' || machine.phase === 'candidate')) {
-                this.pinches.set(frame.handId, stepPinch(machine, {
-                    distance: null,
-                    at: timestampMs,
-                    anchor: { x: 0, y: 0 },
-                    tracking: false
-                }));
-                this.cancel();
-                return this.refuse(this.proposal('move', [], {
-                    modalities: ['camera_hand'],
-                    confidence: 0,
-                    timestampMs,
-                    evidence: ['tracking-lost']
-                }), 'tracking-lost');
-            }
-            return null;
-        }
-
-        const index = frame.landmarks.find(joint => joint.joint === 'index_tip' || joint.joint === '8');
-        if (!index) return null;
-        const canvasPoint = cameraNormalizedToCanvas(
-            point('camera_normalized', index.x, index.y, index.z),
-            this.viewport
-        );
-        this.points.push({ at: canvasPoint, timestampMs, modality: 'camera_hand' });
-        this.points = this.points.filter(item => timestampMs - item.timestampMs < 4000);
-
-        const distance = pinchSpan(frame.landmarks);
-        const previous = this.pinches.get(frame.handId) ?? initialPinch(frame.handId);
-        const next = stepPinch(previous, {
-            distance,
-            at: timestampMs,
-            anchor: { x: canvasPoint.x, y: canvasPoint.y, z: canvasPoint.z },
-            tracking: true
-        });
-        this.pinches.set(frame.handId, next);
-
-        if (next.phase === 'active' && previous.phase !== 'active') {
-            const resolved = resolveReferents({
-                shellId: this.canvas.activeShell(),
-                blocks: this.canvas.listBlocks(),
-                point: next.anchor ? point('canvas', next.anchor.x, next.anchor.y) : canvasPoint,
-                selection: [],
-                recentInteraction: this.recentInteraction,
-                recentDiscourse: this.recentDiscourse
-            });
-            if (resolved.status !== 'resolved') {
-                this.held = this.stage(this.proposal('move', [], {
-                    modalities: ['camera_hand'],
-                    confidence: frame.trackingConfidence,
-                    timestampMs,
-                    evidence: [`hand:${frame.handId}`]
-                }), 'held', 'ambiguous');
-                return this.held;
-            }
-            const subject = resolved.ids[0];
-            const block = this.canvas.listBlocks().find(item => item.id === subject);
-            this.activeMove = { subject, origin: { x: block?.x ?? 0, y: block?.y ?? 0 } };
-            const proposal = this.proposal('move', [subject], {
-                point: canvasPoint,
-                modalities: ['camera_hand'],
-                confidence: frame.trackingConfidence,
-                timestampMs,
-                evidence: [`hand:${frame.handId}`, 'pinch-active']
-            });
-            this.preview = this.stage(proposal, 'previewing');
-            return this.preview;
-        }
-
-        if (next.phase === 'active' && this.activeMove) {
-            this.canvas.move(this.activeMove.subject, canvasPoint.x, canvasPoint.y);
-            if (this.preview) {
-                this.preview = {
-                    ...this.preview,
-                    geometry: { point: canvasPoint },
-                    lifecycle: 'previewing'
-                };
-            }
-            return this.preview;
-        }
-
-        if (next.phase === 'end' && this.activeMove) {
-            const subject = this.activeMove.subject;
-            const origin = this.activeMove.origin;
-            const to = { x: canvasPoint.x, y: canvasPoint.y };
-            this.activeMove = null;
-            const proposal = this.proposal('move', [subject], {
-                point: canvasPoint,
-                modalities: ['camera_hand'],
-                confidence: frame.trackingConfidence,
-                timestampMs,
-                evidence: [`hand:${frame.handId}`, 'pinch-end']
-            });
-            this.preview = null;
-            this.remember(subject);
-            return this.commitTracked(proposal, {
-                command: 'MOVE',
-                subject,
-                from: origin,
-                to,
-                modalities: ['camera_hand'],
-                committedAt: timestampMs
-            }, () => {
-                this.canvas.move(subject, origin.x, origin.y);
-            });
-        }
-
-        if (next.phase === 'cancel') {
-            this.cancel();
-        }
-        return this.preview;
-    }
-
     confirm(timestampMs = Date.now()): SpatialCommand | null {
         const pending = this.preview ?? this.held;
         if (!pending) return null;
@@ -316,10 +178,6 @@ export class InteractionEngine {
     }
 
     cancel(): void {
-        if (this.activeMove) {
-            this.canvas.move(this.activeMove.subject, this.activeMove.origin.x, this.activeMove.origin.y);
-            this.activeMove = null;
-        }
         if (this.preview) {
             this.preview = { ...this.preview, lifecycle: 'cancelled' };
             this.commands.push(this.preview);
@@ -347,7 +205,6 @@ export class InteractionEngine {
             shellId: this.canvas.activeShell(),
             blocks: this.canvas.listBlocks(),
             point: intent.deixis === 'here' || intent.deixis === 'this' ? pointHit : undefined,
-            region: intent.deixis === 'these' ? this.region ?? undefined : undefined,
             selection: this.selection,
             recentInteraction: this.recentInteraction,
             recentDiscourse: this.recentDiscourse,
@@ -431,16 +288,11 @@ export class InteractionEngine {
             if (target.status !== 'resolved') return this.hold(proposal, 'ambiguous-target');
             proposal.target = { id: target.ids[0] };
         }
-        if (intent.action === 'connect' && intent.deixis === 'these' && resolved.ids.length >= 2 && !proposal.target) {
-            proposal.subjects = [{ id: resolved.ids[0] }];
-            proposal.target = { id: resolved.ids[1] };
-        }
         if (intent.destructive) return this.previewDestructive(proposal);
         return this.execute(proposal, timestampMs, false);
     }
 
     private execute(proposal: MultimodalInteractionProposal, timestampMs: number, fromConfirm: boolean): SpatialCommand {
-        const shellId = this.canvas.activeShell();
         if (proposal.action === 'create' && proposal.create && proposal.geometry?.point) {
             const at = proposal.geometry.point;
             const id = this.canvas.add(proposal.create.blockId, proposal.create.displayName, at.x, at.y);
@@ -472,7 +324,6 @@ export class InteractionEngine {
         if (proposal.action === 'connect' && proposal.subjects[0] && proposal.target) {
             const sourceId = proposal.subjects[0].id;
             const targetId = proposal.target.id;
-            if (isSeparated(sourceId, targetId)) return this.refuse(proposal, 'kept-separate');
             const source = this.canvas.getInstance(sourceId);
             const target = this.canvas.getInstance(targetId);
             const admission = evaluateWireAdmission(source, target);
@@ -500,55 +351,6 @@ export class InteractionEngine {
             }, () => {
                 if (removed) this.canvas.restore(removed);
             });
-        }
-
-        if (proposal.action === 'group') {
-            const ids = proposal.subjects.map(subject => subject.id);
-            const groupId = nextId('group');
-            this.groups.set(groupId, ids);
-            this.canvas.setGroup(ids, groupId);
-            return this.commitTracked(proposal, {
-                command: 'GROUP',
-                subjects: ids,
-                modalities: ['speech'],
-                committedAt: timestampMs
-            }, () => {
-                this.groups.delete(groupId);
-                this.canvas.setGroup(ids, null);
-            });
-        }
-
-        if (proposal.action === 'separate' && proposal.subjects.length >= 2) {
-            const ids = proposal.subjects.map(subject => subject.id);
-            for (let i = 0; i < ids.length; i++) {
-                for (let j = i + 1; j < ids.length; j++) {
-                    this.separated.push([ids[i], ids[j]]);
-                    markSeparated(ids[i], ids[j]);
-                }
-            }
-            return this.commitTracked(proposal, {
-                command: 'SEPARATE',
-                subjects: ids,
-                modalities: ['speech'],
-                committedAt: timestampMs
-            }, () => {
-                this.separated = this.separated.filter(pair => !ids.includes(pair[0]) || !ids.includes(pair[1]));
-                for (let i = 0; i < ids.length; i++) {
-                    for (let j = i + 1; j < ids.length; j++) clearSeparated(ids[i], ids[j]);
-                }
-            });
-        }
-
-        if (proposal.action === 'compare') {
-            const ids = proposal.subjects.map(subject => subject.id);
-            const noteId = this.canvas.add('text_note', 'Compare', 80, 80);
-            return this.commitTracked(proposal, {
-                command: 'COMPARE',
-                subjects: ids,
-                subject: noteId,
-                modalities: ['speech'],
-                committedAt: timestampMs
-            }, () => this.canvas.remove(noteId));
         }
 
         if (proposal.action === 'branch' && proposal.subjects[0]) {
@@ -580,7 +382,6 @@ export class InteractionEngine {
             });
         }
 
-        void shellId;
         return this.refuse(proposal, 'unsupported');
     }
 
@@ -621,7 +422,7 @@ export class InteractionEngine {
             create: proposal.create,
             geometry: proposal.geometry,
             evidence: proposal.evidence,
-            modalities: proposal.evidence.some(item => item.startsWith('speech')) ? ['speech'] : ['camera_hand'],
+            modalities: proposal.evidence.some(item => item.startsWith('speech')) ? ['speech'] : ['pointer'],
             confidence: proposal.confidence,
             lifecycle,
             reason,
@@ -664,11 +465,7 @@ export class InteractionEngine {
     }
 
     private latestPoint(now: number): FramedPoint | undefined {
-        const recent = [...this.points].reverse().find(item => {
-            const age = now - item.timestampMs;
-            return item.modality === 'pointer' ? age <= 60_000 : age <= 2500;
-        });
-        return recent?.at;
+        return [...this.points].reverse().find(item => now - item.timestampMs <= 60_000)?.at;
     }
 
     private remember(id: string): void {
@@ -676,12 +473,7 @@ export class InteractionEngine {
         this.recentDiscourse = this.recentInteraction;
     }
 
-    notePoint(at: FramedPoint, timestampMs: number, modality: InputModality = 'pointer'): void {
-        if (at.frame !== 'canvas') throw new Error(`Points recorded for fusion must be canvas coordinates, received ${at.frame}`);
-        this.points.push({ at, timestampMs, modality });
-    }
-
-    noteRegion(polygon: FramedPoint[]): void {
-        this.region = polygon;
+    notePoint(at: FramedPoint, timestampMs: number): void {
+        this.points.push({ at, timestampMs });
     }
 }

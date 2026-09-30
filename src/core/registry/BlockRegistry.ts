@@ -93,22 +93,6 @@ blockRegistry.register({
     description: 'Real-time prediction market odds and probabilities'
 });
 
-// NewsAPI Block
-blockRegistry.register({
-    block_id: 'newsapi_feed',
-    display_name: 'News Feed',
-    category: 'pulse',
-    data_type: 'news_feed',
-    refresh_rate: '5m',
-    semantic_tags: ['news', 'narrative', 'sentiment', 'headlines', 'media'],
-    wiring_logic: 'map_to_narrative_agent',
-    ports: [
-        createJsonOutputPort('out', 'Article Feed')
-    ],
-    icon: 'Newspaper',
-    description: 'Aggregated news articles with sentiment analysis'
-});
-
 // CoinGecko Block
 blockRegistry.register({
     block_id: 'coingecko_crypto',
@@ -122,25 +106,7 @@ blockRegistry.register({
     description: 'Live cryptocurrency prices and market data',
     ports: [
         createJsonOutputPort('out', 'Market Data')
-    ],
-    isUserCreatable: true
-});
-
-// Alpha Vantage Block
-blockRegistry.register({
-    block_id: 'alpha_vantage_quote',
-    display_name: 'Alpha Vantage',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '1m',
-    semantic_tags: ['stocks', 'forex', 'crypto', 'market', 'quote'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Market Quote')
-    ],
-    icon: 'LineChart',
-    description: 'Market quote data from Alpha Vantage',
-    isUserCreatable: true
+    ]
 });
 
 // Hacker News Block
@@ -156,24 +122,7 @@ blockRegistry.register({
     description: 'Top stories from Hacker News',
     ports: [
         createJsonOutputPort('out', 'Story Feed')
-    ],
-    isUserCreatable: true
-});
-
-// Metaculus Block
-blockRegistry.register({
-    block_id: 'metaculus_forecast',
-    display_name: 'Metaculus Forecast',
-    category: 'truth',
-    data_type: 'probabilistic_stream',
-    refresh_rate: '1m',
-    semantic_tags: ['metaculus', 'forecasting', 'prediction', 'probability', 'science'],
-    wiring_logic: 'map_to_game_theory_agent',
-    ports: [
-        createJsonOutputPort('out', 'Forecast Data')
-    ],
-    icon: 'Target',
-    description: 'Scientific forecasting and prediction questions'
+    ]
 });
 
 // OpenAlex Block
@@ -189,42 +138,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Research Feed')
     ],
     icon: 'BookOpen',
-    description: 'Recent research works and citations',
-    isUserCreatable: true
-});
-
-// FRED Block
-blockRegistry.register({
-    block_id: 'fred_series',
-    display_name: 'FRED',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '15m',
-    semantic_tags: ['economics', 'macro', 'time series', 'fred', 'fed'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Series Data')
-    ],
-    icon: 'LineChart',
-    description: 'Federal Reserve Economic Data series observations',
-    isUserCreatable: true
-});
-
-// BLS Block
-blockRegistry.register({
-    block_id: 'bls_series',
-    display_name: 'BLS',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '30m',
-    semantic_tags: ['labor', 'employment', 'time series', 'statistics'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Series Data')
-    ],
-    icon: 'LineChart',
-    description: 'Bureau of Labor Statistics time series data',
-    isUserCreatable: true
+    description: 'Recent research works and citations'
 });
 
 // World Bank Block
@@ -240,8 +154,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Indicator Data')
     ],
     icon: 'Globe',
-    description: 'World Bank global development indicators',
-    isUserCreatable: true
+    description: 'World Bank global development indicators'
 });
 
 blockRegistry.register({
@@ -256,8 +169,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Quake Feed')
     ],
     icon: 'Activity',
-    description: 'USGS magnitude 4.5+ earthquakes this week',
-    isUserCreatable: true
+    description: 'USGS magnitude 4.5+ earthquakes this week'
 });
 
 blockRegistry.register({
@@ -272,8 +184,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Forecast')
     ],
     icon: 'CloudSun',
-    description: 'Open-Meteo current conditions and daily forecast',
-    isUserCreatable: true
+    description: 'Open-Meteo current conditions and daily forecast'
 });
 
 blockRegistry.register({
@@ -288,8 +199,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Rates')
     ],
     icon: 'DollarSign',
-    description: 'ECB foreign-exchange reference rates',
-    isUserCreatable: true
+    description: 'ECB foreign-exchange reference rates'
 });
 
 blockRegistry.register({
@@ -304,8 +214,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Articles')
     ],
     icon: 'BookOpen',
-    description: 'Live Wikipedia article search',
-    isUserCreatable: true
+    description: 'Live Wikipedia article search'
 });
 
 blockRegistry.register({
@@ -320,8 +229,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Books')
     ],
     icon: 'Library',
-    description: 'Books from the Internet Archive catalog',
-    isUserCreatable: true
+    description: 'Books from the Internet Archive catalog'
 });
 
 blockRegistry.register({
@@ -336,8 +244,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Repositories')
     ],
     icon: 'Github',
-    description: 'Public GitHub repositories by stars',
-    isUserCreatable: true
+    description: 'Public GitHub repositories by stars'
 });
 
 blockRegistry.register({
@@ -352,8 +259,7 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Works')
     ],
     icon: 'Files',
-    description: 'Scholarly works from Crossref — no API key',
-    isUserCreatable: true
+    description: 'Scholarly works from Crossref — no API key'
 });
 
 // ============================================
@@ -373,73 +279,7 @@ blockRegistry.register({
         createTextOutputPort('out', 'Text Content')
     ],
     icon: 'FileText',
-    description: 'Markdown notes with preview toggle',
-    expandMode: 'portal',
-    isUserCreatable: true
-});
-
-// Code Block
-blockRegistry.register({
-    block_id: 'code_sandbox',
-    display_name: 'Code',
-    category: 'workspace',
-    data_type: 'code',
-    refresh_rate: 'manual',
-    semantic_tags: ['code', 'programming', 'scripts', 'analysis', 'developer'],
-    wiring_logic: 'map_to_developer_agent',
-    icon: 'Code',
-    description: 'Syntax-highlighted code display',
-    expandMode: 'portal',
-    isUserCreatable: true
-});
-
-// Chat Block
-blockRegistry.register({
-    block_id: 'mind_chat',
-    display_name: 'Mind Chat',
-    category: 'workspace',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
-    semantic_tags: ['chat', 'conversation', 'ai', 'assistant', 'mind'],
-    wiring_logic: 'map_to_active_persona',
-    ports: [
-        createAnyInputPort('in', 'Context Input'),
-        createTextOutputPort('out', 'Conversation')
-    ],
-    icon: 'MessageSquare',
-    description: 'Direct conversation with the Mind',
-    expandMode: 'fullscreen',
-    isUserCreatable: true
-});
-
-// Media Block
-blockRegistry.register({
-    block_id: 'media_gallery',
-    display_name: 'Media',
-    category: 'workspace',
-    data_type: 'media',
-    refresh_rate: 'manual',
-    semantic_tags: ['images', 'video', 'gallery', 'media', 'files'],
-    wiring_logic: 'map_to_analyst_agent',
-    icon: 'Image',
-    description: 'Image and video gallery',
-    expandMode: 'portal',
-    isUserCreatable: true
-});
-
-// Embed Block
-blockRegistry.register({
-    block_id: 'web_embed',
-    display_name: 'Web Embed',
-    category: 'workspace',
-    data_type: 'embed',
-    refresh_rate: 'manual',
-    semantic_tags: ['embed', 'iframe', 'website', 'external', 'browser'],
-    wiring_logic: 'map_to_analyst_agent',
-    icon: 'Globe',
-    description: 'Embed external web content',
-    expandMode: 'fullscreen',
-    isUserCreatable: true
+    description: 'Markdown notes with preview toggle'
 });
 
 // ============================================
@@ -460,9 +300,7 @@ blockRegistry.register({
         createTextOutputPort('out', 'Analysis')
     ],
     icon: 'Target',
-    description: '🎯 Data-driven insights and market analysis',
-    expandMode: 'portal',
-    isUserCreatable: true
+    description: '🎯 Data-driven insights and market analysis'
 });
 
 // Strategist Persona
@@ -479,9 +317,7 @@ blockRegistry.register({
         createTextOutputPort('out', 'Strategy')
     ],
     icon: 'Swords',
-    description: '⚔️ Long-term planning and tactical decisions',
-    expandMode: 'portal',
-    isUserCreatable: true
+    description: '⚔️ Long-term planning and tactical decisions'
 });
 
 // Researcher Persona
@@ -498,9 +334,7 @@ blockRegistry.register({
         createTextOutputPort('out', 'Research')
     ],
     icon: 'FlaskConical',
-    description: '🔬 Deep investigation and knowledge synthesis',
-    expandMode: 'portal',
-    isUserCreatable: true
+    description: '🔬 Deep investigation and knowledge synthesis'
 });
 
 // Creative Persona
@@ -517,9 +351,7 @@ blockRegistry.register({
         createTextOutputPort('out', 'Ideas')
     ],
     icon: 'Palette',
-    description: '🎨 Ideation and unconventional thinking',
-    expandMode: 'portal',
-    isUserCreatable: true
+    description: '🎨 Ideation and unconventional thinking'
 });
 
 // Guardian Persona
@@ -536,9 +368,7 @@ blockRegistry.register({
         createTextOutputPort('out', 'Risk Analysis')
     ],
     icon: 'Shield',
-    description: '🛡️ Risk assessment and protective analysis',
-    expandMode: 'portal',
-    isUserCreatable: true
+    description: '🛡️ Risk assessment and protective analysis'
 });
 
 
@@ -560,10 +390,6 @@ blockRegistry.register({
         createJsonOutputPort('out', 'Entries')
     ],
     icon: 'Brain',
-    description: 'Recollection from a Mind pool, wired in like any other source',
-    expandMode: 'resize',
-    isUserCreatable: true
+    description: 'Recollection from a Mind pool, wired in like any other source'
 });
-
-export default blockRegistry;
 

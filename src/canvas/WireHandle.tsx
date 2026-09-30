@@ -116,13 +116,6 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
                     if (portInBlock) {
                         targetBlockId = portInBlock.getAttribute('data-block-id');
                     }
-                    // Also check for data-persona-block (legacy)
-                    if (!targetBlockId) {
-                        const personaData = blockCard.querySelector('[data-persona-block]');
-                        if (personaData) {
-                            targetBlockId = personaData.getAttribute('data-block-id');
-                        }
-                    }
                 }
             }
 
@@ -302,18 +295,3 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
         </>
     );
 }
-
-/**
- * Wire target indicator - shows on persona blocks when wire is being dragged
- */
-export function WireTarget({ blockId }: { blockId: string }) {
-    return (
-        <div
-            data-persona-block="true"
-            data-block-id={blockId}
-            className="absolute inset-0 pointer-events-auto"
-        />
-    );
-}
-
-export default WireHandle;

@@ -74,5 +74,3 @@ export function Atmosphere() {
         </div>
     );
 }
-
-export default Atmosphere;

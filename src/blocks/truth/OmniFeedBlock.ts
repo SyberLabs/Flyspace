@@ -64,5 +64,3 @@ export function useOmniFeedBlock(
         error
     };
 }
-
-export default useOmniFeedBlock;

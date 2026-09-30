@@ -113,25 +113,6 @@ export function useHackerNewsBlock(instanceId: string) {
         lastUpdated: block?.last_updated,
         fromCache,
         refresh,
-        pause: () => { },
-        resume: refresh,
         error
     };
 }
-
-export async function fetchHNStories(): Promise<{
-    stories: HNStory[];
-    error?: string;
-}> {
-    const { apiGateway } = await import('@/core/gateway');
-    const data = await apiGateway.fetch('hackernews');
-
-    if (data.error) {
-        return { stories: [], error: data.error.message };
-    }
-
-    return { stories: omniItemsToHNStories(data.items || []) };
-}
-
-const hackerNewsBlock = { fetchHNStories, useHackerNewsBlock };
-export default hackerNewsBlock;

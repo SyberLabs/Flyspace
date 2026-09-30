@@ -10,21 +10,7 @@
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
-export const OMNIOS_SIGIL = { name: 'OmniOS', color: '#f59be0' } as const;
-
-export function Sigil({
-    name = OMNIOS_SIGIL.name,
-    color = OMNIOS_SIGIL.color,
-    size,
-    animate = true,
-    className
-}: {
-    name?: string;
-    color?: string;
-    size: number;
-    animate?: boolean;
-    className?: string;
-}) {
+export function Sigil({ size, className }: { size: number; className?: string }) {
     const ref = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
@@ -34,14 +20,14 @@ export function Sigil({
         let handle: { cancel(): void } | undefined;
         import('@/vendor/syber/syber-sigil.js')
             .then(({ draw }) => {
-                if (!cancelled) handle = draw(canvas, name, { color, animate });
+                if (!cancelled) handle = draw(canvas, 'OmniOS', { color: '#f59be0', animate: true });
             })
             .catch(() => { /* decorative: a missing mark is not an error state */ });
         return () => {
             cancelled = true;
             handle?.cancel();
         };
-    }, [name, color, animate]);
+    }, []);
 
     return (
         <canvas
@@ -52,5 +38,3 @@ export function Sigil({
         />
     );
 }
-
-export default Sigil;

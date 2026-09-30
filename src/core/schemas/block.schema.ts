@@ -9,9 +9,7 @@ export type BlockDataType =
   | 'probabilistic_stream'  // Truth Blocks (prediction markets)
   | 'news_feed'             // Pulse Blocks (news/narrative)
   | 'telemetry'             // Physicality Blocks (location/movement)
-  | 'biometric'             // Model Blocks (AI models/biomarkers)
   | 'financial'             // Truth Blocks (market data)
-  | 'social'                // Pulse Blocks (social media)
   | 'custom'
   // Workspace types
   | 'text'                  // Rich text/markdown content
@@ -29,14 +27,8 @@ export type BlockCategory =
   | 'pulse'         // Narrative and sentiment
   | 'model'         // AI models and biomarkers
   | 'workspace'     // User-created content blocks
-  | 'system'        // Life System blocks
-  | 'health'        // Health domain blocks
-  | 'career'        // Career domain blocks
-  | 'finance'       // Finance domain blocks
-  | 'mind_system'   // Mind/Cognition domain blocks
-  | 'relationships' // Relationships domain blocks
-  | 'environment'   // Environment domain blocks
-  | 'time';         // Time domain blocks
+  | 'system'        // Compiled capability blocks
+  | 'environment';  // Weather, quakes, climate
 
 /**
  * Connection status for live data streams
@@ -141,15 +133,6 @@ export interface OmniBlockSchema {
   /** Whether this block can be created by the user (vs API-sourced) */
   isUserCreatable?: boolean;
 
-  /** For System Proxy blocks: the linked system ID */
-  systemId?: string;
-
-  /** For System Blocks: link to a specific graph in the pool */
-  subscribedGraphId?: string;
-
-  /** For System Blocks: map block data keys to graph node IDs */
-  graphNodeMapping?: Record<string, string>;
-
   /** Set when this block type was compiled from a CapabilityManifest. */
   capabilityId?: string;
 }
@@ -187,23 +170,6 @@ export interface BlockInstance {
 
   /** Fetch/config knobs for this instance. Absent means never configured. */
   params?: Record<string, unknown>;
-}
-
-/**
- * Configuration for API connections
- */
-export interface ApiConfig {
-  /** API key or token */
-  apiKey?: string;
-
-  /** Base URL for the API */
-  baseUrl: string;
-
-  /** Whether to use mock data instead of live API */
-  useMockData: boolean;
-
-  /** Additional headers */
-  headers?: Record<string, string>;
 }
 
 /**
@@ -261,14 +227,4 @@ export interface BlockConnection {
   sourcePort: string;
   targetBlockId: string;
   targetPort: string;
-}
-
-/**
- * Block event payloads
- */
-export interface BlockEvent {
-  type: 'data_update' | 'status_change' | 'error' | 'connected' | 'disconnected';
-  blockId: string;
-  timestamp: number;
-  payload: unknown;
 }

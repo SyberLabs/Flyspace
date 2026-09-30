@@ -11,7 +11,6 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
     testDir: './e2e',
     timeout: 60_000,
-    fullyParallel: false,
     retries: process.env.CI ? 1 : 0,
     reporter: process.env.CI ? [['github'], ['list']] : 'list',
     use: {
@@ -22,7 +21,6 @@ export default defineConfig({
     webServer: {
         command: 'npm run start',
         port: 3000,
-        reuseExistingServer: false,
         timeout: 120_000,
         env: {
             OMNI_E2E: '1',

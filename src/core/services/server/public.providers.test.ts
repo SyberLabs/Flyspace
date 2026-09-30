@@ -2,8 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
     fetchPublicProvider,
     isPublicProvider,
-    PUBLIC_PROXY_IDS,
-    keylessCatalogIds
+    PUBLIC_PROXY_IDS
 } from './public.providers';
 
 afterEach(() => {
@@ -32,12 +31,6 @@ describe('public proxy allowlist', () => {
         ].sort());
         expect(isPublicProvider('fred')).toBe(false);
         expect(isPublicProvider('polymarket')).toBe(false);
-    });
-
-    it('the full keyless catalog is at least the demo set plus the original five', () => {
-        expect(keylessCatalogIds().length).toBeGreaterThanOrEqual(12);
-        expect(keylessCatalogIds()).toContain('polymarket');
-        expect(keylessCatalogIds()).toContain('usgs');
     });
 });
 

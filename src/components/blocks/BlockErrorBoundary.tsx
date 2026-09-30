@@ -66,5 +66,3 @@ export class BlockErrorBoundary extends Component<BlockErrorBoundaryProps, Block
         return this.props.children;
     }
 }
-
-export default BlockErrorBoundary;

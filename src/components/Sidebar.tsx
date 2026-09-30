@@ -15,12 +15,7 @@ import {
     ChevronDown,
     ChevronRight,
     FileText,
-    Cpu,
-    Heart,
-    Briefcase,
-    Wallet,
-    Clock,
-    User
+    Cpu
 } from 'lucide-react';
 import { useState } from 'react';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
@@ -39,13 +34,7 @@ const CATEGORY_ICONS: Record<BlockCategory, React.ReactNode> = {
     model: <Activity className="w-4 h-4" />,
     workspace: <FileText className="w-4 h-4" />,
     system: <Cpu className="w-4 h-4" />,
-    health: <Heart className="w-4 h-4" />,
-    career: <Briefcase className="w-4 h-4" />,
-    finance: <Wallet className="w-4 h-4" />,
-    mind_system: <Activity className="w-4 h-4" />,
-    relationships: <User className="w-4 h-4" />,
-    environment: <CloudSun className="w-4 h-4" />,
-    time: <Clock className="w-4 h-4" />
+    environment: <CloudSun className="w-4 h-4" />
 };
 
 const ARMORY_CATEGORY_ORDER: BlockCategory[] = [
@@ -55,13 +44,7 @@ const ARMORY_CATEGORY_ORDER: BlockCategory[] = [
     'truth',
     'workspace',
     'model',
-    'system',
-    'health',
-    'career',
-    'finance',
-    'mind_system',
-    'relationships',
-    'time'
+    'system'
 ];
 
 const DEFAULT_EXPANDED_CATEGORIES: BlockCategory[] = [
@@ -78,13 +61,7 @@ const CATEGORY_LABELS: Record<BlockCategory, string> = {
     model: 'Model Blocks',
     workspace: 'Workspace Blocks',
     system: 'System Blocks',
-    health: 'Health Blocks',
-    career: 'Career Blocks',
-    finance: 'Finance Blocks',
-    mind_system: 'Mind Blocks',
-    relationships: 'Relationships Blocks',
-    environment: 'Environment Blocks',
-    time: 'Time Blocks'
+    environment: 'Environment Blocks'
 };
 
 export function Sidebar() {
@@ -252,5 +229,3 @@ function BlockItem({ block }: BlockItemProps) {
         </div>
     );
 }
-
-export default Sidebar;

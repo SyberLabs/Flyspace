@@ -3,7 +3,6 @@
 // Keyboard shortcuts for quick shell switching
 // ============================================
 
-import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useShellStore, useBlockStore } from '@/core/stores';
 
@@ -34,7 +33,6 @@ const DEFAULT_SYSTEM_SHORTCUTS: Record<string, string> = {
  * 3. Slots 8-9 are user-assignable only
  */
 export function useShellNavigation() {
-    const router = useRouter();
     const { hotkeySlots } = useShellStore();
     const { setActiveShell } = useBlockStore();
 
@@ -47,7 +45,6 @@ export function useShellNavigation() {
             if (e.key === '0') {
                 e.preventDefault();
                 setActiveShell('root');
-                router.push('/');
                 return;
             }
 
@@ -69,10 +66,6 @@ export function useShellNavigation() {
                 if (systemType) {
                     const shellId = `system:${systemType}`;
                     setActiveShell(shellId);
-                    // Stay on home page - system shells are canvas-based, not page-based
-                    if (window.location.pathname !== '/') {
-                        router.push('/');
-                    }
                     return;
                 }
 
@@ -83,7 +76,5 @@ export function useShellNavigation() {
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [router, hotkeySlots, setActiveShell]);
+    }, [hotkeySlots, setActiveShell]);
 }
-
-export default useShellNavigation;

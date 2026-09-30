@@ -2,40 +2,6 @@
 
 import type { CoordinateFrame, FramedPoint } from './types';
 
-export interface Viewport {
-    width: number;
-    height: number;
-    panX: number;
-    panY: number;
-    zoom: number;
-}
-
-export function point(frame: CoordinateFrame, x: number, y: number, z?: number): FramedPoint {
-    return z === undefined ? { frame, x, y } : { frame, x, y, z };
-}
-
-/** Webcam prototype: normalized camera X/Y into canvas space. Z is not room depth. */
-export function cameraNormalizedToCanvas(camera: FramedPoint, viewport: Viewport): FramedPoint {
-    if (camera.frame !== 'camera_normalized') {
-        throw new Error(`Expected camera_normalized, received ${camera.frame}`);
-    }
-    const viewportX = camera.x * viewport.width;
-    const viewportY = camera.y * viewport.height;
-    return point(
-        'canvas',
-        (viewportX - viewport.panX) / viewport.zoom,
-        (viewportY - viewport.panY) / viewport.zoom,
-        camera.z
-    );
-}
-
-export function canvasToViewport(canvasPoint: FramedPoint, viewport: Viewport): FramedPoint {
-    if (canvasPoint.frame !== 'canvas') {
-        throw new Error(`Expected canvas, received ${canvasPoint.frame}`);
-    }
-    return point(
-        'viewport_px',
-        canvasPoint.x * viewport.zoom + viewport.panX,
-        canvasPoint.y * viewport.zoom + viewport.panY
-    );
+export function point(frame: CoordinateFrame, x: number, y: number): FramedPoint {
+    return { frame, x, y };
 }

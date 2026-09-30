@@ -4,18 +4,16 @@
 // restoreSnapshot is the persistence path and may keep an approval the
 // user already granted.
 
-import { apiGateway } from '../gateway/ApiGateway';
 import { blockRegistry } from '../registry/BlockRegistry';
 import type { OmniBlockSchema, PortSchema } from '../schemas/block.schema';
 import { useBlockStore } from '../stores/blockStore';
 import { wireService } from '../services/wire.service';
-import type { ApiTypeDefinition } from '../gateway/omnidata.schema';
 import { createOmniError } from '../gateway/omnidata.schema';
 import { validateManifest, type CapabilityManifest } from './manifest';
 import { allCapabilities, capabilityIds, claimHydration, deleteCapability, readCapability, writeCapability } from './state';
-import { bindLocalHandler, executeCapability, clearLastResult } from './execute';
+import { bindLocalHandler, executeCapability } from './execute';
 import { clearExecutionLedger } from './executionLedger';
-import { isCapabilityResult, type CapabilityResult } from './project';
+import type { CapabilityResult } from './project';
 import { onCapabilityRehydrate, useCapabilityStore } from './store';
 import { portDataTypeFor } from './compatibility';
 import { resolveWiredInputs } from './wireInputs';
@@ -48,13 +46,10 @@ function touch(): void {
 function bindRuntime(manifest: CapabilityManifest): void {
     if (blockRegistry.has(manifest.id)) blockRegistry.unregister(manifest.id);
     blockRegistry.register(toBlockSchema(manifest));
-    apiGateway.registerType(manifest.id, toGatewayDefinition(manifest));
 }
 
 function unbindRuntime(id: string, removeInstances: boolean): void {
-    apiGateway.unregisterType(id);
     blockRegistry.unregister(id);
-    clearLastResult(id);
     if (!removeInstances) return;
     const instances = useBlockStore.getState().blocks.filter(block => block.schema.block_id === id);
     for (const instance of instances) {
@@ -217,7 +212,7 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
     const output = manifest.output.schema;
     const ports: PortSchema[] = [];
     if (manifest.inputs.length > 0) {
-        const inbound = inputPortSchema(manifest);
+        const inbound = inputSchema(manifest);
         ports.push({
             id: 'in',
             direction: 'input',
@@ -252,11 +247,6 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
     };
 }
 
-/** The input port is the real argument contract. Projections live on the wire. */
-function inputPortSchema(manifest: CapabilityManifest): ValueType {
-    return inputSchema(manifest);
-}
-
 function iconFor(manifest: CapabilityManifest): string {
     if (manifest.id === 'cap_speech_speak') return 'Volume2';
     if (manifest.id === 'cap_speech_listen') return 'Mic';
@@ -274,26 +264,6 @@ function inputSchema(manifest: CapabilityManifest): ValueType {
         kind: 'object',
         properties,
         ...(required.length > 0 ? { required } : {})
-    };
-}
-
-function toGatewayDefinition(manifest: CapabilityManifest): ApiTypeDefinition<unknown> {
-    return {
-        category: 'custom',
-        displayName: manifest.title,
-        cacheTtlMs: manifest.effect === 'read' ? 60_000 : 0,
-        rateLimitMs: 0,
-        fetchFn: async (_apiKey, params) => {
-            return executeCapability(manifest.id, isPlain(params) ? params : {});
-        },
-        normalizeFn: (raw) => {
-            if (isCapabilityResult(raw)) return raw.presentation;
-            return createOmniError(manifest.id, 'custom', {
-                code: 'FETCH_ERROR',
-                message: 'Capability executor returned an unexpected payload',
-                retryable: false
-            });
-        }
     };
 }
 

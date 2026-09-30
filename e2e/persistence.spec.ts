@@ -2,12 +2,16 @@ import { test, expect } from '@playwright/test';
 import { freshStart, spawnInvestor, waitForMockAnswer } from './helpers';
 
 /**
- * A Memory entry and a block's fetch params must survive a reload. Params
- * used to vanish because they lived only in component state.
+ * Think → Crystallize must produce something the user can SEE: a Memory block,
+ * wired back, holding the text. That Memory entry and a block's fetch params
+ * must survive a reload. Params used to vanish because they lived only in
+ * component state.
  */
-test('persistence: Memory entries and block params survive a reload', async ({ page }) => {
+test('persistence: Crystallize creates a wired Memory block; it and block params survive a reload', async ({ page }) => {
     await freshStart(page);
     await spawnInvestor(page);
+
+    const wiresBefore = await page.getByTestId('wire').count();
 
     const country = page.getByPlaceholder('Country (USA or all)');
     await expect(country).toHaveValue('USA');
@@ -19,7 +23,9 @@ test('persistence: Memory entries and block params survive a reload', async ({ p
     await waitForMockAnswer(page);
     await page.getByTitle('Keep this as memory — it becomes a block you can wire anywhere').click();
     await expect(page.getByText('Kept in a new Memory block')).toBeVisible();
+    await expect(page.getByText('Memory').first()).toBeVisible();
     await expect(page.getByPlaceholder('Remember something…')).toBeVisible();
+    expect(await page.getByTestId('wire').count()).toBeGreaterThan(wiresBefore);
 
     await page.reload();
 

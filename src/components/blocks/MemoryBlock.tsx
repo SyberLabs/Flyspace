@@ -158,5 +158,3 @@ export function MemoryBlockView({ instanceId }: MemoryBlockProps) {
         </div>
     );
 }
-
-export default MemoryBlockView;

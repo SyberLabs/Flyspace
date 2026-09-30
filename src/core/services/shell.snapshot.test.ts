@@ -22,7 +22,6 @@ function block(overrides: Partial<BlockSnapshotData> = {}): BlockSnapshotData {
         isPinned: false,
         data: null,
         summary: 'A market summary',
-        keyMetrics: [],
         ...overrides
     };
 }

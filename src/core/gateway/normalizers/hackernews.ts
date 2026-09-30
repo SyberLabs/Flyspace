@@ -158,5 +158,3 @@ export const hackernewsNormalizer: ApiTypeDefinition<HackerNewsRawResponse> = {
         return createOmniData('hackernews', 'news', { items }, 300000);
     }
 };
-
-export default hackernewsNormalizer;

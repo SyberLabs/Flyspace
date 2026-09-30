@@ -26,19 +26,6 @@ export interface CapabilityResult {
     runId?: string;
 }
 
-const CAPABILITY_RESULT = Symbol.for('omni.capabilityResult');
-
-export function brandResult<T extends object>(result: T): T {
-    Object.defineProperty(result, CAPABILITY_RESULT, { value: true });
-    return result;
-}
-
-export function isCapabilityResult(value: unknown): value is CapabilityResult {
-    return typeof value === 'object'
-        && value !== null
-        && (value as Record<symbol, unknown>)[CAPABILITY_RESULT] === true;
-}
-
 export function projectSuccess(manifest: CapabilityManifest, typed: TypedValue): OmniData {
     const ttl = manifest.effect === 'read' ? 60_000 : 0;
     const items = projectItems(typed.value, manifest);

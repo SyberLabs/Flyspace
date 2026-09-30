@@ -17,30 +17,3 @@ export async function testPolymarketConnection(): Promise<boolean> {
         return false;
     }
 }
-
-/**
- * Test NewsAPI connection. The key is read server-side from process.env;
- * the client sends no key. A 503 indicates the server is missing NEWSAPI_KEY.
- */
-export async function testNewsConnection(): Promise<{
-    success: boolean;
-    error?: string;
-}> {
-    try {
-        // Same route the NewsAPI block uses, so a green test means the block
-        // will work — a separate /api/news path could pass while the real one failed.
-        const response = await fetch('/api/data?provider=newsapi&pageSize=1');
-        const data = await response.json();
-
-        if (data?.status === 'ok') return { success: true };
-        return {
-            success: false,
-            error: data?.message || 'NewsAPI request failed'
-        };
-    } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Connection failed'
-        };
-    }
-}

@@ -5,16 +5,8 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "dist/**",
-    ".vinext/**",
-    "next-env.d.ts",
-  ]),
+  // eslint-config-next already ignores .next, out, build and next-env.d.ts.
+  globalIgnores(["dist/**", ".vinext/**"]),
   {
     rules: {
       // Pragmatic: `any` is used in external-JSON parsing / gateway / generic

@@ -20,7 +20,6 @@ export interface LLMMessage {
 export interface LLMOptions {
     temperature?: number;
     maxTokens?: number;
-    stream?: boolean;
     /** Abort the in-flight fetch. Never serialized onto the request body. */
     signal?: AbortSignal;
     /** Reuse this value when retrying the same logical inference operation. */
@@ -108,8 +107,7 @@ export class LLMService {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     mode: 'ping',
-                    provider: this.config.provider,
-                    baseUrl: this.config.baseUrl
+                    provider: this.config.provider
                 })
             });
             if (!res.ok) return false;
@@ -131,7 +129,6 @@ export class LLMService {
             body: JSON.stringify({
                 provider: this.config.provider,
                 model: this.config.model,
-                baseUrl: this.config.baseUrl,
                 messages,
                 options: {
                     temperature: options?.temperature ?? this.config.temperature,
@@ -161,7 +158,6 @@ export class LLMService {
             body: JSON.stringify({
                 provider: this.config.provider,
                 model: this.config.model,
-                baseUrl: this.config.baseUrl,
                 messages,
                 options: {
                     temperature: llmOptions.temperature ?? this.config.temperature,

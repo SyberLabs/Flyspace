@@ -198,5 +198,3 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
         </svg>
     );
 }
-
-export default WireRenderer;

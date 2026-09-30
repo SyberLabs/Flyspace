@@ -34,8 +34,6 @@ export const SECRET_ENV_VARS = [
     'OMNI_TEST_DATABASE_URL'
 ] as const;
 
-export type SecretEnvVar = (typeof SECRET_ENV_VARS)[number];
-
 /**
  * Below this length a "secret" would match ordinary text and the scrubber
  * would corrupt more than it protects. A real key is far longer.

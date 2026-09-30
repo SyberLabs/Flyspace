@@ -5,11 +5,11 @@
 // the provider. That hop exists so CORS and User-Agent rules cannot empty
 // a block that is sitting on the canvas.
 //
-// Never add a keyed provider here. Those stay on /api/data.
+// Never add a keyed provider here.
 // ============================================
 
 import 'server-only';
-import { API_CATALOG, getApiProvider } from '@/core/schemas/api.schema';
+import { getApiProvider } from '@/core/schemas/api.schema';
 
 export const PUBLIC_PROXY_IDS = [
     'usgs',
@@ -109,9 +109,4 @@ export async function fetchPublicProvider(
     } catch {
         return { status: 502, body: { error: `${id} request failed` } };
     }
-}
-
-/** Catalog ids that work on a fresh clone with nothing in .env. */
-export function keylessCatalogIds(): string[] {
-    return API_CATALOG.filter(p => !p.requiresAuth).map(p => p.id);
 }
