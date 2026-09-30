@@ -59,12 +59,32 @@ export type CapabilityTransport =
     | { kind: 'mcp'; serverId: string; toolName: string }
     | { kind: 'local'; handler: string };
 
+export type CapabilityProviderKind = 'openapi' | 'mcp' | 'managed_integration' | 'web_data' | 'manual';
+
+/**
+ * Where an admitted capability came from. Written by admission, never by a
+ * provider. Part of the digest, so a stored manifest cannot swap its origin
+ * story without failing validation.
+ */
+export interface CapabilityProvenance {
+    providerId: string;
+    providerKind: CapabilityProviderKind;
+    externalId: string;
+    sourceLocator: string;
+    sourceRevision?: string;
+    discoveredAtMs: number;
+    admittedAtMs: number;
+    /** SHA-256 of the canonical inputs and output schema. */
+    schemaDigest: string;
+}
+
 export interface CapabilityManifest {
     version: typeof CAPABILITY_MANIFEST_VERSION;
     id: string;
     title: string;
     description?: string;
     source: CapabilitySource;
+    provenance?: CapabilityProvenance;
     effect: CapabilityEffect;
     effectSource: EffectSource;
     approval: CapabilityApproval;
@@ -92,10 +112,19 @@ const LOCATIONS: InputLocation[] = ['path', 'query', 'header', 'body', 'argument
 const EFFECT_SOURCES: EffectSource[] = ['method', 'extension', 'annotation', 'declared'];
 const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring'];
 
+const PROVIDER_KINDS: CapabilityProviderKind[] = ['openapi', 'mcp', 'managed_integration', 'web_data', 'manual'];
+
 const MANIFEST_KEYS = new Set([
-    'version', 'id', 'title', 'description', 'source', 'effect', 'effectSource',
+    'version', 'id', 'title', 'description', 'source', 'provenance', 'effect', 'effectSource',
     'approval', 'invocation', 'trigger', 'auth', 'transport', 'inputs', 'output', 'digest'
 ]);
+
+const PROVENANCE_KEYS = new Set([
+    'providerId', 'providerKind', 'externalId', 'sourceLocator', 'sourceRevision',
+    'discoveredAtMs', 'admittedAtMs', 'schemaDigest'
+]);
+
+export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_.:-]{0,63}$/;
 
 const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
 const SECRET_REF_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
@@ -159,6 +188,11 @@ export function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrig
     return null;
 }
 
+/** Digest of the typed contract alone: inputs and output schema. */
+export function schemaDigestFor(draft: Pick<ManifestDraft, 'inputs' | 'output'>): string {
+    return sha256(canonicalize({ inputs: draft.inputs, output: draft.output }));
+}
+
 export function digestPayload(draft: ManifestDraft): unknown {
     return {
         version: draft.version,
@@ -166,6 +200,8 @@ export function digestPayload(draft: ManifestDraft): unknown {
         title: draft.title,
         description: draft.description ?? null,
         source: draft.source,
+        // Absent on manifests that predate providers, so their digests do not move.
+        ...(draft.provenance ? { provenance: draft.provenance } : {}),
         effect: draft.effect,
         effectSource: draft.effectSource,
         invocation: triggerInvocation(normalizeTrigger(draft.trigger, draft.invocation)),
@@ -218,6 +254,40 @@ function validateAuth(auth: unknown, errors: string[]): void {
     }
     if (auth.prefix !== undefined && (typeof auth.prefix !== 'string' || auth.prefix.length > 32)) {
         errors.push('auth.prefix must be a short string');
+    }
+}
+
+function validateProvenance(provenance: unknown, errors: string[]): void {
+    if (!isRecord(provenance)) {
+        errors.push('provenance must be an object');
+        return;
+    }
+    for (const key of Object.keys(provenance)) {
+        if (!PROVENANCE_KEYS.has(key)) errors.push(`provenance.${key} is not a provenance field`);
+    }
+    if (typeof provenance.providerId !== 'string' || !PROVIDER_ID_PATTERN.test(provenance.providerId)) {
+        errors.push('provenance.providerId is invalid');
+    }
+    if (typeof provenance.providerKind !== 'string' || !PROVIDER_KINDS.includes(provenance.providerKind as CapabilityProviderKind)) {
+        errors.push('provenance.providerKind is invalid');
+    }
+    for (const key of ['externalId', 'sourceLocator'] as const) {
+        const value = provenance[key];
+        if (typeof value !== 'string' || value.length === 0 || value.length > 200) {
+            errors.push(`provenance.${key} must be a short non-empty string`);
+        }
+    }
+    if (provenance.sourceRevision !== undefined && (typeof provenance.sourceRevision !== 'string' || provenance.sourceRevision.length > 120)) {
+        errors.push('provenance.sourceRevision must be a short string');
+    }
+    for (const key of ['discoveredAtMs', 'admittedAtMs'] as const) {
+        const value = provenance[key];
+        if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+            errors.push(`provenance.${key} must be a timestamp`);
+        }
+    }
+    if (typeof provenance.schemaDigest !== 'string' || !/^[a-f0-9]{64}$/.test(provenance.schemaDigest)) {
+        errors.push('provenance.schemaDigest must be a sha256 hex string');
     }
 }
 
@@ -306,6 +376,8 @@ export function validateManifest(input: unknown): ManifestValidation {
             errors.push('source.operationId must be a short string');
         }
     }
+
+    if (input.provenance !== undefined) validateProvenance(input.provenance, errors);
 
     validateAuth(input.auth, errors);
 
@@ -439,6 +511,16 @@ export function validateManifest(input: unknown): ManifestValidation {
         errors.push('digest must be a sha256 hex string');
     }
 
+    if (errors.length === 0 && isRecord(input.provenance)) {
+        const expected = schemaDigestFor({
+            inputs: (input.inputs as CapabilityInput[]).map(canonicalInput),
+            output: canonicalOutput(input.output as CapabilityOutput)
+        });
+        if (input.provenance.schemaDigest !== expected) {
+            errors.push('provenance.schemaDigest does not match inputs and output');
+        }
+    }
+
     if (errors.length === 0 && isRecord(input.transport)) {
         const transport = input.transport as CapabilityTransport;
         if (typeof input.id === 'string' && input.id !== canonicalCapabilityId(transport)) {
@@ -475,6 +557,7 @@ function canonicalDraft(input: Record<string, unknown>): ManifestDraft {
             locator: source.locator,
             ...(source.operationId ? { operationId: source.operationId } : {})
         },
+        ...(isRecord(input.provenance) ? { provenance: canonicalProvenance(input.provenance as unknown as CapabilityProvenance) } : {}),
         effect: input.effect as CapabilityEffect,
         effectSource: input.effectSource as EffectSource,
         approval: input.approval as CapabilityApproval,
@@ -482,13 +565,30 @@ function canonicalDraft(input: Record<string, unknown>): ManifestDraft {
         trigger: normalizeTrigger(input.trigger as CapabilityTrigger | undefined, input.invocation === 'manual' ? 'manual' : 'auto'),
         auth: canonicalAuth(input.auth as AuthBinding),
         transport: canonicalTransport(input.transport as CapabilityTransport),
-        inputs: (input.inputs as CapabilityInput[]).map(entry => ({
-            name: entry.name,
-            in: entry.in,
-            required: entry.required,
-            schema: entry.schema
-        })),
+        inputs: (input.inputs as CapabilityInput[]).map(canonicalInput),
         output: canonicalOutput(input.output as CapabilityOutput)
+    };
+}
+
+export function canonicalInput(entry: CapabilityInput): CapabilityInput {
+    return {
+        name: entry.name,
+        in: entry.in,
+        required: entry.required,
+        schema: entry.schema
+    };
+}
+
+function canonicalProvenance(provenance: CapabilityProvenance): CapabilityProvenance {
+    return {
+        providerId: provenance.providerId,
+        providerKind: provenance.providerKind,
+        externalId: provenance.externalId,
+        sourceLocator: provenance.sourceLocator,
+        ...(provenance.sourceRevision ? { sourceRevision: provenance.sourceRevision } : {}),
+        discoveredAtMs: provenance.discoveredAtMs,
+        admittedAtMs: provenance.admittedAtMs,
+        schemaDigest: provenance.schemaDigest
     };
 }
 
@@ -519,7 +619,7 @@ function canonicalTransport(transport: CapabilityTransport): CapabilityTransport
     };
 }
 
-function canonicalOutput(output: CapabilityOutput): CapabilityOutput {
+export function canonicalOutput(output: CapabilityOutput): CapabilityOutput {
     return {
         schema: output.schema,
         presentation: output.presentation,
