@@ -89,12 +89,19 @@ describe('extractBlockData — empty content carries nothing', () => {
         expect(extractBlockData('empty', { ...DEFAULT_WIRE_FILTERS, summaryOnly: true })).toBeNull();
     });
 
-    it('returns null when a time window filters every market away', () => {
-        seed('old', { markets: [{
-            id: 'm', question: 'Old?', outcomes: [{ id: 'y', name: 'Yes', probability: 0.5 }],
-            volume: 1, liquidity: 0, endDate: '2001-01-01', category: 'x', tags: []
-        }] });
-        expect(extractBlockData('old', { ...DEFAULT_WIRE_FILTERS, timeWindow: 'day' })).toBeNull();
+    const expiredMarket = {
+        id: 'm', question: 'Old?', outcomes: [{ id: 'y', name: 'Yes', probability: 0.5 }],
+        volume: 1, liquidity: 0, endDate: '2001-01-01', category: 'x', tags: []
+    };
+
+    it.each([
+        ['wrapped { markets }', { markets: [expiredMarket] }],
+        ['direct PolymarketMarket[]', [expiredMarket]]
+    ])('returns null when a time window filters every market of a %s away', (_shape, data) => {
+        seed('old', data);
+        for (const summaryOnly of [true, false]) {
+            expect(extractBlockData('old', { ...DEFAULT_WIRE_FILTERS, timeWindow: 'day', summaryOnly })).toBeNull();
+        }
     });
 
     it('still returns text for non-empty content', () => {

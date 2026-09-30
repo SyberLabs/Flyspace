@@ -78,18 +78,7 @@ export function extractBlockData(
         // Handle different data types
         if (isRecord(data) && Array.isArray(data.markets)) {
             // Polymarket data
-            const markets = data.markets as PolymarketMarket[];
-            const filtered = filters.timeWindow && filters.timeWindow !== 'all'
-                ? filterByTimeWindow(markets, filters.timeWindow)
-                : markets;
-
-            if (filtered.length === 0) {
-                extracted = '';
-            } else if (filters.summaryOnly) {
-                extracted = formatMarketsSummary(filtered);
-            } else {
-                extracted = formatMarketsDetailed(filtered);
-            }
+            extracted = formatFilteredMarkets(data.markets as PolymarketMarket[], filters);
         } else if (isRecord(data) && Array.isArray(data.articles)) {
             // News data
             const articles = data.articles as NewsArticle[];
@@ -145,13 +134,7 @@ export function extractBlockData(
             if (isRecord(first) && 'question' in first && 'outcomes' in first) {
                 // PolymarketMarket[] (how the Polymarket block stores its data):
                 // use the dedicated formatter so outcomes + volume are included.
-                const markets = data as PolymarketMarket[];
-                const filtered = filters.timeWindow && filters.timeWindow !== 'all'
-                    ? filterByTimeWindow(markets, filters.timeWindow)
-                    : markets;
-                extracted = filters.summaryOnly
-                    ? formatMarketsSummary(filtered)
-                    : formatMarketsDetailed(filtered);
+                extracted = formatFilteredMarkets(data as PolymarketMarket[], filters);
             } else if (isRecord(first) && 'metadata' in first) {
                 // OmniItem[] stored directly.
                 const limit = filters.summaryOnly ? 8 : 25;
@@ -225,6 +208,18 @@ function formatOmniItem(item: unknown): string {
     const metaStr = parts.length > 0 ? ` (${parts.join(' | ')})` : '';
     const descStr = desc ? ` — ${desc}` : '';
     return `- ${title}${metaStr}${descStr}`;
+}
+
+/**
+ * Apply the wire's time window and format what is left. '' when nothing is
+ * left, so no formatter emits a header for zero rows.
+ */
+function formatFilteredMarkets(markets: PolymarketMarket[], filters: WireFilters): string {
+    const filtered = filters.timeWindow && filters.timeWindow !== 'all'
+        ? filterByTimeWindow(markets, filters.timeWindow)
+        : markets;
+    if (filtered.length === 0) return '';
+    return filters.summaryOnly ? formatMarketsSummary(filtered) : formatMarketsDetailed(filtered);
 }
 
 /**
