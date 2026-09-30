@@ -1,3 +1,5 @@
+> **Status (2026-09-29):** historical — the gap it was written to close is closed; persona turns run through `src/core/services/personaTurn.service.ts` and no longer use the `setTimeout` placeholders described here. Current roadmap: APEX_PLAN.md.
+
 # Citadel — Think Loop Build Plan
 
 > Front: **Citadel** (active). Created 2026-06-19.

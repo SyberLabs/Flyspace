@@ -1,3 +1,5 @@
+> **Status (2026-09-29):** historical — the Shell Store shipped and grew past this plan (Investor, Researcher, and World Watch templates in `src/core/shells/templates.ts`, wires as `DataWire` rather than `connections`), so its "parked" and "remaining" items no longer describe the code. Current roadmap: APEX_PLAN.md.
+
 # Citadel — Shell Store Build Plan
 
 > Front: **Citadel** (active). Created 2026-06-19.

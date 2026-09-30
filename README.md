@@ -28,6 +28,29 @@ point at on screen.
 Shells are saved canvases. The Shell Store spawns pre-wired ones; the
 **Investor** shell arrives with its blocks and wires already connected.
 
+## Capability compiler
+
+An unknown API can be compiled into a native block instead of hand-written. The
+compilers in `src/core/capabilities/` turn an OpenAPI document, MCP tool schemas,
+or a structured "bring" description into a `CapabilityManifest`.
+`installProposal` is the only gate that registers one. Write and destructive
+capabilities stay `pending` until `approveCapability`, and a manifest never
+grants itself authority. Execution has idempotency keys and reports
+`EFFECT_UNCERTAIN` when a write may have left the process. See
+`src/core/capabilities/DESIGN.md`. Claim ceiling: this is tested against
+fixtures and stubbed transports; no third-party API or MCP server has been
+measured in production use.
+
+## Spoken canvas control
+
+Hold **Talk** or Space and say a command from a fixed grammar ("wire hacker news
+to the analyst", "delete this", "undo"). Speech, pointer, and hand input only
+propose commands; the interaction engine (`src/core/interaction/`) decides. It
+refuses unknown or ambiguous names, previews a delete until you confirm, and
+supports undo. Claim ceiling: tested with typed-in transcripts and synthetic
+hand frames; there is no live microphone or webcam measurement of recognition
+accuracy or latency.
+
 ## Configuration
 
 Keys are read **server-side** from `process.env` and are never sent to the
@@ -62,7 +85,8 @@ When one persona feeds another, the ledger records which *run* was consumed,
 not just which block - so the full chain behind a cascade's answer stays
 walkable long after the upstream blocks have refetched.
 
-Postgres owns **only** that. The canvas - blocks, wires, shells, personas,
+Postgres owns **only** server-side run records (these, plus the capability
+broker's execution rows). The canvas - blocks, wires, shells, personas,
 memory - stays in IndexedDB, because it belongs to the person at the keyboard
 and must work with no server at all. A run belongs to the server: it is the
 only party that held the key, called the provider and timed it. Leave
@@ -126,7 +150,10 @@ The canvas is the product.
 ## Docs
 
 `APEX_PLAN.md` is the live roadmap. `vision.md` is the north star.
-`WIRE_SYSTEM_GUIDE.md`, `TYPED_PORT_SYSTEM.md` (display-only port metadata), and
-`MEMORY_ARCHITECTURE.md` cover the wire, port, and memory layers.
+`WIRE_SYSTEM_GUIDE.md`, `TYPED_PORT_SYSTEM.md` (declared ports are enforced when
+a wire is created; blocks without ports stay untyped), and
+`MEMORY_ARCHITECTURE.md` cover the wire, port, and memory layers. Root plan
+documents marked historical at the top are kept as a record, not as current
+behavior. `AGENTS.md` holds the rules for agents working in this repo.
 `INFERENCE_LEDGER.md` covers the one thing Postgres owns, and why the rest stays
 local. `DEPLOYMENT.md` records the hosting decision and what CI guarantees.
