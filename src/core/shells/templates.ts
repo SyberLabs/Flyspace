@@ -4,7 +4,6 @@
 // Each template is an opinionated, preconfigured thinking environment that
 // instantiates into a fresh shell. Templates reference registry block_ids and
 // use *placeholder* instance ids that are remapped to fresh ids on instantiate.
-// See CITADEL_SHELL_STORE_PLAN.md.
 // ============================================
 
 import type { PersonaType, AestheticTheme } from '@/core/schemas/shell.schema';

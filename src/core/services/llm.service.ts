@@ -2,7 +2,7 @@
 // PROJECT OMNI: LLM SERVICE (client)
 // Thin client that proxies all LLM calls through the server-side /api/llm
 // route. No provider API keys ever live in the browser — they are read from
-// process.env on the server. See IMPLEMENTATION_PLAN.md (Phase 3).
+// process.env on the server.
 // ============================================
 
 import { LLMConfig } from '@/core/schemas/mind.schema';

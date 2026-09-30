@@ -1,8 +1,7 @@
 # AGENTS.md
 
 Rules for agents (and people) changing OmniOS. Read `README.md` first,
-`APEX_PLAN.md` for the live roadmap. Root plan documents with a "Status ...
-historical" banner are a record, not a spec.
+`APEX_PLAN.md` for the live roadmap.
 
 ## The product
 
