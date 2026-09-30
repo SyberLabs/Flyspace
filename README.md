@@ -14,9 +14,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Without any keys the canvas still runs: public sources (Polymarket, Metaculus,
-HackerNews, World Bank) work as-is, and everything else falls back to built-in
-mock data.
+Without any keys the canvas still runs: every built-in data source is public
+(Polymarket, CoinGecko, Hacker News, World Bank, OpenAlex, and others). A persona
+needs an LLM - Ollama runs locally with no key.
 
 ## The idea
 
@@ -42,7 +42,6 @@ cp .env.example .env
 | `OLLAMA_BASE_URL` | Local LLM (Ollama). Default `http://localhost:11434`. No key. |
 | `ANTHROPIC_API_KEY` | Claude for Mind / personas. |
 | `GOOGLE_API_KEY` | Gemini for Mind / personas. |
-| `NEWSAPI_KEY` | NewsAPI blocks. |
 | `DATABASE_URL` | **Optional.** Postgres for the inference ledger. Blank = off. |
 
 ### The inference ledger (optional)

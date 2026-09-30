@@ -11,7 +11,7 @@ machine.
 The full OmniOS app goes on a **private network** - Tailscale, WireGuard, or
 an IP allowlist - until the controls below are implemented. A limited public
 preview is possible with `OMNI_PUBLIC_DEMO=1`: server routes then disable
-paid text generation, keyed data, and shared inference ledger reads.
+paid text generation and shared inference ledger reads.
 
 The app's local-first mode has no account system. Production now defaults to
 hosted API authentication for inference and its ledger; `OMNI_DEPLOYMENT_MODE=local`
@@ -22,12 +22,11 @@ Other API surfaces still need their own hosting review before any public URL:
 | Route | Historical anonymous behavior before hosted-boundary changes |
 |-------|-------------------------------|
 | `POST /api/llm` | Spends your Anthropic / Google credits, unmetered |
-| `GET /api/data?provider=` | Spends your FRED / BLS / NewsAPI / Alpha Vantage quota |
 | `GET /api/inference-runs` | Reads `prompt_excerpt` and `output_excerpt` from every run |
 | `GET /api/inference-runs/:id/lineage` | Reads whole cascades, several hops deep |
 
 The inference-history routes are now protected by the hosted identity check
-below. `/api/data` and other surfaces remain unreviewed. This is a historical
+below. Other surfaces remain unreviewed. This is a historical
 exposure table, not a claim about a current public deployment.
 
 `npm run dev` and `npm start` bind `127.0.0.1` for this reason. A container
@@ -45,9 +44,9 @@ question or send the canvas to the configured Kev endpoint.
 Deploy the preview only after all of these are true:
 
 - Set `OMNI_PUBLIC_DEMO=1` and `NEXT_PUBLIC_OMNI_PUBLIC_DEMO=1`. Verify
-  `/api/llm` and `/api/data` return 503, and both inference ledger routes
+  `/api/llm` returns 503, and both inference ledger routes
   report `configured:false` on the deployed host. Do not set `DATABASE_URL`,
-  Anthropic/Google keys, or keyed data provider keys on the public Worker.
+  or Anthropic/Google keys on the public Worker.
 - If enabling Kev persona suggestions, keep `DECISION_PROVIDER=kev` and
   `NEXT_PUBLIC_DECISION_PROVIDER=kev`. After authorizing question transmission
   to the selected Kev host, set `OMNI_KEV_ENABLED=1` and
@@ -67,8 +66,8 @@ Deploy the preview only after all of these are true:
   is not a Cloudflare deployment.
 
 This preview does not satisfy the controls for the full app. Keep the private
-deployment requirements below for any deployment that enables paid LLMs,
-keyed data, or the inference ledger.
+deployment requirements below for any deployment that enables paid LLMs
+or the inference ledger.
 
 ## Before the full app is publicly accessible
 
@@ -90,7 +89,7 @@ acquisition flow yet, so a real issuer and client integration remain deployment
 prerequisites.
 
 Hosted identity protects `POST /api/llm`, inference history, and lineage. It
-does not make unrelated `/api/data` routes production-ready. Local use needs no
+does not make other routes production-ready. Local use needs no
 account and keeps the canvas available offline. Local `npm run dev` and
 `npm start` bind to `127.0.0.1`; container listeners must remain private unless
 all other API surfaces are separately protected.
@@ -114,7 +113,7 @@ and no-database inference behavior.
 
 ## Remaining before any public URL
 
-- [ ] Protect `/`, `/api/data`, and any other hosted surface; enforce abuse and
+- [ ] Protect `/` and any other hosted surface; enforce abuse and
       paid-call limits by authenticated owner. These routes have not been
       verified as covered by the new identity boundary.
 - [ ] Configure a real OIDC issuer/audience and add browser sign-in/token
