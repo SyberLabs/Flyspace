@@ -40,7 +40,14 @@ a server on the host's `trustedEffectHints` list, and the same holds for an
 async runtime), the approval from the
 effect, and the credential slot from the destination. It seals provenance
 (provider, external id, source locator and revision, discovery and admission
-time, schema digest) into the digest, then calls `installProposal`. Admission
+time, schema digest) into the digest, then calls `installProposal`.
+`providers/maxunProvider.ts` is a `web_data` provider: a scrape robot becomes
+`{ markdown: string }`, an extract robot becomes an object of its declared
+text fields, and a robot with no declared fields is reported, not admitted as
+`any`. Its proposals use the async `maxun` runtime (`providers/maxunRuntime.ts`,
+Maxun's REST start and run lookup) with the API key in the `x-api-key` slot.
+`providers/maxun.evaluation.ts` records that no live Maxun run was performed.
+Admission
 does not place blocks or wires. The OpenAPI install panel still calls
 `compileOpenApi` directly.
 

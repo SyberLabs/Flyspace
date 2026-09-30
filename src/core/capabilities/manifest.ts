@@ -11,7 +11,7 @@ export const CAPABILITY_MANIFEST_VERSION = 1 as const;
 
 export type CapabilityEffect = 'read' | 'compute' | 'write' | 'destructive';
 export type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
-export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring';
+export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring' | 'web_data';
 export type CapabilityInvocation = 'auto' | 'manual';
 export type CapabilityTrigger =
     | { kind: 'manual' }
@@ -122,7 +122,7 @@ const APPROVALS: CapabilityApproval[] = ['auto', 'pending', 'approved', 'denied'
 const METHODS: HttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const LOCATIONS: InputLocation[] = ['path', 'query', 'header', 'body', 'argument'];
 const EFFECT_SOURCES: EffectSource[] = ['method', 'extension', 'annotation', 'declared'];
-const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring'];
+const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring', 'web_data'];
 
 const PROVIDER_KINDS: CapabilityProviderKind[] = ['openapi', 'mcp', 'managed_integration', 'web_data', 'manual'];
 

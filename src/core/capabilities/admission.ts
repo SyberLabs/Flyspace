@@ -60,7 +60,8 @@ const EFFECTS: CapabilityEffect[] = ['read', 'compute', 'write', 'destructive'];
 const SOURCE_KIND_FOR: Partial<Record<CapabilityProviderKind, CapabilitySourceKind>> = {
     openapi: 'openapi',
     mcp: 'mcp',
-    manual: 'bring'
+    manual: 'bring',
+    web_data: 'web_data'
 };
 
 /** Build the manifest a proposal would become. Nothing is installed. */
