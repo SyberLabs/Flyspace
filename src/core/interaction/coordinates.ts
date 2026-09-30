@@ -28,14 +28,3 @@ export function cameraNormalizedToCanvas(camera: FramedPoint, viewport: Viewport
         camera.z
     );
 }
-
-export function canvasToViewport(canvasPoint: FramedPoint, viewport: Viewport): FramedPoint {
-    if (canvasPoint.frame !== 'canvas') {
-        throw new Error(`Expected canvas, received ${canvasPoint.frame}`);
-    }
-    return point(
-        'viewport_px',
-        canvasPoint.x * viewport.zoom + viewport.panX,
-        canvasPoint.y * viewport.zoom + viewport.panY
-    );
-}

@@ -7,7 +7,7 @@ export const PINCH_ACTIVATE_DISTANCE = 0.08;
 export const PINCH_RELEASE_DISTANCE = 0.14;
 export const PINCH_STABLE_MS = 120;
 
-export type PinchPhase = 'inactive' | 'candidate' | 'active' | 'end' | 'cancel';
+type PinchPhase = 'inactive' | 'candidate' | 'active' | 'end' | 'cancel';
 
 export interface PinchMachine {
     phase: PinchPhase;
@@ -20,7 +20,7 @@ export function initialPinch(handId: string): PinchMachine {
     return { phase: 'inactive', startedAt: null, anchor: null, handId };
 }
 
-export function landmarkDistance(a: HandLandmark, b: HandLandmark): number {
+function landmarkDistance(a: HandLandmark, b: HandLandmark): number {
     const dz = (a.z ?? 0) - (b.z ?? 0);
     return Math.hypot(a.x - b.x, a.y - b.y, dz);
 }

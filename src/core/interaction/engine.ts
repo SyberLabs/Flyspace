@@ -45,7 +45,6 @@ export interface EngineSnapshot {
     preview: SpatialCommand | null;
     held: SpatialCommand | null;
     groups: Record<string, string[]>;
-    separated: Array<[string, string]>;
 }
 
 let sequence = 0;
@@ -64,9 +63,7 @@ export class InteractionEngine {
     private recentInteraction: string[] = [];
     private recentDiscourse: string[] = [];
     private points: Array<{ at: FramedPoint; timestampMs: number; modality: InputModality }> = [];
-    private region: FramedPoint[] | null = null;
     private groups = new Map<string, string[]>();
-    private separated: Array<[string, string]> = [];
     private pinches = new Map<string, PinchMachine>();
     private activeMove: { subject: string; origin: { x: number; y: number } } | null = null;
     private viewport: Viewport = { width: 1280, height: 720, panX: 0, panY: 0, zoom: 1 };
@@ -80,18 +77,13 @@ export class InteractionEngine {
         this.viewport = viewport;
     }
 
-    getSelection(): string[] {
-        return [...this.selection];
-    }
-
     snapshot(): EngineSnapshot {
         return {
             commands: this.commands.map(command => ({ ...command, subjects: [...command.subjects], evidence: [...command.evidence], modalities: [...command.modalities], summary: command.summary })),
             traces: this.traces.map(trace => ({ ...trace })),
             preview: this.preview ? { ...this.preview } : null,
             held: this.held ? { ...this.held } : null,
-            groups: Object.fromEntries(this.groups),
-            separated: this.separated.map(pair => [pair[0], pair[1]] as [string, string])
+            groups: Object.fromEntries(this.groups)
         };
     }
 
@@ -347,7 +339,6 @@ export class InteractionEngine {
             shellId: this.canvas.activeShell(),
             blocks: this.canvas.listBlocks(),
             point: intent.deixis === 'here' || intent.deixis === 'this' ? pointHit : undefined,
-            region: intent.deixis === 'these' ? this.region ?? undefined : undefined,
             selection: this.selection,
             recentInteraction: this.recentInteraction,
             recentDiscourse: this.recentDiscourse,
@@ -440,7 +431,6 @@ export class InteractionEngine {
     }
 
     private execute(proposal: MultimodalInteractionProposal, timestampMs: number, fromConfirm: boolean): SpatialCommand {
-        const shellId = this.canvas.activeShell();
         if (proposal.action === 'create' && proposal.create && proposal.geometry?.point) {
             const at = proposal.geometry.point;
             const id = this.canvas.add(proposal.create.blockId, proposal.create.displayName, at.x, at.y);
@@ -521,10 +511,7 @@ export class InteractionEngine {
         if (proposal.action === 'separate' && proposal.subjects.length >= 2) {
             const ids = proposal.subjects.map(subject => subject.id);
             for (let i = 0; i < ids.length; i++) {
-                for (let j = i + 1; j < ids.length; j++) {
-                    this.separated.push([ids[i], ids[j]]);
-                    markSeparated(ids[i], ids[j]);
-                }
+                for (let j = i + 1; j < ids.length; j++) markSeparated(ids[i], ids[j]);
             }
             return this.commitTracked(proposal, {
                 command: 'SEPARATE',
@@ -532,7 +519,6 @@ export class InteractionEngine {
                 modalities: ['speech'],
                 committedAt: timestampMs
             }, () => {
-                this.separated = this.separated.filter(pair => !ids.includes(pair[0]) || !ids.includes(pair[1]));
                 for (let i = 0; i < ids.length; i++) {
                     for (let j = i + 1; j < ids.length; j++) clearSeparated(ids[i], ids[j]);
                 }
@@ -580,7 +566,6 @@ export class InteractionEngine {
             });
         }
 
-        void shellId;
         return this.refuse(proposal, 'unsupported');
     }
 
@@ -679,9 +664,5 @@ export class InteractionEngine {
     notePoint(at: FramedPoint, timestampMs: number, modality: InputModality = 'pointer'): void {
         if (at.frame !== 'canvas') throw new Error(`Points recorded for fusion must be canvas coordinates, received ${at.frame}`);
         this.points.push({ at, timestampMs, modality });
-    }
-
-    noteRegion(polygon: FramedPoint[]): void {
-        this.region = polygon;
     }
 }
