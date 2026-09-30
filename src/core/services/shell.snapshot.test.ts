@@ -106,11 +106,11 @@ function wire(id: string, from: string, to: string, shellId: string): DataWire {
     } as unknown as DataWire;
 }
 
-function mkScoped(id: string, shellId: string): BlockInstance {
+function mkScoped(id: string, shellId: string, status: BlockInstance['status'] = 'connected'): BlockInstance {
     return {
         instance_id: id,
         schema: { block_id: 'polymarket', display_name: id, category: 'truth' },
-        status: 'connected',
+        status,
         last_updated: null,
         data: null,
         position: { x: 0, y: 0 },
@@ -133,23 +133,8 @@ describe('captureShellSnapshot', () => {
     });
 
     it('counts blocks and aggregates stats from the block store', () => {
-        const mkBlock = (id: string, status: BlockInstance['status']): BlockInstance => ({
-            instance_id: id,
-            schema: {
-                block_id: 'polymarket',
-                display_name: 'Polymarket',
-                category: 'truth'
-            } as unknown as BlockInstance['schema'],
-            status,
-            last_updated: null,
-            data: null,
-            position: { x: 0, y: 0 },
-            dimensions: { width: 320, height: 240 },
-            shellId: 'root'
-        });
-
         useBlockStore.setState({
-            blocks: [mkBlock('a', 'connected'), mkBlock('b', 'error')],
+            blocks: [mkScoped('a', 'root'), mkScoped('b', 'root', 'error')],
             activeShellId: 'root'
         });
         useWireStore.setState({ wires: [wire('w1', 'a', 'b', 'root')] });
