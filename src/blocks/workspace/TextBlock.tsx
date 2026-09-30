@@ -124,5 +124,3 @@ Use # ## ### for headings."
         </div>
     );
 }
-
-export default TextBlockView;
