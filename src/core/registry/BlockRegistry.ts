@@ -375,49 +375,6 @@ blockRegistry.register({
     description: 'Syntax-highlighted code display'
 });
 
-// Chat Block
-blockRegistry.register({
-    block_id: 'mind_chat',
-    display_name: 'Mind Chat',
-    category: 'workspace',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
-    semantic_tags: ['chat', 'conversation', 'ai', 'assistant', 'mind'],
-    wiring_logic: 'map_to_active_persona',
-    ports: [
-        createAnyInputPort('in', 'Context Input'),
-        createTextOutputPort('out', 'Conversation')
-    ],
-    icon: 'MessageSquare',
-    description: 'Direct conversation with the Mind'
-});
-
-// Media Block
-blockRegistry.register({
-    block_id: 'media_gallery',
-    display_name: 'Media',
-    category: 'workspace',
-    data_type: 'media',
-    refresh_rate: 'manual',
-    semantic_tags: ['images', 'video', 'gallery', 'media', 'files'],
-    wiring_logic: 'map_to_analyst_agent',
-    icon: 'Image',
-    description: 'Image and video gallery'
-});
-
-// Embed Block
-blockRegistry.register({
-    block_id: 'web_embed',
-    display_name: 'Web Embed',
-    category: 'workspace',
-    data_type: 'embed',
-    refresh_rate: 'manual',
-    semantic_tags: ['embed', 'iframe', 'website', 'external', 'browser'],
-    wiring_logic: 'map_to_analyst_agent',
-    icon: 'Globe',
-    description: 'Embed external web content'
-});
-
 // ============================================
 // PERSONA BLOCKS
 // ============================================

@@ -22,13 +22,7 @@ import { useBlsBlock } from '@/blocks/truth/BlsBlock';
 import { useWorldBankBlock } from '@/blocks/truth/WorldBankBlock';
 import { useOmniFeedBlock } from '@/blocks/truth/OmniFeedBlock';
 import { API_CATALOG } from '@/core/schemas/api.schema';
-import {
-    TextBlockView,
-    CodeBlockView,
-    ChatBlockView,
-    MediaBlockView,
-    EmbedBlockView
-} from '@/blocks/workspace';
+import { TextBlockView, CodeBlockView } from '@/blocks/workspace';
 import { PersonaBlockView } from '@/blocks/persona';
 import { MemoryBlockView } from '@/components/blocks/MemoryBlock';
 import { CapabilityBlockView } from '@/blocks/capability/CapabilityBlock';
@@ -480,9 +474,6 @@ export const BlockViews: Record<string, React.ComponentType<{ instanceId: string
     // Workspace Blocks
     'text_note': TextBlockView,
     'code_sandbox': CodeBlockView,
-    'mind_chat': ChatBlockView,
-    'media_gallery': MediaBlockView,
-    'web_embed': EmbedBlockView,
 
     // Persona Blocks
     'persona_analyst': PersonaBlockView,
