@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { browserDictation, browserVoice, createPushToTalk, type DictationSession, type Voice } from '@/core/interaction/pushToTalk';
+import { browserSpeechAdapter } from '@/core/interaction/browserSpeechAdapter';
 import { spatialSession } from '@/core/interaction/session';
+import { browserSpeechFeedback, emitFeedback, silenceFeedback, type SpeechFeedbackAdapter } from '@/core/interaction/speechFeedback';
+import { createSpeechInput, type SpeechOutcome } from '@/core/interaction/speechInput';
+import type { SpeechAdapter, SpeechCapture } from '@/core/interaction/speechObservation';
 import { useUIStore } from '@/core/stores';
 
 function usesSpace(target: EventTarget | null): boolean {
@@ -17,60 +20,77 @@ function usesSpace(target: EventTarget | null): boolean {
     return role === 'button' || role === 'link' || role === 'textbox' || role === 'combobox' || role === 'listbox' || role === 'menuitem';
 }
 
+function providerLabel(capture: SpeechCapture): string {
+    const name = capture.provider.providerName ?? capture.provider.adapterId;
+    if (capture.transport === 'remote') return `${name} (remote)`;
+    if (capture.transport === 'browser') return `${name} (browser)`;
+    return name;
+}
+
+function outcomeText(outcome: SpeechOutcome): string {
+    if (outcome.kind === 'error') return outcome.message;
+    if (outcome.kind === 'silence') return "I didn't hear anything.";
+    if (outcome.kind === 'stopped') return 'Stopped listening.';
+    return outcome.command.summary ?? 'Done.';
+}
+
 export function VoiceControl({
-    listen = browserDictation,
-    voice = browserVoice()
+    adapter,
+    feedback
 }: {
-    listen?: () => DictationSession;
-    voice?: Voice;
+    adapter?: SpeechAdapter;
+    /** Spoken replies. `null` turns them off; text replies stay. */
+    feedback?: SpeechFeedbackAdapter | null;
 }) {
-    const talk = useRef(createPushToTalk(listen));
-    const voiceRef = useRef(voice);
+    const [provider, setProvider] = useState<string | null>(null);
+    const [input] = useState(() => createSpeechInput({
+        adapter: adapter ?? browserSpeechAdapter(),
+        authority: spatialSession,
+        onListening: capture => setProvider(providerLabel(capture))
+    }));
+    const feedbackRef = useRef<SpeechFeedbackAdapter | null>(feedback === undefined ? browserSpeechFeedback() : feedback);
     const pressRef = useRef<() => void>(() => undefined);
     const releaseRef = useRef<() => Promise<void>>(async () => undefined);
     const [held, setHeld] = useState(false);
+    const [spokenReplies, setSpokenReplies] = useState(true);
+    const spokenRef = useRef(spokenReplies);
     const [reply, setReply] = useState('Hold to talk. Click a block, then speak.');
 
     useEffect(() => {
-        voiceRef.current = voice;
-    }, [voice]);
+        if (feedback !== undefined) feedbackRef.current = feedback;
+    }, [feedback]);
+
+    useEffect(() => {
+        spokenRef.current = spokenReplies;
+    }, [spokenReplies]);
 
     useEffect(() => () => {
-        talk.current.cancel();
-    }, []);
+        input.cancel();
+    }, [input]);
 
     function say(text: string) {
         setReply(text);
-        voiceRef.current.cancel();
-        voiceRef.current.speak(text);
+        if (spokenRef.current) emitFeedback(feedbackRef.current, text);
     }
 
     function press() {
-        voiceRef.current.cancel();
-        const failed = talk.current.press();
-        if (failed?.error) {
-            setHeld(false);
-            say(failed.error);
-            return;
-        }
+        silenceFeedback(feedbackRef.current);
         setHeld(true);
         setReply('Listening');
+        void input.press().then(failed => {
+            if (!failed) return;
+            setHeld(false);
+            setProvider(null);
+            say(outcomeText(failed));
+        });
     }
 
     async function release() {
-        if (!talk.current.held) return;
+        if (!input.held) return;
         setHeld(false);
-        const heard = await talk.current.release();
-        if (heard.error) {
-            say(heard.error);
-            return;
-        }
-        if (!heard.heard) {
-            say("I didn't hear anything.");
-            return;
-        }
-        const command = spatialSession.speak(heard.transcript);
-        say(command.summary ?? 'Done.');
+        const outcome = await input.release();
+        setProvider(null);
+        if (outcome) say(outcomeText(outcome));
     }
 
     useEffect(() => {
@@ -87,7 +107,7 @@ export function VoiceControl({
             pressRef.current();
         };
         const up = (event: KeyboardEvent) => {
-            if (event.code !== 'Space' || !talk.current.held) return;
+            if (event.code !== 'Space' || !input.held) return;
             event.preventDefault();
             void releaseRef.current();
         };
@@ -105,11 +125,14 @@ export function VoiceControl({
             window.removeEventListener('blur', interrupt);
             document.removeEventListener('visibilitychange', hidden);
         };
-    }, []);
+    }, [input]);
 
     return (
         <div className="absolute bottom-6 left-4 z-40 w-64 rounded-2xl border border-[var(--citadel-border)] bg-[var(--citadel-surface)]/95 p-3 shadow-xl backdrop-blur-md">
             <p className="mb-2 min-h-8 text-xs text-[var(--text-secondary)]" role="status">{reply}</p>
+            {held && provider && (
+                <p className="mb-2 text-[10px] text-[var(--text-muted)]" aria-label="Speech provider">{provider}</p>
+            )}
             <div className="flex items-center gap-2">
                 <button
                     type="button"
@@ -142,6 +165,18 @@ export function VoiceControl({
                     className="rounded-full bg-[var(--citadel-primary)] px-3 py-1.5 text-xs font-medium text-white"
                 >
                     {held ? 'Listening' : 'Hold to talk'}
+                </button>
+                <button
+                    type="button"
+                    aria-label="Spoken replies"
+                    aria-pressed={spokenReplies}
+                    onClick={() => {
+                        if (spokenReplies) silenceFeedback(feedbackRef.current);
+                        setSpokenReplies(!spokenReplies);
+                    }}
+                    className="rounded-full border border-[var(--citadel-border)] px-2 py-1 text-[10px] text-[var(--text-secondary)]"
+                >
+                    {spokenReplies ? 'Replies on' : 'Replies off'}
                 </button>
             </div>
         </div>

@@ -1,196 +1,146 @@
-export interface DictationSession {
-    start(): void;
-    stop(): Promise<string>;
-    abort(): void;
-    readonly error?: string;
-}
+// One press is one speech session. Capture only: no parsing, no commands.
 
-export interface Voice {
-    speak(text: string): void;
-    cancel(): void;
-}
+import {
+    createSpeechSessionId,
+    normalizeSpeechError,
+    type SpeechAdapter,
+    type SpeechAdapterError,
+    type SpeechCapture,
+    type SpeechObservationV1
+} from './speechObservation';
 
-interface Heard {
+export interface Heard {
     transcript: string;
     heard: boolean;
-    error?: string;
+    error?: SpeechAdapterError;
+    /** The one final observation for this session, when there was speech. */
+    observation?: SpeechObservationV1;
+}
+
+export interface PushToTalkTimings {
+    sessionId: string;
+    captureRequestedAtMs: number;
+    microphoneActiveAtMs?: number;
+    firstDeltaAtMs?: number;
+    stopRequestedAtMs?: number;
+    finalAtMs?: number;
+}
+
+export interface PushToTalkOptions {
+    locale?: string;
+    newSessionId?: () => string;
+    now?: () => number;
+    /** Interim observations for display only. They never reach the engine. */
+    onPartial?: (observation: SpeechObservationV1) => void;
+    /** The microphone is live on this capture. */
+    onListening?: (capture: SpeechCapture) => void;
 }
 
 export interface PushToTalk {
     readonly held: boolean;
-    press(): Heard | undefined;
-    release(): Promise<Heard>;
+    readonly adapterId: string;
+    /** Resolves with an error when capture could not start, otherwise undefined. */
+    press(): Promise<Heard | undefined>;
+    release(): Promise<Heard & { timings?: PushToTalkTimings }>;
     /** Drop the microphone without turning the audio into a command. */
     cancel(): void;
 }
 
-export function createPushToTalk(listen: () => DictationSession): PushToTalk {
-    let session: DictationSession | null = null;
-    let held = false;
+interface Pending {
+    sessionId: string;
+    abort: AbortController;
+    capture: Promise<SpeechCapture>;
+    timings: PushToTalkTimings;
+}
+
+export function createPushToTalk(adapter: SpeechAdapter, options: PushToTalkOptions = {}): PushToTalk {
+    const now = options.now ?? Date.now;
+    const newSessionId = options.newSessionId ?? createSpeechSessionId;
+    let current: Pending | null = null;
+
+    function failed(error: unknown): Heard {
+        return { transcript: '', heard: false, error: normalizeSpeechError(error) };
+    }
 
     return {
         get held() {
-            return held;
+            return current !== null;
+        },
+        get adapterId() {
+            return adapter.id;
         },
         press() {
-            if (held) return undefined;
-            const next = listen();
+            if (current) return Promise.resolve(undefined);
+            const sessionId = newSessionId();
+            const abort = new AbortController();
+            const timings: PushToTalkTimings = { sessionId, captureRequestedAtMs: now() };
+            let capture: Promise<SpeechCapture>;
             try {
-                next.start();
+                capture = adapter.start({
+                    sessionId,
+                    locale: options.locale,
+                    signal: abort.signal,
+                    onObservation(observation) {
+                        if (observation.sessionId !== sessionId || abort.signal.aborted) return;
+                        if (observation.final) return;
+                        timings.firstDeltaAtMs ??= now();
+                        options.onPartial?.(observation);
+                    }
+                });
             } catch (error) {
-                held = false;
-                session = null;
-                return {
-                    transcript: '',
-                    heard: false,
-                    error: error instanceof Error ? error.message : 'Speech recognition failed.'
-                };
+                capture = Promise.reject(error);
             }
-            session = next;
-            held = true;
-            return undefined;
+            const entry: Pending = { sessionId, abort, capture, timings };
+            current = entry;
+            return capture.then(
+                started => {
+                    timings.microphoneActiveAtMs = now();
+                    if (current === entry) options.onListening?.(started);
+                    return undefined;
+                },
+                error => {
+                    // Release or cancel already owns this session; they report its outcome.
+                    if (current !== entry) return undefined;
+                    current = null;
+                    return failed(error);
+                }
+            );
         },
         async release() {
-            if (!held || !session) return { transcript: '', heard: false };
-            held = false;
-            const current = session;
-            session = null;
-            const transcript = (await current.stop()).trim();
-            if (!transcript && current.error) {
-                return { transcript: '', heard: false, error: current.error };
+            const entry = current;
+            if (!entry) return { transcript: '', heard: false };
+            current = null;
+            let capture: SpeechCapture;
+            try {
+                capture = await entry.capture;
+            } catch (error) {
+                return failed(error);
             }
-            return { transcript, heard: transcript.length > 0 };
+            entry.timings.stopRequestedAtMs = now();
+            let final: SpeechObservationV1 | null;
+            try {
+                final = await capture.stop();
+            } catch (error) {
+                return { ...failed(error), timings: entry.timings };
+            }
+            if (!final || !final.final || final.sessionId !== entry.sessionId) {
+                return { transcript: '', heard: false, timings: entry.timings };
+            }
+            entry.timings.finalAtMs = now();
+            const transcript = final.transcript.trim();
+            return {
+                transcript,
+                heard: transcript.length > 0,
+                observation: transcript ? final : undefined,
+                timings: entry.timings
+            };
         },
         cancel() {
-            held = false;
-            const current = session;
-            session = null;
-            current?.abort();
+            const entry = current;
+            current = null;
+            if (!entry) return;
+            entry.abort.abort();
+            void entry.capture.then(capture => capture.cancel(), () => undefined).catch(() => undefined);
         }
     };
-}
-
-interface RecognitionResultEvent {
-    results: ArrayLike<{
-        0: { transcript: string };
-        isFinal: boolean;
-        length: number;
-    }>;
-}
-
-export interface RecognitionLike {
-    continuous: boolean;
-    interimResults: boolean;
-    lang: string;
-    onresult: ((event: RecognitionResultEvent) => void) | null;
-    onerror: ((event: { error: string }) => void) | null;
-    onend: (() => void) | null;
-    start(): void;
-    stop(): void;
-    abort(): void;
-}
-
-const RECOGNITION_WAIT_MS = 2000;
-
-function recognitionFailure(code: string): string | null {
-    if (code === 'no-speech' || code === 'aborted') return null;
-    if (code === 'not-allowed' || code === 'service-not-allowed') return 'Microphone permission was refused.';
-    if (code === 'audio-capture') return 'No microphone is available.';
-    if (code === 'network') return 'Speech recognition needs a network connection.';
-    return 'Speech recognition failed.';
-}
-
-export function dictationFromRecognizer(create: () => RecognitionLike): DictationSession {
-    let recognizer: RecognitionLike | null = null;
-    let transcript = '';
-    let failure = '';
-    let finished: Promise<string> | null = null;
-    let finish: ((text: string) => void) | null = null;
-
-    return {
-        get error() {
-            return failure || undefined;
-        },
-        start() {
-            transcript = '';
-            failure = '';
-            finished = new Promise(resolve => {
-                finish = resolve;
-            });
-            recognizer = create();
-            recognizer.continuous = true;
-            recognizer.interimResults = true;
-            recognizer.lang = 'en-US';
-            recognizer.onresult = event => {
-                transcript = Array.from(event.results)
-                    .map(result => result[0]?.transcript ?? '')
-                    .join(' ')
-                    .trim();
-            };
-            recognizer.onerror = event => {
-                const message = recognitionFailure(event.error);
-                if (!message) return;
-                failure = message;
-                transcript = '';
-            };
-            recognizer.onend = () => finish?.(transcript);
-            recognizer.start();
-        },
-        stop() {
-            recognizer?.stop();
-            const pending = finished ?? Promise.resolve(transcript);
-            return new Promise(resolve => {
-                const timer = setTimeout(() => resolve(transcript), RECOGNITION_WAIT_MS);
-                pending.then(text => {
-                    clearTimeout(timer);
-                    resolve(text);
-                });
-            });
-        },
-        abort() {
-            recognizer?.abort();
-            finish?.(transcript);
-        }
-    };
-}
-
-export function browserDictation(): DictationSession {
-    const ctor = typeof window === 'undefined'
-        ? undefined
-        : window.SpeechRecognition ?? window.webkitSpeechRecognition;
-    if (!ctor) {
-        return {
-            start() {
-                throw new Error('This browser has no speech recognition.');
-            },
-            stop() {
-                return Promise.resolve('');
-            },
-            abort() {}
-        };
-    }
-    return dictationFromRecognizer(() => new ctor());
-}
-
-export function browserVoice(): Voice {
-    const synth = typeof window === 'undefined' ? undefined : window.speechSynthesis;
-    return {
-        speak(text: string) {
-            if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return;
-            synth.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            synth.speak(utterance);
-        },
-        cancel() {
-            synth?.cancel();
-        }
-    };
-}
-
-declare global {
-    interface Window {
-        SpeechRecognition?: new () => RecognitionLike;
-        webkitSpeechRecognition?: new () => RecognitionLike;
-    }
 }
