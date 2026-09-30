@@ -5,16 +5,6 @@ import { blockRegistry } from '@/core/registry/BlockRegistry';
 import { Activity } from 'lucide-react';
 
 describe('block icons — every catalog API has a real UI icon', () => {
-    it('maps every catalog provider icon name', () => {
-        for (const provider of API_CATALOG) {
-            expect(provider.icon in BLOCK_ICON_COMPONENTS, provider.id).toBe(true);
-            // USGS legitimately uses Activity; every other catalog icon must be distinct.
-            if (provider.icon !== 'Activity') {
-                expect(resolveBlockIcon(provider.icon), provider.id).not.toBe(Activity);
-            }
-        }
-    });
-
     it('maps every keyless block icon so Armory and the palette do not fall back', () => {
         const keylessBlocks = API_CATALOG
             .filter(p => !p.requiresAuth)

@@ -11,7 +11,6 @@ import {
     Settings,
     Wifi,
     Database,
-    Key,
     MousePointer2,
     Highlighter,
     ChevronRight,
@@ -19,7 +18,6 @@ import {
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useShellStore, useSettingsStore, useUIStore, useToolStore } from '@/core/stores';
-import { useApiStore } from '@/core/stores/apiStore';
 import { LlmStatusPill } from './LlmStatusPill';
 import { cn } from '@/lib/utils';
 import { useClientMounted } from '@/core/hooks';
@@ -27,14 +25,12 @@ import { Sigil } from './brand/Sigil';
 
 export function TopBar({
     onOpenSkin,
-    onOpenApi,
     onOpenSettings,
     onOpenShells,
     children,
     customRight
 }: {
     onOpenSkin?: () => void;
-    onOpenApi?: () => void;
     onOpenSettings?: () => void;
     onOpenShells?: () => void;
     children?: React.ReactNode;
@@ -46,7 +42,6 @@ export function TopBar({
     const { useMockData, toggleMockData } = useSettingsStore();
     const { openCommandPalette } = useUIStore();
     const { activeTool, setTool } = useToolStore();
-    const { installedApis } = useApiStore();
 
     const hasMounted = useClientMounted();
 
@@ -232,22 +227,6 @@ export function TopBar({
                             <Database className="w-3.5 h-3.5" />
                         ) : (
                             <Wifi className="w-3.5 h-3.5" />
-                        )}
-                    </button>
-
-                    <div className="w-px h-4 bg-[var(--citadel-border)]" />
-
-                    {/* API Dashboard */}
-                    <button
-                        onClick={onOpenApi}
-                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-full text-xs text-[var(--citadel-primary)] hover:bg-[var(--citadel-primary)]/10 transition-colors"
-                        title="API Dashboard"
-                    >
-                        <Key className="w-3.5 h-3.5" />
-                        {hasMounted && installedApis.length > 0 && (
-                            <span className="px-1.5 py-0.5 text-xs font-mono bg-[var(--citadel-primary)]/15 rounded-full ml-1">
-                                {installedApis.length}
-                            </span>
                         )}
                     </button>
 

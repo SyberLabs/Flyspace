@@ -1,6 +1,6 @@
-// Shared Lucide map for Armory, canvas cards, command palette, and the
-// API Command Center. A provider that is on the canvas but missing here
-// falls back to Activity and looks unsupported.
+// Shared Lucide map for Armory, canvas cards, and command palette. A block
+// that is on the canvas but missing here falls back to Activity and looks
+// unsupported.
 
 import { createElement } from 'react';
 import {

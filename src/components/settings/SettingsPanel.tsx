@@ -249,7 +249,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
                                 <div className="space-y-3 p-4 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
                                     <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                                        These {getKeylessApis().length} connectors are installed by default and work with nothing in{' '}
+                                        These {getKeylessApis().length} connectors work with nothing in{' '}
                                         <code className="px-1 py-0.5 rounded bg-[var(--citadel-bg)] text-[var(--text-primary)]">.env</code>.
                                         Drag them from the Armory, or spawn World Watch / Investor / Researcher.
                                     </p>

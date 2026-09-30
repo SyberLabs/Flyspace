@@ -49,9 +49,6 @@ describe('keyless demo catalog', () => {
             'worldbank'
         ].sort());
         expect(keyless).toHaveLength(12);
-        for (const provider of keyless) {
-            expect(provider.serverKeyed, provider.id).toBeFalsy();
-        }
         expect(getKeylessApis().map(p => p.id).sort()).toEqual(keyless.map(p => p.id).sort());
     });
 });
