@@ -12,4 +12,3 @@ export { useUIStore } from './uiStore';
 export { useMindStore } from './mindStore';
 export { useWireStore } from './wireStore';
 export { useToolStore } from './toolStore';
-export type { ToolType, SelectionData } from './toolStore';

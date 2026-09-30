@@ -7,7 +7,7 @@
 
 import { useState, useCallback } from 'react';
 import { useMindStore } from '@/core/stores';
-import { getMindEngine } from '@/core/services';
+import { getMindEngine } from '@/core/services/mind.engine';
 import { LLMProvider, PersonaConfig, ContextPool, ContextEntry } from '@/core/schemas/mind.schema';
 import { MemoryConfirmModal } from './MemoryConfirmModal';
 import { ThinkResultModal } from './ThinkResultModal';

@@ -400,52 +400,10 @@ export function aggregateWireContext(targetBlockId: string): {
 }
 
 /**
- * Update wire status based on data availability
- */
-export function updateWireStatuses() {
-    const { wires, updateWireStatus } = useWireStore.getState();
-    const { getBlock } = useBlockStore.getState();
-
-    wires.forEach(wire => {
-        const sourceBlock = getBlock(wire.sourceBlockId);
-        const targetBlock = getBlock(wire.targetBlockId);
-
-        if (!sourceBlock || !targetBlock) {
-            updateWireStatus(wire.id, 'disconnected', 'Block not found');
-            return;
-        }
-
-        if (sourceBlock.status === 'error') {
-            updateWireStatus(wire.id, 'error', 'Source block has error');
-            return;
-        }
-
-        if (!sourceBlock.data) {
-            updateWireStatus(wire.id, 'stale', 'No data available');
-            return;
-        }
-
-        // Check if data is stale (no update in 5 minutes)
-        if (sourceBlock.last_updated) {
-            const age = Date.now() - sourceBlock.last_updated;
-            if (age > 5 * 60 * 1000) {
-                updateWireStatus(wire.id, 'stale', 'Data is stale');
-                return;
-            }
-        }
-
-        // All good
-        if (wire.status !== 'active') {
-            updateWireStatus(wire.id, 'active');
-        }
-    });
-}
-
-/**
  * WireService class for managing wire lifecycle
  * Simplified: No polling, context updates are on-demand only
  */
-export class WireService {
+class WireService {
     /**
      * Create a wire connection
      */
@@ -459,20 +417,6 @@ export class WireService {
         this.updateTargetContext(targetBlockId);
 
         return wireId;
-    }
-
-    /**
-     * Remove a wire connection
-     */
-    removeWire(wireId: string) {
-        const wire = useWireStore.getState().getWire(wireId);
-        if (!wire) return;
-
-        const targetBlockId = wire.targetBlockId;
-        useWireStore.getState().removeWire(wireId);
-
-        // Update target context after removal
-        this.updateTargetContext(targetBlockId);
     }
 
     /**
@@ -504,18 +448,7 @@ export class WireService {
             this.updateTargetContext(targetId);
         });
     }
-
-    /**
-     * Get aggregated context for a block (for AI prompts)
-     */
-    getContextForBlock(blockId: string): string {
-        const { context } = aggregateWireContext(blockId);
-        return context;
-    }
 }
 
 // Singleton instance
 export const wireService = new WireService();
-
-export default wireService;
-

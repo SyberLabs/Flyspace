@@ -33,7 +33,6 @@ export interface ShellTemplate {
     id: string;
     name: string;
     description: string;
-    icon?: string;
     tags: string[];
     persona: PersonaType;
     aesthetic: AestheticTheme;
@@ -53,7 +52,6 @@ const INVESTOR_SHELL: ShellTemplate = {
     description:
         'Prediction markets, crypto, US GDP growth, and tech signals wired into an ' +
         'Analyst and Strategist — a ready-made environment that works without API keys.',
-    icon: 'TrendingUp',
     tags: ['finance', 'markets', 'macro'],
     persona: 'analyst',
     aesthetic: 'command',
@@ -89,7 +87,6 @@ const RESEARCHER_SHELL: ShellTemplate = {
     description:
         'OpenAlex papers on foundation models, Hacker News, and live prediction markets ' +
         'wired into a Researcher with Memory — works without API keys.',
-    icon: 'BookOpen',
     tags: ['research', 'papers', 'tech'],
     persona: 'researcher',
     aesthetic: 'journal',
@@ -120,7 +117,6 @@ const WORLD_WATCH_SHELL: ShellTemplate = {
     description:
         'Live weather, earthquakes, Wikipedia, ECB FX, and GitHub wired into an ' +
         'Analyst — every block works with nothing in .env.',
-    icon: 'Globe',
     tags: ['demo', 'live', 'keyless'],
     persona: 'analyst',
     aesthetic: 'command',
