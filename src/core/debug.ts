@@ -12,8 +12,3 @@ const DEBUG_ENABLED =
 export const debug = DEBUG_ENABLED
     ? (...args: unknown[]) => console.log(...args)
     : () => {};
-
-/** Opt-in warning (still gated; use console.warn directly for real warnings). */
-export const debugWarn = DEBUG_ENABLED
-    ? (...args: unknown[]) => console.warn(...args)
-    : () => {};
