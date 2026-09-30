@@ -53,10 +53,11 @@ export class MindEngine {
             }
 
             // Snapshot of what the canvas shows: wired or pinned blocks of the
-            // active shell, nothing else.
+            // active shell, nothing else. Nothing in scope is only a refusal
+            // for a context-only Think; an explicit question (Quick Ask) runs.
             const snapshot = captureShellSnapshot();
 
-            if (snapshot.totalBlocks === 0) {
+            if (snapshot.totalBlocks === 0 && !question?.trim()) {
                 mindStore.setStatus('ready');
                 return { success: false, error: NO_SCOPE_ERROR };
             }

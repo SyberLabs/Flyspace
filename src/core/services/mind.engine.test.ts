@@ -44,12 +44,23 @@ beforeEach(() => {
 });
 
 describe('MindEngine.think', () => {
-    it('refuses to think on an empty canvas', async () => {
-        const engine = new MindEngine();
-        const result = await engine.think();
+    it.each([undefined, '   '])('refuses a context-only Think (%j) with nothing wired or pinned', async (question) => {
+        const result = await new MindEngine().think(question);
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/wired or pinned/);
         expect(runTurn).not.toHaveBeenCalled();
+        expect(useMindStore.getState().status).toBe('ready');
+    });
+
+    it('answers an explicit question with nothing wired or pinned (Quick Ask)', async () => {
+        vi.mocked(runTurn).mockResolvedValue({ success: true, content: 'A market prices an event.', tokensUsed: 1 });
+
+        const result = await new MindEngine().think('User asks: what is a prediction market?');
+
+        expect(result).toMatchObject({ success: true, response: 'A market prices an event.' });
+        const prompt = sentPrompt();
+        expect(prompt).toContain('what is a prediction market?');
+        expect(prompt).toContain('Blocks in scope: 0');
         expect(useMindStore.getState().status).toBe('ready');
     });
 
