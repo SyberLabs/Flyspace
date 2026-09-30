@@ -5,7 +5,6 @@
 
 import { useBlockStore } from '../stores';
 import { useWireStore } from '../stores/wireStore';
-import { explainPortWire } from '../capabilities/compatibility';
 
 import { WireFilters, ContextSource } from '../schemas/wire.schema';
 import { PolymarketMarket, NewsArticle } from '../schemas/block.schema';
@@ -408,10 +407,8 @@ class WireService {
      * Create a wire connection
      */
     createWire(sourceBlockId: string, targetBlockId: string, filters?: Partial<WireFilters>): string {
-        const refusal = explainPortWire(sourceBlockId, targetBlockId);
-        if (refusal) return '';
-
         const wireId = useWireStore.getState().addWire(sourceBlockId, targetBlockId, filters);
+        if (!wireId) return '';
 
         // Immediate context update for target
         this.updateTargetContext(targetBlockId);
