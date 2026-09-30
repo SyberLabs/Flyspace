@@ -164,8 +164,7 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
                     spatialSession.select([]);
                     spatialSession.notePoint(
                         point('canvas', event.clientX - rect.left, event.clientY - rect.top),
-                        Date.now(),
-                        'pointer'
+                        Date.now()
                     );
                 }}
             >
@@ -184,8 +183,7 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
                             spatialSession.select([block.instance_id]);
                             spatialSession.notePoint(
                                 point('canvas', block.position.x + 8, block.position.y + 8),
-                                Date.now(),
-                                'pointer'
+                                Date.now()
                             );
                         }}
                         onClose={() => removeBlock(block.instance_id)}
