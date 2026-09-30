@@ -35,6 +35,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { crystallize } from '@/core/services/crystallize.service';
 import { cn } from '@/lib/utils';
+import { LineageToggle } from './RunLineage';
 
 interface PersonaBlockViewProps {
     instanceId: string;
@@ -251,6 +252,9 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                                     message={msg}
                                     show={msg.role === 'assistant'}
                                 />
+                                {msg.role === 'assistant' && msg.runId && (
+                                    <LineageToggle runId={msg.runId} />
+                                )}
                                 {msg.stopped && (
                                     <p className="mt-1 text-[10px] text-[var(--text-muted)]">Stopped</p>
                                 )}
