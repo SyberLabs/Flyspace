@@ -25,32 +25,21 @@ AI personas and seeing which sources informed each response.
   (`aggregateWireContext`) ignores ports and projections; projections apply
   only in capability execution (`wireInputs.ts`).
 - **Mind-panel Think sees what the canvas shows.** `captureShellSnapshot`
-  (used by `think()` and `thinkStream()`) keeps only blocks of the active shell
-  that have an active wire in or out, or are pinned, plus only the wires between
-  them and the pins on them. It leaves out `useMindShellSync`'s awareness
-  entries, which aggregate every block of a type across all shells and are still
-  written to the shared observations pool and shown in the Mind panel. Earlier
-  Think answers stay in the observations pool and are fed back as recent
-  observations; they were produced under the old, wider scope until they age out
-  of the last-20 window.
+  (used by `think()`) keeps only blocks of the active shell that have a wire in
+  or out, or are pinned, plus only the wires between them and the pins on them.
+  It does not read the observations pool, so neither earlier answers nor
+  `useMindShellSync`'s all-shell awareness entries reach the prompt. With
+  nothing in scope, Think is refused unless the caller passes a question
+  (Quick Ask).
 
 ## 3. Remaining work
 
-1. ~~**Keep provenance honest.**~~ Done 2026-09-29. `extractBlockData` returns
-   `null` for empty items, empty Memory pools, empty markets/articles (including
-   after a time-window filter) and blank text, so `aggregateWireContext` no
-   longer cites a source that carried nothing. The wire's stale/empty status is
-   still shown as status. See `FINDINGS.md`.
-2. ~~**Resolve Mind-panel scope.**~~ Done 2026-09-29. Think is kept and limited
-   to the active shell's wired or pinned blocks (see section 2). It is not
-   retired: pinning already exists as an explicit way to put a block in scope.
-   Not measured with users.
-3. **Fix the block accessibility tree.** A draggable BlockCard can be exposed as
+1. **Fix the block accessibility tree.** A draggable BlockCard can be exposed as
    a button around its own controls. Keep drag semantics on the handle and give
    nested controls independent names. See `FINDINGS.md`.
-4. **Expose recorded inference lineage.** The server can return the runs behind a
+2. **Expose recorded inference lineage.** The server can return the runs behind a
    persona answer; the canvas does not yet show that tree from a source chip.
-5. **Re-validate persisted wires on load.** Shell restore and templates
+3. **Re-validate persisted wires on load.** Shell restore and templates
    re-run only `admitConnection`, via `replaceWiresForShell`; they skip the
    `dataType` check in `evaluateWireAdmission`, and wires loaded from storage
    are not re-validated at all. A wire the live canvas would refuse can

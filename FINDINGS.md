@@ -7,17 +7,10 @@ Where: `src/components/blocks/BlockCard.tsx` (the `motion.div` is a dnd-kit drag
 Why it matters: keyboard and AT users get a giant button wrapping other buttons. The persistence e2e had to use `{ name: 'Apply', exact: true }` to escape it.
 What I would do: stop promoting the card itself to `role="button"` (dnd-kit `role` option / drag handle only), so inner controls keep unique names.
 
-## Empty OmniItem arrays are cited as grounding — fixed 2026-09-29
-Where: `src/core/services/wire.service.ts`. `extractBlockData` returned the string `'(No data)'` for an empty `items` array (and `'(No entries)'` for an empty Memory pool), and `aggregateWireContext` treats any returned string as a contributing source.
-Why it mattered: the invariant is that a source which carried no data is not grounding and must not be cited. A connected-but-empty block still got a provenance chip.
-What was done: `extractBlockData` now returns `null` when the extracted text is empty (empty `items`, empty Memory pool, empty `markets`/`articles` including after a time-window filter, an empty direct array, blank text), matching the persona-error path. The wire's stale/empty status is unchanged; it is status, not provenance. An old test that asserted an empty Memory block "IS cited" enshrined the bug and was reversed.
-Not covered: a block whose data is an empty object `{}` still goes through the generic JSON fallback and is cited as `{}`.
-
-## Mind panel Think still snapshots the whole shell — fixed 2026-09-29
-Where: `src/core/services/mind.engine.ts` `think()` / `thinkStream()` via `captureShellSnapshot()`.
-Why it mattered: persona turns are wire-only. Think fed the LLM a snapshot of every stored block in every shell, wired or not, plus `useMindShellSync`'s awareness aggregates (all blocks of a type, any shell) through the observations pool.
-What was done: `captureShellSnapshot` keeps only blocks of the active shell with an active wire in or out (both ends on that shell) or pinned; pins outside that scope and awareness entries are dropped; the prompt heading and instructions say "wired or pinned in this shell". `think()` and `thinkStream()` both refuse with a clear message when nothing is in scope. Think was kept, not retired, because the existing pin feature is a coherent explicit way in.
-Still true: earlier Think answers stay in the observations pool and come back as recent observations; those written before this change were made under the old scope. The Mind panel still displays the global awareness entries (display only, no longer in Think's prompt), and `useMindShellSync` itself still aggregates across shells.
+## An empty object is still cited as grounding
+Where: `src/core/services/wire.service.ts`, the generic JSON fallback in `extractBlockData`. A block whose data is `{}` is stringified to `{}`, which is non-empty, so `aggregateWireContext` cites it.
+Why it matters: a source that carried no data is not grounding and must not be cited.
+What I would do: treat an empty object like any other empty payload and return `null`.
 
 ## Unused ApiConfig on the block schema
 Where: `src/core/schemas/block.schema.ts` ~190. A separate `ApiConfig` with an `apiKey` field. Nothing imports it.
