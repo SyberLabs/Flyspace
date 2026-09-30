@@ -168,5 +168,3 @@ function formatTimeAgo(timestamp: number): string {
     if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
     return new Date(timestamp).toLocaleDateString();
 }
-
-export default HNView;

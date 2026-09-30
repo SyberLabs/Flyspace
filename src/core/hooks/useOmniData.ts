@@ -111,5 +111,3 @@ export function useOmniData(
         fromCache: data?.source?.fromCache || false
     };
 }
-
-export default useOmniData;

@@ -97,5 +97,3 @@ export const alphavantageNormalizer: ApiTypeDefinition<AlphaVantageGlobalQuoteRe
         return createOmniData('alpha_vantage', 'market_data', { items, metrics }, 60 * 1000);
     }
 };
-
-export default alphavantageNormalizer;

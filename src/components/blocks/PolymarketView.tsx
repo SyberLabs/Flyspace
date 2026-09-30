@@ -157,5 +157,3 @@ function MarketCard({ market }: MarketCardProps) {
         </motion.div>
     );
 }
-
-export default PolymarketView;

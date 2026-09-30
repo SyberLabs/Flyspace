@@ -3,15 +3,4 @@
 // ============================================
 
 export { apiGateway } from './ApiGateway';
-export type {
-    OmniData,
-    OmniItem,
-    OmniMetrics,
-    OmniContent,
-    OmniSource,
-    ApiCategory,
-    ApiTypeDefinition,
-    OmniDataCallback,
-    GatewaySubscription
-} from './omnidata.schema';
-export { createOmniData, createOmniError } from './omnidata.schema';
+export type { OmniData, OmniItem, OmniMetrics } from './omnidata.schema';

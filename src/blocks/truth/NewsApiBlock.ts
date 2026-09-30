@@ -98,31 +98,6 @@ export function useNewsBlock(instanceId: string, query?: string, category?: stri
         lastUpdated: block?.last_updated,
         fromCache,
         refresh,
-        pause: () => { }, // Polling handled by useOmniData
-        resume: refresh,
         error
     };
 }
-
-/**
- * Standalone fetch function (for compatibility)
- */
-export async function fetchNewsArticles(
-    query?: string,
-    category?: string
-): Promise<{
-    articles: NewsArticle[];
-    error?: string;
-}> {
-    const { apiGateway } = await import('@/core/gateway');
-    const data = await apiGateway.fetch('newsapi', { query, category });
-
-    if (data.error) {
-        return { articles: [], error: data.error.message };
-    }
-
-    return { articles: omniItemsToArticles(data.items || []) };
-}
-
-const newsApiBlock = { fetchNewsArticles, useNewsBlock };
-export default newsApiBlock;

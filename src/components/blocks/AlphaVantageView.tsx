@@ -157,5 +157,3 @@ function Metric({ label, value, format }: { label: string; value: number; format
         </div>
     );
 }
-
-export default AlphaVantageView;

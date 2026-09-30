@@ -72,5 +72,3 @@ export function useBlsBlock(instanceId: string, params?: BlsBlockParams) {
         error
     };
 }
-
-export default useBlsBlock;

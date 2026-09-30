@@ -128,23 +128,3 @@ export function usePolymarketBlock(instanceId: string) {
         error
     };
 }
-
-/**
- * Standalone fetch function (for compatibility)
- */
-export async function fetchPolymarketMarkets(): Promise<{
-    markets: PolymarketMarket[];
-    error?: string;
-}> {
-    const { apiGateway } = await import('@/core/gateway');
-    const data = await apiGateway.fetch('polymarket');
-
-    if (data.error) {
-        return { markets: [], error: data.error.message };
-    }
-
-    return { markets: omniItemsToMarkets(data.items || []) };
-}
-
-const polymarketBlock = { fetchPolymarketMarkets, usePolymarketBlock };
-export default polymarketBlock;

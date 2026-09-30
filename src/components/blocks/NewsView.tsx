@@ -135,5 +135,3 @@ function ArticleCard({ article, index }: ArticleCardProps) {
         </motion.a>
     );
 }
-
-export default NewsView;

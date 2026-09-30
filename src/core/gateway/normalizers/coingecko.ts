@@ -185,5 +185,3 @@ export const coingeckoNormalizer: ApiTypeDefinition<CoinGeckoRawResponse> = {
         return createOmniData('coingecko', 'market_data', { items }, 60000);
     }
 };
-
-export default coingeckoNormalizer;

@@ -144,5 +144,3 @@ export const fredNormalizer: ApiTypeDefinition<FredResponse> = {
         return createOmniData('fred', 'market_data', { items, metrics: metrics ?? undefined }, 10 * 60 * 1000);
     }
 };
-
-export default fredNormalizer;

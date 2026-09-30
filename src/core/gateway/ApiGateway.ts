@@ -84,14 +84,6 @@ function registerCatalogAdapters() {
 registerCatalogAdapters();
 
 /**
- * Cache entry
- */
-interface CacheEntry {
-    data: OmniData;
-    params?: string;
-}
-
-/**
  * API Gateway Service
  * 
  * Centralizes all API calls with:
@@ -101,7 +93,7 @@ interface CacheEntry {
  * - Automatic retry on failure
  */
 class ApiGatewayService {
-    private cache: Map<string, CacheEntry> = new Map();
+    private cache: Map<string, OmniData> = new Map();
     private rateLimitTimers: Map<string, number> = new Map();
     private subscriptions: GatewaySubscription[] = [];
 
@@ -133,12 +125,12 @@ class ApiGatewayService {
 
         if (!entry) return null;
 
-        if (Date.now() > entry.data.source.expiresAt) {
+        if (Date.now() > entry.source.expiresAt) {
             this.cache.delete(cacheKey);
             return null;
         }
 
-        return { ...entry.data, source: { ...entry.data.source, fromCache: true } };
+        return { ...entry, source: { ...entry.source, fromCache: true } };
     }
 
     /**
@@ -146,7 +138,7 @@ class ApiGatewayService {
      */
     private setCache(apiId: string, data: OmniData, params?: Record<string, unknown>): void {
         const cacheKey = this.getCacheKey(apiId, params);
-        this.cache.set(cacheKey, { data, params: JSON.stringify(params) });
+        this.cache.set(cacheKey, data);
     }
 
     /**
@@ -305,13 +297,6 @@ class ApiGatewayService {
     }
 
     /**
-     * Get list of registered API types
-     */
-    getRegisteredApis(): string[] {
-        return Array.from(apiTypeRegistry.keys());
-    }
-
-    /**
      * Check if an API type is registered
      */
     isRegistered(apiId: string): boolean {
@@ -321,5 +306,3 @@ class ApiGatewayService {
 
 // Singleton instance
 export const apiGateway = new ApiGatewayService();
-
-export default apiGateway;

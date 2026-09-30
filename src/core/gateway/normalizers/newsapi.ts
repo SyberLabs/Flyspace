@@ -95,5 +95,3 @@ export const newsapiNormalizer: ApiTypeDefinition<NewsApiRawResponse> = {
         return createOmniData('newsapi', 'news', { items }, 5 * 60 * 1000);
     }
 };
-
-export default newsapiNormalizer;
