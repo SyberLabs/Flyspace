@@ -7,7 +7,6 @@ import { useEffect, useMemo } from 'react';
 import { PolymarketMarket } from '@/core/schemas/block.schema';
 import { useBlockStore, useSettingsStore } from '@/core/stores';
 import { useOmniData } from '@/core/hooks';
-import { generateProbabilityUpdate } from '@/data/mockData';
 import { debug } from '@/core/debug';
 
 /**
@@ -85,21 +84,10 @@ export function usePolymarketBlock(instanceId: string) {
     // Sync data to block store for other components
     useEffect(() => {
         if (markets.length > 0) {
-            // Apply mock probability updates if in mock mode
-            const finalMarkets = useMockData
-                ? markets.map(market => ({
-                    ...market,
-                    outcomes: market.outcomes.map(outcome => ({
-                        ...outcome,
-                        probability: generateProbabilityUpdate(outcome.probability)
-                    }))
-                }))
-                : markets;
-
-            updateData(instanceId, finalMarkets);
+            updateData(instanceId, markets);
             updateStatus(instanceId, 'connected');
         }
-    }, [markets, instanceId, updateData, updateStatus, useMockData]);
+    }, [markets, instanceId, updateData, updateStatus]);
 
     // Handle loading state
     useEffect(() => {
