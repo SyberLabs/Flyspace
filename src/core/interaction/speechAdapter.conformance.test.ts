@@ -92,9 +92,10 @@ function harness(adapter: SpeechAdapter) {
     const engine = new InteractionEngine(canvas);
     const heard: SpeechObservationV1[] = [];
     const authority: SpeechAuthority = {
-        hear(observation) {
+        describeSpeechContext: () => engine.describeSpeechContext(),
+        admitSpeech(observation, result) {
             heard.push(observation);
-            return engine.hear(observation);
+            return engine.admitSpeech(observation, result);
         }
     };
     const partials: SpeechObservationV1[] = [];

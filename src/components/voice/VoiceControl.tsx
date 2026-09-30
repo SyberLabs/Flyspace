@@ -38,6 +38,7 @@ function outcomeText(outcome: SpeechOutcome): string {
     if (outcome.kind === 'error') return outcome.message;
     if (outcome.kind === 'silence') return "I didn't hear anything.";
     if (outcome.kind === 'stopped') return 'Stopped listening.';
+    if (outcome.kind === 'cancelled') return 'Cancelled.';
     return outcome.command.summary ?? 'Done.';
 }
 

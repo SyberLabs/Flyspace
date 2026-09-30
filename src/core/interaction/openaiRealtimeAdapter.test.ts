@@ -5,15 +5,20 @@ import { fallbackSpeechAdapter, openaiRealtimeAdapter, REALTIME_CALLS_URL } from
 import { answerCommit, fakeRealtime } from './realtimeFakes';
 import { scriptedSpeechAdapter } from './scriptedSpeechAdapter';
 import { createPushToTalk } from './pushToTalk';
+import type { IntentCompilerResult } from './intentCompiler';
 import { createSpeechInput } from './speechInput';
 import type { SpeechAdapter, SpeechObservationV1 } from './speechObservation';
 
 function wired(adapter: SpeechAdapter) {
     const canvas = new MemoryCanvas();
     const engine = new InteractionEngine(canvas);
-    const hear = vi.fn((observation: SpeechObservationV1) => engine.hear(observation));
+    const hear = vi.fn((observation: SpeechObservationV1, result: IntentCompilerResult) => engine.admitSpeech(observation, result));
     const partials: SpeechObservationV1[] = [];
-    const input = createSpeechInput({ adapter, authority: { hear }, onPartial: item => partials.push(item) });
+    const input = createSpeechInput({
+        adapter,
+        authority: { describeSpeechContext: () => engine.describeSpeechContext(), admitSpeech: hear },
+        onPartial: item => partials.push(item)
+    });
     return { canvas, engine, hear, partials, input };
 }
 

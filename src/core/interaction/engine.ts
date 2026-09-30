@@ -7,9 +7,11 @@ import type { DataWire } from '@/core/schemas/wire.schema';
 import { evaluateWireAdmission } from './ports';
 import { defaultSpeechCatalog, parseSpeech, type SpeechCatalog, type SpeechIntent, type SpeechShellKind } from './speech';
 import { describeCommand } from './speechReply';
-import { resolveReferents } from './referent';
+import { resolveReferents, type ResolveResult } from './referent';
 import { point } from './coordinates';
 import { isSpeechObservationV1, type SpeechObservationV1 } from './speechObservation';
+import { compileDeterministic, outOfScopeReason, type IntentCompilerResult, type IntentContext } from './intentCompiler';
+import { validateProposal, type SpatialCommandProposalV1 } from './proposal';
 import type {
     CanvasBlockView,
     CommandLifecycle,
@@ -65,6 +67,10 @@ function nextId(prefix: string): string {
 }
 
 const CONSUMED_SESSION_LIMIT = 512;
+const CONTEXT_BLOCK_LIMIT = 100;
+
+/** A grammar intent, or one mapped from a proposal whose candidate ids the engine already checked. */
+type EngineIntent = SpeechIntent & { subjectIds?: string[]; targetId?: string };
 
 function speechEvidence(observation: SpeechObservationV1): SpeechEvidence {
     const evidence: SpeechEvidence = {
@@ -80,6 +86,10 @@ function speechEvidence(observation: SpeechObservationV1): SpeechEvidence {
     if (observation.endedAtMs !== undefined) evidence.endedAtMs = observation.endedAtMs;
     if (observation.confidence !== undefined) evidence.confidence = observation.confidence;
     return evidence;
+}
+
+function sameResult(a: IntentCompilerResult, b: IntentCompilerResult): boolean {
+    return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function provenanceEvidence(speech: SpeechEvidence): string[] {
@@ -226,9 +236,134 @@ export class InteractionEngine {
      * and each speech session yields at most one interpretation.
      */
     hear(observation: SpeechObservationV1, timestampMs = Date.now()): SpatialCommand {
+        const context = this.describeSpeechContext();
+        const result = isSpeechObservationV1(observation)
+            ? compileDeterministic(observation, context) ?? { kind: 'refuse' as const, reason: 'unrecognized-speech', via: 'grammar' as const }
+            : { kind: 'refuse' as const, reason: 'invalid-observation', via: 'grammar' as const };
+        return this.admitSpeech(observation, result, timestampMs);
+    }
+
+    /** Bounded descriptors for a compiler: active shell only, no store handles. */
+    describeSpeechContext(): IntentContext {
+        const shellId = this.canvas.activeShell();
+        const visible = this.canvas.listBlocks().filter(block => block.shellId === shellId).slice(0, CONTEXT_BLOCK_LIMIT);
+        const ids = new Set(visible.map(block => block.id));
+        return {
+            activeShellId: shellId,
+            vocabulary: this.catalog(),
+            visibleBlocks: visible.map(block => ({ id: block.id, name: block.name, blockId: block.blockId, tags: [...block.tags] })),
+            selection: this.selection.filter(id => ids.has(id))
+        };
+    }
+
+    /**
+     * Second gate for anything a compiler produced. The observation is checked,
+     * the proposal is re-validated, reserved operations are re-derived from the
+     * fixed grammar, and referents are resolved against the live canvas.
+     */
+    admitSpeech(observation: SpeechObservationV1, result: IntentCompilerResult, timestampMs = Date.now()): SpatialCommand {
         const gate = this.admitObservation(observation, timestampMs);
         if (gate) return gate;
-        return this.withSpeech(observation, () => this.described(() => this.interpretSpeech(observation.transcript, timestampMs)));
+        return this.withSpeech(observation, () => this.described(() => this.admitResult(observation, result, timestampMs)));
+    }
+
+    private admitResult(observation: SpeechObservationV1, result: IntentCompilerResult, timestampMs: number): SpatialCommand {
+        const transcript = observation.transcript;
+        const evidence = [...this.transcriptEvidence(transcript), `speech-compiler:${result.via}`];
+        const bare = () => this.proposal('select', [], { modalities: ['speech'], confidence: 0, timestampMs, evidence });
+        if (result.kind === 'refuse') return this.refuse(bare(), result.reason);
+        const catalog = this.catalog();
+        if (result.via === 'grammar') {
+            // A grammar label is a claim. The engine re-derives it and interprets its own parse.
+            const host = compileDeterministic(observation, this.describeSpeechContext());
+            const intent = parseSpeech(transcript, catalog);
+            if (!host || host.kind === 'refuse' || !intent || !sameResult(host, result)) return this.refuse(bare(), 'grammar-mismatch');
+            return this.interpretIntent(intent, timestampMs, evidence);
+        }
+        if (result.kind === 'needs-input') {
+            if (this.preview || this.held) this.cancel();
+            return this.hold(bare(), result.reason);
+        }
+        const checked = validateProposal(result.proposal, {
+            observationId: observation.observationId,
+            vocabulary: catalog,
+            allowReserved: false
+        });
+        if (!checked.ok) return this.refuse(bare(), `invalid-proposal:${checked.reason}`);
+        const proposal = checked.proposal;
+        if (proposal.operation === 'RESOLVE_CAPABILITY') return this.refuse(bare(), 'capability-bridge-unavailable');
+        const mapped = this.proposalIntent(proposal, catalog);
+        if ('hold' in mapped) {
+            if (this.preview || this.held) this.cancel();
+            return this.hold(bare(), mapped.hold);
+        }
+        return this.interpretIntent(mapped.intent, timestampMs, evidence);
+    }
+
+    private proposalIntent(proposal: SpatialCommandProposalV1, catalog: SpeechCatalog): { intent: EngineIntent } | { hold: string } {
+        const shellId = this.canvas.activeShell();
+        const live = new Set(this.canvas.listBlocks().filter(block => block.shellId === shellId).map(block => block.id));
+        const intent: EngineIntent = { action: 'select', deixis: 'none', destructive: false };
+        const subject = proposal.subject;
+        const target = proposal.target;
+        if (subject?.kind === 'candidate') {
+            if (!live.has(subject.id)) return { hold: 'stale-referent' };
+            intent.subjectIds = [subject.id];
+        } else if (subject?.kind === 'deictic') {
+            intent.deixis = subject.word;
+        }
+        if (target?.kind === 'candidate') {
+            if (!live.has(target.id)) return { hold: 'stale-referent' };
+            intent.targetId = target.id;
+        } else if (target?.kind === 'named') {
+            intent.targetName = target.name;
+        }
+        switch (proposal.operation) {
+            case 'CREATE': {
+                const kind = subject?.kind === 'block-type' ? catalog.blocks.find(block => block.blockId === subject.blockId) : undefined;
+                if (!kind) return { hold: 'unknown-block-type' };
+                return { intent: {
+                    action: 'create',
+                    personaBlockId: kind.blockId,
+                    displayName: kind.displayName,
+                    deixis: proposal.placement?.kind === 'pointed' ? 'here' : 'none',
+                    destructive: false
+                } };
+            }
+            case 'MOVE':
+                intent.action = 'move';
+                intent.deixis = 'here';
+                if (subject?.kind === 'named') intent.targetName = subject.name;
+                return { intent };
+            case 'CONNECT':
+                intent.action = 'connect';
+                if (subject?.kind === 'named') intent.sourceName = subject.name;
+                return { intent };
+            case 'DELETE':
+                intent.action = 'delete';
+                intent.destructive = true;
+                if (subject?.kind === 'named') intent.targetName = subject.name;
+                return { intent };
+            case 'OPEN_SHELL': {
+                const shell = target?.kind === 'shell' ? catalog.shells.find(item => item.id === target.shellId) : undefined;
+                if (!shell) return { hold: 'missing-shell' };
+                return { intent: { action: 'open-shell', shell, deixis: 'none', destructive: false } };
+            }
+            case 'BRANCH':
+                intent.action = 'branch';
+                return { intent };
+            case 'CRYSTALLIZE':
+                intent.action = 'crystallize';
+                return { intent };
+            case 'UNDO':
+                return { intent: { action: 'undo', deixis: 'none', destructive: false } };
+            case 'CANCEL':
+                return { intent: { action: 'cancel', deixis: 'none', destructive: false } };
+            case 'CONFIRM':
+                return { intent: { action: 'confirm', deixis: 'none', destructive: false } };
+            default:
+                return { hold: 'unsupported' };
+        }
     }
 
     private admitObservation(observation: SpeechObservationV1, timestampMs: number): SpatialCommand | null {
@@ -273,13 +408,21 @@ export class InteractionEngine {
     }
 
     private interpretSpeech(transcript: string, timestampMs: number): SpatialCommand {
-        const intent = parseSpeech(transcript, this.catalog());
+        const evidence = this.transcriptEvidence(transcript);
+        const scope = outOfScopeReason(transcript);
+        if (scope) {
+            return this.refuse(this.proposal('select', [], { modalities: ['speech'], confidence: 0, timestampMs, evidence }), scope);
+        }
+        return this.interpretIntent(parseSpeech(transcript, this.catalog()), timestampMs, evidence);
+    }
+
+    private interpretIntent(intent: EngineIntent | null, timestampMs: number, evidence: string[]): SpatialCommand {
         const proposalAction = intent && intent.action !== 'confirm' ? intent.action : 'select';
         const proposal = this.proposal(proposalAction, [], {
             modalities: ['speech'],
             confidence: intent ? 0.9 : 0,
             timestampMs,
-            evidence: this.transcriptEvidence(transcript)
+            evidence
         });
         if (!intent) return this.refuse(proposal, 'unrecognized-speech');
         if (intent.ambiguous) return this.refuse(proposal, `ambiguous-${intent.ambiguous}`);
@@ -361,18 +504,26 @@ export class InteractionEngine {
         return true;
     }
 
-    private applyIntent(intent: SpeechIntent, proposal: MultimodalInteractionProposal, timestampMs: number): SpatialCommand {
+    private applyIntent(intent: EngineIntent, proposal: MultimodalInteractionProposal, timestampMs: number): SpatialCommand {
         const pointHit = this.latestPoint(timestampMs);
-        const resolved = resolveReferents({
-            shellId: this.canvas.activeShell(),
-            blocks: this.canvas.listBlocks(),
-            point: intent.deixis === 'here' || intent.deixis === 'this' ? pointHit : undefined,
-            selection: this.selection,
-            recentInteraction: this.recentInteraction,
-            recentDiscourse: this.recentDiscourse,
-            noun: intent.targetName,
-            allowSet: intent.deixis === 'these'
-        });
+        const resolved = intent.subjectIds
+            ? { status: 'resolved' as const, ids: intent.subjectIds }
+            : resolveReferents({
+                shellId: this.canvas.activeShell(),
+                blocks: this.canvas.listBlocks(),
+                point: intent.deixis === 'here' || intent.deixis === 'this' ? pointHit : undefined,
+                selection: this.selection,
+                recentInteraction: this.recentInteraction,
+                recentDiscourse: this.recentDiscourse,
+                noun: intent.targetName,
+                allowSet: intent.deixis === 'these'
+            });
+
+        if (intent.action === 'delete' && intent.subjectIds) {
+            proposal.subjects = intent.subjectIds.map(id => ({ id }));
+            proposal.action = 'delete';
+            return this.previewDestructive(proposal);
+        }
 
         if (intent.action === 'delete' && intent.targetName && intent.deixis === 'none') {
             const named = resolveReferents({
@@ -398,14 +549,7 @@ export class InteractionEngine {
                 recentDiscourse: [],
                 noun: intent.sourceName
             });
-            const target = resolveReferents({
-                shellId: this.canvas.activeShell(),
-                blocks: this.canvas.listBlocks(),
-                selection: [],
-                recentInteraction: [],
-                recentDiscourse: [],
-                noun: intent.targetName
-            });
+            const target = this.connectTarget(intent);
             if (source.status !== 'resolved') return this.hold(proposal, source.reason);
             if (target.status !== 'resolved') return this.hold(proposal, 'ambiguous-target');
             proposal.subjects = [{ id: source.ids[0] }];
@@ -438,15 +582,8 @@ export class InteractionEngine {
             if (!pointHit) return this.hold(proposal, 'missing-point');
             proposal.geometry = { point: pointHit };
         }
-        if (intent.targetName && intent.action === 'connect') {
-            const target = resolveReferents({
-                shellId: this.canvas.activeShell(),
-                blocks: this.canvas.listBlocks(),
-                selection: [],
-                recentInteraction: [],
-                recentDiscourse: [],
-                noun: intent.targetName
-            });
+        if ((intent.targetName || intent.targetId) && intent.action === 'connect') {
+            const target = this.connectTarget(intent);
             if (target.status !== 'resolved') return this.hold(proposal, 'ambiguous-target');
             proposal.target = { id: target.ids[0] };
         }
@@ -458,6 +595,18 @@ export class InteractionEngine {
     private placedAt(id: string, requested: { x: number; y: number }): { x: number; y: number } {
         const placed = this.canvas.getInstance(id)?.position;
         return placed ? { x: placed.x, y: placed.y } : { x: requested.x, y: requested.y };
+    }
+
+    private connectTarget(intent: EngineIntent): ResolveResult {
+        if (intent.targetId) return { status: 'resolved', ids: [intent.targetId] };
+        return resolveReferents({
+            shellId: this.canvas.activeShell(),
+            blocks: this.canvas.listBlocks(),
+            selection: [],
+            recentInteraction: [],
+            recentDiscourse: [],
+            noun: intent.targetName
+        });
     }
 
     private execute(proposal: MultimodalInteractionProposal, timestampMs: number, fromConfirm: boolean): SpatialCommand {

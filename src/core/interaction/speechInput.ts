@@ -1,19 +1,22 @@
-// SpeechInputController: capture → final observation → engine admission.
+// SpeechInputController: capture → final observation → compile → engine admission.
 // It holds no authority and never touches canvas stores.
 
+import { createIntentCompiler, type IntentCompiler, type IntentCompilerResult, type IntentContext } from './intentCompiler';
 import { createPushToTalk, type PushToTalkOptions } from './pushToTalk';
 import type { SpeechTimingRecorder } from './speechMeasurement';
 import type { SpeechAdapter, SpeechErrorCode, SpeechObservationV1 } from './speechObservation';
 import type { SpatialCommand } from './types';
 
 export interface SpeechAuthority {
-    hear(observation: SpeechObservationV1): SpatialCommand;
+    describeSpeechContext(): IntentContext;
+    admitSpeech(observation: SpeechObservationV1, result: IntentCompilerResult): SpatialCommand;
 }
 
 export type SpeechOutcome =
     | { kind: 'command'; command: SpatialCommand; observation: SpeechObservationV1 }
     | { kind: 'silence' }
     | { kind: 'stopped' }
+    | { kind: 'cancelled' }
     | { kind: 'error'; code: SpeechErrorCode; message: string };
 
 export interface SpeechInput {
@@ -29,6 +32,8 @@ export interface SpeechInput {
 export interface SpeechInputOptions extends PushToTalkOptions {
     adapter: SpeechAdapter;
     authority: SpeechAuthority;
+    /** Defaults to the fixed grammar alone. */
+    compiler?: IntentCompiler;
     /** Receives timings from live captures only; synthetic adapters are refused by the recorder. */
     recorder?: SpeechTimingRecorder;
 }
@@ -38,6 +43,8 @@ const STOP_LISTENING = /^stop listening[.!]?$/i;
 export function createSpeechInput(options: SpeechInputOptions): SpeechInput {
     const now = options.now ?? Date.now;
     const talk = createPushToTalk(options.adapter, { ...options, now });
+    const compiler = options.compiler ?? createIntentCompiler();
+    let generation = 0;
 
     return {
         get held() {
@@ -60,12 +67,15 @@ export function createSpeechInput(options: SpeechInputOptions): SpeechInput {
         },
         async release() {
             if (!talk.held) return undefined;
+            const turn = generation;
             const heard = await talk.release();
             if (heard.error) return { kind: 'error', code: heard.error.code, message: heard.error.message };
             if (!heard.heard || !heard.observation) return { kind: 'silence' };
             if (STOP_LISTENING.test(heard.transcript)) return { kind: 'stopped' };
+            const result = await compiler.compile(heard.observation, options.authority.describeSpeechContext());
+            if (turn !== generation) return { kind: 'cancelled' };
             const decidedAtMs = now();
-            const command = options.authority.hear(heard.observation);
+            const command = options.authority.admitSpeech(heard.observation, result);
             const admittedAtMs = now();
             if (heard.timings) {
                 const { sessionId: _sessionId, ...timings } = heard.timings;
@@ -81,6 +91,7 @@ export function createSpeechInput(options: SpeechInputOptions): SpeechInput {
             return { kind: 'command', command, observation: heard.observation };
         },
         cancel() {
+            generation += 1;
             talk.cancel();
         }
     };
