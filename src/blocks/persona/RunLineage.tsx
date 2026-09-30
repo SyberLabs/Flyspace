@@ -113,12 +113,15 @@ function LineageContent({ state }: { state: LoadState | null }) {
     const root = lineage.nodes.find(n => n.depth === 0);
     if (!root) return <p role="status" className="text-[var(--text-muted)]">{NOT_RECORDED}</p>;
 
+    const graph: LineageGraph = { edges: buildEdges(lineage.nodes), maxDepth: lineage.depth };
+    const rootFedByPersona = root.run.sources.some(s => s.kind === 'inference');
+
     return (
         <div>
             <ul aria-label="Run lineage" className="space-y-1">
-                <LineageItem node={root} nodes={lineage.nodes} />
+                <LineageItem run={root.run} via={null} depth={0} ancestors={[]} graph={graph} />
             </ul>
-            {lineage.nodes.length === 1 && (
+            {!rootFedByPersona && (
                 <p className="mt-1 text-[var(--text-muted)]">No upstream persona answer fed this run.</p>
             )}
             {lineage.truncated && (
@@ -131,17 +134,69 @@ function LineageContent({ state }: { state: LoadState | null }) {
     );
 }
 
-function LineageItem({ node, nodes }: { node: LineageNode; nodes: LineageNode[] }) {
-    const upstream = node.isCycle
-        ? []
-        : nodes.filter(n => n.childRunId === node.run.id && n.depth === node.depth + 1);
+interface Edge {
+    run: LedgerRunRow;
+    via: string | null;
+}
+
+interface LineageGraph {
+    /** Child run id -> the distinct runs that fed it, one per (run, cited label). */
+    edges: Map<string, Edge[]>;
+    /** The depth limit the server walked to; nothing deeper was fetched. */
+    maxDepth: number;
+}
+
+/**
+ * The server's recursive walk emits one row per path, so a shared upstream run
+ * (a diamond) and everything above it arrive once for every route to it.
+ * Collapse those rows into the edges they describe and draw the tree from the
+ * edges, so each ancestor appears once under each path.
+ */
+function buildEdges(nodes: LineageNode[]): Map<string, Edge[]> {
+    const edges = new Map<string, Edge[]>();
+    const seen = new Set<string>();
+    for (const n of nodes) {
+        if (n.childRunId === null) continue;
+        const key = `${n.childRunId}>${n.run.id}:${n.viaLabel ?? ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const list = edges.get(n.childRunId) ?? [];
+        list.push({ run: n.run, via: n.viaLabel });
+        edges.set(n.childRunId, list);
+    }
+    return edges;
+}
+
+function LineageItem({ run, via, depth, ancestors, graph }: {
+    run: LedgerRunRow;
+    via: string | null;
+    depth: number;
+    ancestors: string[];
+    graph: LineageGraph;
+}) {
+    // Same rule as the server walk: a run already on this path is shown once,
+    // marked, and not followed. Whether it is a cycle depends on the path, so
+    // it is decided here rather than taken from a row that may describe
+    // another path.
+    const isCycle = ancestors.includes(run.id);
+    const expanded = !isCycle && depth < graph.maxDepth;
+    const upstream = expanded ? graph.edges.get(run.id) ?? [] : [];
+    const path = [...ancestors, run.id];
+    // Persona sources the ledger could not follow: the upstream turn was never
+    // recorded (no parentRunId), or its row did not come back. Past the depth
+    // limit the truncation note says so instead.
+    const unfollowed = expanded
+        ? run.sources.filter(s =>
+            s.kind === 'inference' &&
+            !upstream.some(e => e.run.id === s.parentRunId && e.via === s.label))
+        : [];
 
     return (
         <li data-testid="lineage-node" className="pl-2 border-l border-[var(--citadel-border)]">
-            <RunSummary run={node.run} via={node.viaLabel} isCycle={node.isCycle} />
-            {node.run.sources.length > 0 && (
-                <ul aria-label={`Sources of run ${node.run.id}`} className="mt-0.5 flex flex-wrap gap-1">
-                    {node.run.sources.map(s => (
+            <RunSummary run={run} via={via} isCycle={isCycle} />
+            {run.sources.length > 0 && (
+                <ul aria-label={`Sources of run ${run.id}`} className="mt-0.5 flex flex-wrap gap-1">
+                    {run.sources.map(s => (
                         <li
                             key={s.id}
                             className={
@@ -156,10 +211,22 @@ function LineageItem({ node, nodes }: { node: LineageNode; nodes: LineageNode[] 
                     ))}
                 </ul>
             )}
+            {unfollowed.map(s => (
+                <p key={s.id} className="mt-0.5 text-[var(--text-muted)]">
+                    {s.label} fed this run, but its answer is not in the ledger, so lineage stops there.
+                </p>
+            ))}
             {upstream.length > 0 && (
-                <ul aria-label={`Runs that fed run ${node.run.id}`} className="mt-1 ml-1 space-y-1">
-                    {upstream.map(n => (
-                        <LineageItem key={`${n.run.id}:${n.viaLabel ?? ''}`} node={n} nodes={nodes} />
+                <ul aria-label={`Runs that fed run ${run.id}`} className="mt-1 ml-1 space-y-1">
+                    {upstream.map(e => (
+                        <LineageItem
+                            key={`${e.run.id}:${e.via ?? ''}`}
+                            run={e.run}
+                            via={e.via}
+                            depth={depth + 1}
+                            ancestors={path}
+                            graph={graph}
+                        />
                     ))}
                 </ul>
             )}
