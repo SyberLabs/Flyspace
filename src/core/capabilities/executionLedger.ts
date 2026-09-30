@@ -61,10 +61,6 @@ export function executionRecords(): ExecutionRecord[] {
     return useExecutionLedger.getState().records;
 }
 
-export function getExecutionRecord(runId: string): ExecutionRecord | undefined {
-    return executionRecords().find(record => record.runId === runId);
-}
-
 export function latestExecutionRecord(capabilityId: string): ExecutionRecord | undefined {
     let latest: ExecutionRecord | undefined;
     for (const record of executionRecords()) {

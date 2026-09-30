@@ -8,11 +8,3 @@ export * from './schemas/wire.schema';
 export * from './stores';
 export { blockRegistry } from './registry/BlockRegistry';
 export { wireService } from './services/wire.service';
-export {
-    compileOpenApi,
-    compileMcpTools,
-    compileBring,
-    installProposal,
-    executeCapability,
-    runInstalledCapability
-} from './capabilities';

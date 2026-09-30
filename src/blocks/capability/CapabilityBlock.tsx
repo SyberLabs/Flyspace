@@ -2,10 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import { useBlockStore, useWireStore } from '@/core/stores';
-import { runInstalledCapability, useCapabilityStore } from '@/core/capabilities';
+import { runInstalledCapability } from '@/core/capabilities/registry';
+import { useCapabilityStore } from '@/core/capabilities/store';
 import { claimCreateTrigger, latestExecutionRecord, useExecutionLedger } from '@/core/capabilities/executionLedger';
 import { canonicalize, sha256 } from '@/core/capabilities/hash';
-import { subscribeCapabilityEvent, triggerIdempotencyKey } from '@/core/capabilities/triggers';
+import { triggerIdempotencyKey } from '@/core/capabilities/triggers';
 import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
 
@@ -58,7 +59,6 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     });
     const triggerKind = trigger.kind;
     const everyMs = trigger.kind === 'interval' ? trigger.everyMs : 0;
-    const eventName = trigger.kind === 'event' ? trigger.name : '';
 
     useEffect(() => {
         if (!manifest || sideEffect || triggerKind === 'manual' || triggerKind === 'on_input_change') return;
@@ -67,17 +67,12 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
             runRef.current(triggerIdempotencyKey('on_create', instanceId, 'once'));
             return;
         }
-        if (triggerKind === 'event') {
-            return subscribeCapabilityEvent(eventName, () => {
-                runRef.current(triggerIdempotencyKey('event', instanceId, sha256(`${Date.now()}|${Math.random()}`).slice(0, 16)));
-            });
-        }
         const timer = window.setInterval(() => {
             const slot = String(Math.floor(Date.now() / everyMs));
             runRef.current(triggerIdempotencyKey('interval', instanceId, slot));
         }, everyMs);
         return () => window.clearInterval(timer);
-    }, [instanceId, manifest, sideEffect, triggerKind, everyMs, eventName]);
+    }, [instanceId, manifest, sideEffect, triggerKind, everyMs]);
 
     useEffect(() => {
         if (!manifest || sideEffect || triggerKind !== 'on_input_change') return;

@@ -17,7 +17,6 @@ import {
 } from './registry';
 import { bindMcpTransport, executeCapability, unbindMcpTransport } from './execute';
 import { capabilitySecrets } from './secrets';
-import { apiGateway } from '../gateway/ApiGateway';
 import { blockRegistry } from '../registry/BlockRegistry';
 import { useBlockStore } from '../stores/blockStore';
 import { useWireStore } from '../stores/wireStore';
@@ -212,7 +211,7 @@ describe('capability compiler', () => {
         const claimed = { ...create, approval: 'approved' as const, apiKey: 'super-secret' };
         const installed = installProposal(claimed);
         expect(installed.ok).toBe(false);
-        expect(apiGateway.isRegistered(create.id)).toBe(false);
+        expect(blockRegistry.has(create.id)).toBe(false);
 
         const blessed = { ...create, approval: 'approved' as const };
         expect(validateManifest(blessed).ok).toBe(true);
@@ -220,7 +219,6 @@ describe('capability compiler', () => {
     });
 
     it('turns the sample API into a wired block, and removes it, without a catalog edit', async () => {
-        expect(apiGateway.isRegistered('polymarket')).toBe(true);
         expect(blockRegistry.has('polymarket_live_odds')).toBe(true);
 
         const list = byOp('listPosts');
@@ -249,11 +247,6 @@ describe('capability compiler', () => {
         expect(result.presentation).not.toHaveProperty('typed');
         expect(calls[0]?.url).toBe('https://board.example.test/v1/posts');
         expect(new Headers(calls[0]?.init?.headers).get('X-Board-Key')).toBe('super-secret');
-
-        const viaGateway = await apiGateway.fetch(byOp('listPosts').id, {}, true);
-        expect(viaGateway.items?.[0]?.title).toBe('Hello from the board');
-        expect(viaGateway).not.toHaveProperty('typed');
-        expect(apiGateway.isRegistered('polymarket')).toBe(true);
 
         const schema = blockRegistry.get(byOp('listPosts').id);
         expect(schema).toBeDefined();
@@ -289,12 +282,9 @@ describe('capability compiler', () => {
 
         const listId = byOp('listPosts').id;
         expect(uninstallCapability(listId)).toBe(true);
-        expect(apiGateway.isRegistered(listId)).toBe(false);
         expect(blockRegistry.has(listId)).toBe(false);
         expect(useBlockStore.getState().getBlock(instanceId)).toBeUndefined();
-        expect(apiGateway.isRegistered('polymarket')).toBe(true);
         expect(blockRegistry.has('polymarket_live_odds')).toBe(true);
-        expect(apiGateway.unregisterType('polymarket')).toBe(false);
     });
 
     it('refuses write and destructive calls until an explicit approval', async () => {

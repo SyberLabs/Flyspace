@@ -1,8 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { compileOpenApi, capabilitySecrets, installProposal, approveCapability, denyCapability, uninstallCapability, useCapabilityStore } from '@/core/capabilities';
-import type { CapabilityManifest } from '@/core/capabilities';
+import { compileOpenApi } from '@/core/capabilities/openapi';
+import { capabilitySecrets } from '@/core/capabilities/secrets';
+import { installProposal, approveCapability, denyCapability, uninstallCapability } from '@/core/capabilities/registry';
+import { useCapabilityStore } from '@/core/capabilities/store';
+import type { CapabilityManifest } from '@/core/capabilities/manifest';
 
 /**
  * The only product door into installProposal.

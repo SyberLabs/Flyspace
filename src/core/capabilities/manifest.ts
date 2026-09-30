@@ -17,8 +17,7 @@ export type CapabilityTrigger =
     | { kind: 'manual' }
     | { kind: 'on_create' }
     | { kind: 'on_input_change' }
-    | { kind: 'interval'; everyMs: number }
-    | { kind: 'event'; name: string };
+    | { kind: 'interval'; everyMs: number };
 export type HttpMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export type InputLocation = 'path' | 'query' | 'header' | 'body' | 'argument';
 export type EffectSource = 'method' | 'extension' | 'annotation' | 'declared';
@@ -143,7 +142,6 @@ export function triggerInvocation(trigger: CapabilityTrigger): CapabilityInvocat
 function validTriggerShape(trigger: CapabilityTrigger): boolean {
     if (trigger.kind === 'manual' || trigger.kind === 'on_create' || trigger.kind === 'on_input_change') return true;
     if (trigger.kind === 'interval') return Number.isInteger(trigger.everyMs);
-    if (trigger.kind === 'event') return typeof trigger.name === 'string';
     return false;
 }
 
@@ -157,9 +155,6 @@ export function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrig
         || trigger.everyMs > MAX_TRIGGER_INTERVAL_MS
     )) {
         return `interval must be between ${MIN_TRIGGER_INTERVAL_MS} and ${MAX_TRIGGER_INTERVAL_MS} ms`;
-    }
-    if (trigger.kind === 'event' && !/^[a-z][a-z0-9._-]{0,63}$/.test(trigger.name)) {
-        return 'event name is invalid';
     }
     return null;
 }
