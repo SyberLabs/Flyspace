@@ -37,8 +37,6 @@ interface CanvasProps {
 export function Canvas({ onBrowseShells }: CanvasProps) {
     const {
         blocks,
-        addBlock,
-        removeBlock,
         activeShellId
     } = useBlockStore();
     const { gridSnapping, gridSize } = useSettingsStore();
@@ -83,13 +81,12 @@ export function Canvas({ onBrowseShells }: CanvasProps) {
         e.preventDefault();
         setIsSidebarOver(false);
         const blockId = e.dataTransfer.getData('text/plain');
-        const schema = blockId ? blockRegistry.get(blockId) : undefined;
-        if (schema) {
+        if (blockId && blockRegistry.has(blockId)) {
             const rect = e.currentTarget.getBoundingClientRect();
-            addBlock(schema, {
+            spatialSession.pointerCreate(blockId, {
                 x: Math.max(0, e.clientX - rect.left - 160),
                 y: Math.max(0, e.clientY - rect.top - 20)
-            }, activeShellId);
+            }, 'sidebar-drop');
         }
         setDraggingBlock(null);
     };
@@ -180,7 +177,7 @@ export function Canvas({ onBrowseShells }: CanvasProps) {
                                 Date.now()
                             );
                         }}
-                        onClose={() => removeBlock(block.instance_id)}
+                        onClose={() => spatialSession.pointerDelete(block.instance_id)}
                     />
                 ))}
 

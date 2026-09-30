@@ -221,6 +221,75 @@ export class InteractionEngine {
         }, () => this.canvas.remove(id));
     }
 
+    /** A click, drop, or palette add. The gesture is the commitment; the type must be in the vocabulary. */
+    pointerCreate(blockId: string, at: { x: number; y: number }, source = 'pointer', timestampMs = Date.now()): SpatialCommand {
+        const proposal = this.proposal('create', [], {
+            point: point('canvas', at.x, at.y),
+            modalities: ['pointer'],
+            confidence: 1,
+            timestampMs,
+            evidence: [`pointer-add:${source}`]
+        });
+        const kind = this.catalog().blocks.find(block => block.blockId === blockId);
+        if (!kind) return this.refuse(proposal, 'unknown-block-type');
+        if (at.x < 0 || at.y < 0) return this.refuse(proposal, 'out-of-bounds');
+        proposal.create = { blockId, displayName: kind.displayName };
+        const id = this.canvas.add(blockId, kind.displayName, at.x, at.y);
+        proposal.subjects = [{ id }];
+        this.remember(id);
+        return this.commitTracked(proposal, {
+            command: 'CREATE',
+            subject: id,
+            to: this.placedAt(id, at),
+            modalities: ['pointer'],
+            committedAt: timestampMs
+        }, () => this.canvas.remove(id));
+    }
+
+    /** The block's close control. A direct click needs no spoken confirm, and it is undoable. */
+    pointerDelete(id: string, timestampMs = Date.now()): SpatialCommand {
+        const proposal = this.proposal('delete', [id], {
+            modalities: ['pointer'], confidence: 1, timestampMs, evidence: ['pointer-close']
+        });
+        if (!this.canvas.getInstance(id)) return this.refuse(proposal, 'missing-block');
+        this.dropPendingFor(id);
+        const removed = this.canvas.remove(id);
+        return this.commitTracked(proposal, {
+            command: 'DELETE',
+            subject: id,
+            modalities: ['pointer'],
+            committedAt: timestampMs
+        }, () => {
+            if (removed) this.canvas.restore(removed);
+        });
+    }
+
+    /** A wire dragged from an output handle onto a block. Same admission as spoken wiring. */
+    pointerConnect(sourceId: string, targetId: string, timestampMs = Date.now()): SpatialCommand {
+        const proposal = this.proposal('connect', [sourceId], {
+            modalities: ['pointer'], confidence: 1, timestampMs, evidence: ['pointer-wire']
+        });
+        proposal.target = { id: targetId };
+        const admission = evaluateWireAdmission(this.canvas.getInstance(sourceId), this.canvas.getInstance(targetId));
+        if (!admission.ok) return this.refuse(proposal, admission.reason);
+        const connected = this.canvas.connect(sourceId, targetId);
+        if (!connected.ok) return this.refuse(proposal, connected.reason);
+        const wireId = connected.wireId;
+        this.remember(targetId);
+        return this.commitTracked(proposal, {
+            command: 'CONNECT',
+            subject: sourceId,
+            target: targetId,
+            modalities: ['pointer'],
+            committedAt: timestampMs
+        }, () => this.canvas.disconnect(wireId));
+    }
+
+    private dropPendingFor(id: string): void {
+        const pending = [this.preview, this.held].filter((item): item is SpatialCommand => item !== null);
+        if (pending.some(item => item.subjects.includes(id) || item.target === id)) this.cancel();
+    }
+
     select(ids: string[]): void {
         this.selection = [...ids];
         ids.forEach(id => this.remember(id));
@@ -479,7 +548,9 @@ export class InteractionEngine {
             confidence: pending.confidence,
             timestampMs
         };
-        return this.execute(proposal, timestampMs, true);
+        const result = this.execute(proposal, timestampMs, true);
+        if (result.lifecycle === 'refused' && this.preview === pending) this.cancel();
+        return result;
     }
 
     cancel(): void {
@@ -659,6 +730,7 @@ export class InteractionEngine {
 
         if (proposal.action === 'delete' && proposal.subjects[0]) {
             const id = proposal.subjects[0].id;
+            if (!this.canvas.getInstance(id)) return this.refuse(proposal, 'missing-block');
             const removed = this.canvas.remove(id);
             return this.commitTracked(proposal, {
                 command: 'DELETE',

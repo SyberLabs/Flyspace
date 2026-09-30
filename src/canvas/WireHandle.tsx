@@ -8,7 +8,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plug } from 'lucide-react';
-import { wireService } from '@/core/services/wire.service';
+import { spatialSession } from '@/core/interaction/session';
 import { PortSchema, PortDataType } from '@/core/schemas/block.schema';
 import { cn } from '@/lib/utils';
 import { polylineToPath } from './routing/svgPath';
@@ -122,7 +122,7 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
 
             if (targetBlockId && targetBlockId !== blockId) {
                 // Create wire from this block (source/output) to target block (input)
-                wireService.createWire(blockId, targetBlockId);
+                spatialSession.pointerConnect(blockId, targetBlockId);
             }
 
             setDragState(null);

@@ -22,7 +22,8 @@ import { useState } from 'react';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
 import { useCapabilityStore } from '@/core/capabilities/store';
 import { OmniBlockSchema, BlockCategory } from '@/core/schemas/block.schema';
-import { useBlockStore, useUIStore } from '@/core/stores';
+import { useUIStore } from '@/core/stores';
+import { spatialSession } from '@/core/interaction/session';
 import { cn } from '@/lib/utils';
 import { BlockGlyph } from '@/components/blockIcons';
 import { AddApiDialog } from '@/components/apis/AddApiDialog';
@@ -191,7 +192,6 @@ interface BlockItemProps {
 }
 
 function BlockItem({ block }: BlockItemProps) {
-    const { addBlock } = useBlockStore();
     const { setDraggingBlock } = useUIStore();
 
     const handleDragStart = (e: React.DragEvent) => {
@@ -207,7 +207,7 @@ function BlockItem({ block }: BlockItemProps) {
     const handleClick = () => {
         // Quick-add to canvas at a default position
         const offset = Math.random() * 100;
-        addBlock(block, { x: 320 + offset, y: 80 + offset });
+        spatialSession.pointerCreate(block.block_id, { x: 320 + offset, y: 80 + offset }, 'sidebar-click');
     };
 
     return (
