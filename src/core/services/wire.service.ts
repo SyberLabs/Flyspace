@@ -122,13 +122,11 @@ export function extractBlockData(
             // hackernews, …). The useful signal lives in each item's `metadata`
             // (probability, volume, price, value, …) — include it, don't drop it.
             const items = data.items;
-            if (items.length > 0) {
-                const limit = filters.summaryOnly ? 8 : 25;
-                extracted = items.slice(0, limit)
-                    .map(item => formatOmniItem(item))
-                    .join('\n');
-                if (items.length > limit) extracted += `\n… ${items.length - limit} more`;
-            }
+            const limit = filters.summaryOnly ? 8 : 25;
+            extracted = items.slice(0, limit)
+                .map(item => formatOmniItem(item))
+                .join('\n');
+            if (items.length > limit) extracted += `\n… ${items.length - limit} more`;
         } else if (Array.isArray(data)) {
             const first = data[0];
             if (isRecord(first) && 'question' in first && 'outcomes' in first) {
