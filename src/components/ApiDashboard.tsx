@@ -568,6 +568,3 @@ function ApiMarketplaceCard({ api, isInstalled, onInstall }: ApiMarketplaceCardP
         </div>
     );
 }
-
-export default ApiDashboardModal;
-

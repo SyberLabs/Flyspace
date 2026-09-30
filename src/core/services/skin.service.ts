@@ -237,40 +237,6 @@ class SkinService {
             root.style.removeProperty(key);
         }
     }
-
-    /**
-     * Apply a preset theme
-     */
-    applyPreset(presetId: string): void {
-        const preset = PRESET_THEMES.find(p => p.id === presetId);
-        if (preset) {
-            this.applyTheme(preset.variables);
-        }
-    }
-
-    /**
-     * Get current theme as CSS string for Shell storage
-     */
-    exportTheme(): string {
-        const root = document.documentElement;
-        const computedStyle = getComputedStyle(root);
-        const vars: string[] = [];
-
-        const exportVars = [
-            '--citadel-void', '--citadel-surface', '--citadel-elevated', '--citadel-border',
-            '--citadel-primary', '--citadel-primary-glow', '--citadel-secondary', '--citadel-accent',
-            '--text-primary', '--text-secondary', '--text-muted'
-        ];
-
-        for (const varName of exportVars) {
-            const value = computedStyle.getPropertyValue(varName).trim();
-            if (value) {
-                vars.push(`${varName}: ${value};`);
-            }
-        }
-
-        return `:root {\n  ${vars.join('\n  ')}\n}`;
-    }
 }
 
 // Singleton instance
@@ -282,5 +248,3 @@ export function getSkinService(): SkinService {
     }
     return skinServiceInstance;
 }
-
-export default SkinService;

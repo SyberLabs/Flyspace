@@ -258,5 +258,3 @@ export function SkinModal({ isOpen, onClose }: SkinModalProps) {
         </AnimatePresence>
     );
 }
-
-export default SkinModal;

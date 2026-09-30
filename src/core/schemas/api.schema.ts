@@ -1,6 +1,6 @@
 // ============================================
 // PROJECT OMNI: API PROVIDER SCHEMA
-// Definitions for the API Marketplace
+// The catalog the gateway, the public proxy and shells read
 // ============================================
 
 /**
@@ -122,7 +122,6 @@ export interface ApiIntegration {
     support: ApiSupportLevel;
     gateway?: ApiGatewayAdapter;
     testParams?: Record<string, unknown>;
-    notes?: string;
 }
 
 /**
@@ -159,9 +158,6 @@ export interface ApiProvider {
     /** Whether API key is required */
     requiresAuth: boolean;
 
-    /** Auth type */
-    authType?: 'api_key' | 'oauth' | 'bearer' | 'basic';
-
     /**
      * The key is configured server-side (process.env) and proxied via
      * /api/data. The browser neither holds nor sends it, so the dashboard
@@ -177,9 +173,6 @@ export interface ApiProvider {
     /** Corresponding block IDs that use this API */
     blockIds?: string[];
 
-    /** Whether this API is installed/enabled */
-    isInstalled?: boolean;
-
     /** Tags for search */
     tags: string[];
 
@@ -193,26 +186,13 @@ export interface ApiProvider {
 export interface ApiConfig {
     providerId: string;
     status: ApiStatus;
-    lastTested?: number;
     requestCount: number;
     lastRequest?: number;
     errorMessage?: string;
 }
 
-/**
- * Usage statistics for an API
- */
-export interface ApiUsageStats {
-    providerId: string;
-    requestsToday: number;
-    requestsThisMonth: number;
-    lastRequestTime?: number;
-    averageResponseTime?: number;
-    errorRate: number;
-}
-
 // ============================================
-// API CATALOG - All 80+ APIs
+// API CATALOG
 // ============================================
 
 export const API_CATALOG: ApiProvider[] = [
@@ -250,7 +230,6 @@ export const API_CATALOG: ApiProvider[] = [
         docsUrl: 'https://www.metaculus.com/api/',
         pricing: 'free',
         requiresAuth: true,
-        authType: 'api_key',
         serverKeyed: true,
         envVar: 'METACULUS_API_KEY',
         blockIds: ['metaculus_forecast'],
@@ -277,7 +256,6 @@ export const API_CATALOG: ApiProvider[] = [
         freeTierLimits: '25 requests/day',
         requiresAuth: true,
         serverKeyed: true,
-        authType: 'api_key',
         envVar: 'ALPHA_VANTAGE_API_KEY',
         blockIds: ['alpha_vantage_quote'],
         integration: {
@@ -325,7 +303,6 @@ export const API_CATALOG: ApiProvider[] = [
         pricing: 'free',
         requiresAuth: true,
         serverKeyed: true,
-        authType: 'api_key',
         envVar: 'FRED_API_KEY',
         blockIds: ['fred_series'],
         integration: {
@@ -359,7 +336,6 @@ export const API_CATALOG: ApiProvider[] = [
         freeTierLimits: '100 requests/day',
         requiresAuth: true,
         serverKeyed: true,
-        authType: 'api_key',
         envVar: 'NEWSAPI_KEY',
         blockIds: ['newsapi_feed'],
         integration: {
@@ -749,7 +725,6 @@ export const API_CATALOG: ApiProvider[] = [
         pricing: 'free',
         requiresAuth: true,
         serverKeyed: true,
-        authType: 'api_key',
         envVar: 'BLS_API_KEY',
         blockIds: ['bls_series'],
         integration: {
@@ -774,13 +749,6 @@ export const API_CATALOG: ApiProvider[] = [
  */
 export function getApisByCategory(category: ApiCategory): ApiProvider[] {
     return API_CATALOG.filter(api => api.category === category);
-}
-
-/**
- * Get all unique categories
- */
-export function getApiCategories(): ApiCategory[] {
-    return [...new Set(API_CATALOG.map(api => api.category))];
 }
 
 /**
