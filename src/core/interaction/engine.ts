@@ -3,7 +3,6 @@
 
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import { evaluateWireAdmission } from './ports';
-import { clearSeparated, isSeparated, markSeparated } from './separation';
 import { defaultSpeechCatalog, parseSpeech, type SpeechCatalog, type SpeechIntent, type SpeechShellKind } from './speech';
 import { describeCommand } from './speechReply';
 import { resolveReferents } from './referent';
@@ -28,7 +27,6 @@ export interface CanvasMutator {
     restore(block: BlockInstance): void;
     connect(sourceId: string, targetId: string): { ok: true; wireId: string } | { ok: false; reason: string };
     disconnect(wireId: string): void;
-    setGroup(ids: string[], groupId: string | null): void;
     openShell(target: SpeechShellKind): { ok: true; name: string; previousShellId: string } | { ok: false; reason: string };
 }
 
@@ -42,7 +40,6 @@ export interface EngineSnapshot {
     traces: InteractionTrace[];
     preview: SpatialCommand | null;
     held: SpatialCommand | null;
-    groups: Record<string, string[]>;
 }
 
 let sequence = 0;
@@ -61,7 +58,6 @@ export class InteractionEngine {
     private recentInteraction: string[] = [];
     private recentDiscourse: string[] = [];
     private points: Array<{ at: FramedPoint; timestampMs: number }> = [];
-    private groups = new Map<string, string[]>();
 
     constructor(
         private readonly canvas: CanvasMutator,
@@ -73,8 +69,7 @@ export class InteractionEngine {
             commands: this.commands.map(command => ({ ...command, subjects: [...command.subjects], evidence: [...command.evidence], modalities: [...command.modalities], summary: command.summary })),
             traces: this.traces.map(trace => ({ ...trace })),
             preview: this.preview ? { ...this.preview } : null,
-            held: this.held ? { ...this.held } : null,
-            groups: Object.fromEntries(this.groups)
+            held: this.held ? { ...this.held } : null
         };
     }
 
@@ -293,10 +288,6 @@ export class InteractionEngine {
             if (target.status !== 'resolved') return this.hold(proposal, 'ambiguous-target');
             proposal.target = { id: target.ids[0] };
         }
-        if (intent.action === 'connect' && intent.deixis === 'these' && resolved.ids.length >= 2 && !proposal.target) {
-            proposal.subjects = [{ id: resolved.ids[0] }];
-            proposal.target = { id: resolved.ids[1] };
-        }
         if (intent.destructive) return this.previewDestructive(proposal);
         return this.execute(proposal, timestampMs, false);
     }
@@ -333,7 +324,6 @@ export class InteractionEngine {
         if (proposal.action === 'connect' && proposal.subjects[0] && proposal.target) {
             const sourceId = proposal.subjects[0].id;
             const targetId = proposal.target.id;
-            if (isSeparated(sourceId, targetId)) return this.refuse(proposal, 'kept-separate');
             const source = this.canvas.getInstance(sourceId);
             const target = this.canvas.getInstance(targetId);
             const admission = evaluateWireAdmission(source, target);
@@ -361,51 +351,6 @@ export class InteractionEngine {
             }, () => {
                 if (removed) this.canvas.restore(removed);
             });
-        }
-
-        if (proposal.action === 'group') {
-            const ids = proposal.subjects.map(subject => subject.id);
-            const groupId = nextId('group');
-            this.groups.set(groupId, ids);
-            this.canvas.setGroup(ids, groupId);
-            return this.commitTracked(proposal, {
-                command: 'GROUP',
-                subjects: ids,
-                modalities: ['speech'],
-                committedAt: timestampMs
-            }, () => {
-                this.groups.delete(groupId);
-                this.canvas.setGroup(ids, null);
-            });
-        }
-
-        if (proposal.action === 'separate' && proposal.subjects.length >= 2) {
-            const ids = proposal.subjects.map(subject => subject.id);
-            for (let i = 0; i < ids.length; i++) {
-                for (let j = i + 1; j < ids.length; j++) markSeparated(ids[i], ids[j]);
-            }
-            return this.commitTracked(proposal, {
-                command: 'SEPARATE',
-                subjects: ids,
-                modalities: ['speech'],
-                committedAt: timestampMs
-            }, () => {
-                for (let i = 0; i < ids.length; i++) {
-                    for (let j = i + 1; j < ids.length; j++) clearSeparated(ids[i], ids[j]);
-                }
-            });
-        }
-
-        if (proposal.action === 'compare') {
-            const ids = proposal.subjects.map(subject => subject.id);
-            const noteId = this.canvas.add('text_note', 'Compare', 80, 80);
-            return this.commitTracked(proposal, {
-                command: 'COMPARE',
-                subjects: ids,
-                subject: noteId,
-                modalities: ['speech'],
-                committedAt: timestampMs
-            }, () => this.canvas.remove(noteId));
         }
 
         if (proposal.action === 'branch' && proposal.subjects[0]) {

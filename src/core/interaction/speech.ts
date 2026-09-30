@@ -121,20 +121,8 @@ export function parseSpeech(transcript: string, catalog: SpeechCatalog = default
         };
     }
 
-    if (text === 'compare these' || text === 'compare this') {
-        return { action: 'compare', deixis: 'these', destructive: false };
-    }
-    if (text === 'connect this to that') {
-        return { action: 'connect', deixis: 'these', destructive: false };
-    }
     if (text === 'delete this' || text === 'remove this') {
         return { action: 'delete', deixis: 'this', destructive: true };
-    }
-    if (text === 'group these') {
-        return { action: 'group', deixis: 'these', destructive: false };
-    }
-    if (text === 'keep these apart' || text === 'keep these separate') {
-        return { action: 'separate', deixis: 'these', destructive: false };
     }
     if (text === 'branch from here') {
         return { action: 'branch', deixis: 'this', destructive: false };

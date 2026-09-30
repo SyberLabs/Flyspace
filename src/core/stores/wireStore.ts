@@ -7,7 +7,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { DataWire, WireFilters, WireStatus, DEFAULT_WIRE_FILTERS } from '../schemas/wire.schema';
 import { evaluateWireAdmission } from '../interaction/ports';
-import { isSeparated } from '../interaction/separation';
 // Direct, not via the barrel. blockStore and wireStore are genuinely mutual —
 // deleting a block clears its wires, and a new wire defaults to the active
 // shell — but every use is a lazy .getState() inside a function body, so the
@@ -70,10 +69,6 @@ export const useWireStore = create<WireStoreState>()(
             lastAdmissionRefusal: null,
 
             addWire: (sourceBlockId, targetBlockId, filters, shellId) => {
-                if (isSeparated(sourceBlockId, targetBlockId)) {
-                    set({ lastAdmissionRefusal: 'kept-separate' });
-                    return '';
-                }
                 const blocks = useBlockStore.getState();
                 const typed = evaluateWireAdmission(
                     blocks.getBlock(sourceBlockId),

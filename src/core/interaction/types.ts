@@ -17,13 +17,10 @@ export type SpatialAction =
     | 'select'
     | 'create'
     | 'move'
-    | 'group'
     | 'connect'
-    | 'compare'
     | 'branch'
     | 'crystallize'
     | 'delete'
-    | 'separate'
     | 'cancel'
     | 'undo'
     | 'open-shell';

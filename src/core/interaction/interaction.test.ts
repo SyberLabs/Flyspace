@@ -4,7 +4,6 @@ import { InteractionEngine, type CanvasMutator } from './engine';
 import { resolveReferents } from './referent';
 import { parseSpeech } from './speech';
 import { point } from './coordinates';
-import { resetSeparation } from './separation';
 import type { BlockInstance, PortSchema } from '@/core/schemas/block.schema';
 import type { CanvasBlockView } from './types';
 import { useBlockStore } from '@/core/stores';
@@ -110,7 +109,6 @@ class MemoryCanvas implements CanvasMutator {
         return { ok: true as const, wireId };
     }
     disconnect(wireId: string) { this.wires = this.wires.filter(wire => wire.id !== wireId); }
-    setGroup() {}
     openShell(target: { id: string; name: string; kind: 'root' | 'template' | 'saved' }) {
         const previousShellId = this.shell;
         this.shell = target.kind === 'root' ? 'root' : target.id;
@@ -123,7 +121,6 @@ describe('spatial command lifecycle', () => {
     let engine: InteractionEngine;
 
     beforeEach(() => {
-        resetSeparation();
         canvas = new MemoryCanvas();
         canvas.blocks.push(block('news', [jsonOut]));
         canvas.blocks[0].schema.display_name = 'News Feed';
@@ -168,24 +165,6 @@ describe('spatial command lifecycle', () => {
         engine.undo();
         expect(canvas.getInstance('news')?.instance_id).toBe('news');
     });
-
-    it('refuses a typed connect and honors keep-apart', () => {
-        canvas.blocks.push(block('note', [textOut]));
-        canvas.blocks[1].schema.display_name = 'Note';
-        canvas.blocks[1].position = { x: 400, y: 10 };
-        canvas.blocks.push(block('typed', [textIn]));
-        canvas.blocks[2].schema.display_name = 'Typed';
-        engine.select(['news', 'typed']);
-        const refused = engine.speak('connect this to that', 4000);
-        expect(refused.lifecycle).toBe('refused');
-        expect(canvas.wires).toHaveLength(0);
-
-        engine.select(['news', 'note']);
-        expect(engine.speak('keep these apart', 4100).lifecycle).toBe('committed');
-        const again = engine.speak('connect this to that', 4200);
-        expect(again.lifecycle).toBe('refused');
-        expect(again.reason).toBe('kept-separate');
-    });
 });
 
 describe('referents and speech', () => {
@@ -206,7 +185,6 @@ describe('referents and speech', () => {
     it('parses the spoken command set and nothing beyond it', () => {
         expect(parseSpeech('Create a researcher.')?.personaBlockId).toBe('persona_researcher');
         expect(parseSpeech('give these to the analyst')?.action).toBe('connect');
-        expect(parseSpeech('compare these')?.action).toBe('compare');
         expect(parseSpeech('wave at the canvas')).toBeNull();
     });
 

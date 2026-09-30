@@ -65,11 +65,6 @@ function createStoreMutator(): CanvasMutator {
         disconnect(wireId) {
             useWireStore.getState().removeWire(wireId);
         },
-        setGroup(ids, groupId) {
-            for (const id of ids) {
-                useBlockStore.getState().setParams(id, { spatialGroupId: groupId });
-            }
-        },
         openShell(target: SpeechShellKind) {
             const previousShellId = useBlockStore.getState().activeShellId;
             if (target.kind === 'root') {
