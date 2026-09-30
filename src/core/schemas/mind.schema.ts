@@ -77,7 +77,6 @@ export interface KnowledgeNode {
     label: string;
     description?: string;
     properties: Record<string, unknown>;
-    embeddings?: number[];  // For semantic search (future)
     createdAt: number;
     updatedAt: number;
     sourceBlockId?: string;  // Block that created this node
@@ -160,8 +159,6 @@ export interface PersonaConfig {
     avatar?: string;  // Emoji or image URL
     systemPrompt: string;
     traits: PersonaTrait[];
-    llmConfig: Partial<LLMConfig>;  // Override defaults
-    activeContextPools: string[];  // Which pools this persona reads
     isBuiltIn: boolean;
     createdAt: number;
     updatedAt: number;
@@ -190,8 +187,6 @@ When you identify connections between data points, explain your reasoning clearl
             { ...PERSONA_TRAITS[6], value: 0.3 },  // Speculative: low
             { ...PERSONA_TRAITS[7], value: 0.3 }   // Empathetic: low
         ],
-        llmConfig: { temperature: 0.3 },
-        activeContextPools: ['observations', 'inferences'],
         isBuiltIn: true
     },
     {
@@ -213,8 +208,6 @@ Think in terms of moves and counter-moves, risks and opportunities.`,
             { ...PERSONA_TRAITS[6], value: 0.7 },  // Speculative: high
             { ...PERSONA_TRAITS[7], value: 0.4 }   // Empathetic: moderate
         ],
-        llmConfig: { temperature: 0.5 },
-        activeContextPools: ['observations', 'inferences', 'directives'],
         isBuiltIn: true
     },
     {
@@ -236,8 +229,6 @@ Be clear about what could invalidate your predictions.`,
             { ...PERSONA_TRAITS[6], value: 0.9 },  // Speculative: very high
             { ...PERSONA_TRAITS[7], value: 0.5 }   // Empathetic: moderate
         ],
-        llmConfig: { temperature: 0.7 },
-        activeContextPools: ['observations', 'inferences', 'predictions'],
         isBuiltIn: true
     },
     {
@@ -259,8 +250,6 @@ Identify blind spots, hidden risks, and uncomfortable questions others avoid.`,
             { ...PERSONA_TRAITS[6], value: 0.4 },  // Speculative: moderate
             { ...PERSONA_TRAITS[7], value: 0.2 }   // Empathetic: low
         ],
-        llmConfig: { temperature: 0.6 },
-        activeContextPools: ['observations', 'inferences', 'directives'],
         isBuiltIn: true
     }
 ];
@@ -289,13 +278,10 @@ export interface ContextEntry {
     id: string;
     type: ContextEntryType;
     content: string;
-    summary?: string;  // Compressed version for large entries
     importance: number;  // 0-1, affects pruning
     timestamp: number;
     sourceBlockId?: string;
-    sourcePersonaId?: string;
     metadata?: Record<string, unknown>;
-    ttl?: number;  // Time-to-live in ms (optional expiry)
 }
 
 // ============================================
@@ -334,9 +320,7 @@ export interface ContextPool {
     icon?: string;
     entries: ContextEntry[];
     maxEntries: number;
-    maxTokens?: number;  // Optional token limit
     pruneStrategy: PruneStrategy;
-    subscribers: string[];  // Persona IDs
     isSystem: boolean;  // Built-in vs user-created
     createdAt: number;
     updatedAt: number;
@@ -352,9 +336,7 @@ export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updated
         description: 'Shell Mind auto-awareness of all active blocks. Short-term memory tier.',
         icon: '👁️',
         maxEntries: 100,
-        maxTokens: 8000,
         pruneStrategy: 'recency',
-        subscribers: ['analyst', 'strategist', 'oracle', 'devil'],
         isSystem: true
     },
     {
@@ -363,9 +345,7 @@ export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updated
         description: 'User attention signal - pinned blocks for deep analysis (max 5). Can be imported by Persona Blocks.',
         icon: '📍',
         maxEntries: 5,
-        maxTokens: 12000,
         pruneStrategy: 'importance',
-        subscribers: ['analyst', 'strategist', 'oracle', 'devil'],
         isSystem: true
     },
     {
@@ -374,9 +354,7 @@ export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updated
         description: 'Shell Mind insights and pattern detections. Short-term memory tier.',
         icon: '💡',
         maxEntries: 50,
-        maxTokens: 4000,
         pruneStrategy: 'importance',
-        subscribers: ['analyst', 'strategist', 'oracle', 'devil'],
         isSystem: true
     },
     {
@@ -385,9 +363,7 @@ export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updated
         description: 'User instructions and strategic goals. Short-term memory tier.',
         icon: '🎯',
         maxEntries: 20,
-        maxTokens: 2000,
         pruneStrategy: 'fifo',
-        subscribers: ['strategist', 'devil'],
         isSystem: true
     },
     {
@@ -396,9 +372,7 @@ export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updated
         description: 'Shell Mind forecasts and scenarios. Short-term memory tier.',
         icon: '🔮',
         maxEntries: 30,
-        maxTokens: 3000,
         pruneStrategy: 'hybrid',
-        subscribers: ['oracle', 'strategist'],
         isSystem: true
     },
     {
@@ -407,9 +381,7 @@ export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updated
         description: 'Crystallized insights persisted across sessions. Long-term memory tier.',
         icon: '🧠',
         maxEntries: 200,
-        maxTokens: 16000,
         pruneStrategy: 'importance',
-        subscribers: ['analyst', 'strategist', 'oracle', 'devil'],
         isSystem: true
     }
 ];
