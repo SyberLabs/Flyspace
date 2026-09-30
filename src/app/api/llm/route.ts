@@ -1,7 +1,7 @@
 // ============================================
 // PROJECT OMNI: LLM PROXY ROUTE
 // Server-side proxy for LLM calls. Keys are read from process.env here and
-// never shipped to the client. See IMPLEMENTATION_PLAN.md (Phase 3).
+// never shipped to the client.
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';

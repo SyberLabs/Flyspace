@@ -12,7 +12,7 @@
  *
  * Local (Ollama) runs offline with no key. Anthropic and Google are cloud
  * providers whose API keys live server-side (read from process.env by the
- * /api/llm route); keys are never stored client-side. See IMPLEMENTATION_PLAN.md.
+ * /api/llm route); keys are never stored client-side.
  */
 export type LLMProvider = 'local' | 'anthropic' | 'google';
 

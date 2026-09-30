@@ -150,10 +150,8 @@ The canvas is the product.
 ## Docs
 
 `APEX_PLAN.md` is the live roadmap. `vision.md` is the north star.
-`WIRE_SYSTEM_GUIDE.md`, `TYPED_PORT_SYSTEM.md` (declared ports are enforced when
-a wire is created; blocks without ports stay untyped), and
-`MEMORY_ARCHITECTURE.md` cover the wire, port, and memory layers. Root plan
-documents marked historical at the top are kept as a record, not as current
-behavior. `AGENTS.md` holds the rules for agents working in this repo.
+`TYPED_PORT_SYSTEM.md` covers the port layer (declared ports are enforced when a
+wire is created; blocks without ports stay untyped).
+`AGENTS.md` holds the rules for agents working in this repo.
 `INFERENCE_LEDGER.md` covers the one thing Postgres owns, and why the rest stays
 local. `DEPLOYMENT.md` records the hosting decision and what CI guarantees.
