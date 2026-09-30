@@ -362,19 +362,6 @@ blockRegistry.register({
     description: 'Markdown notes with preview toggle'
 });
 
-// Code Block
-blockRegistry.register({
-    block_id: 'code_sandbox',
-    display_name: 'Code',
-    category: 'workspace',
-    data_type: 'code',
-    refresh_rate: 'manual',
-    semantic_tags: ['code', 'programming', 'scripts', 'analysis', 'developer'],
-    wiring_logic: 'map_to_developer_agent',
-    icon: 'Code',
-    description: 'Syntax-highlighted code display'
-});
-
 // ============================================
 // PERSONA BLOCKS
 // ============================================
