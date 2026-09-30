@@ -251,6 +251,3 @@ function CommandItem({ icon, label, description, shortcut, onSelect }: CommandIt
         </Command.Item>
     );
 }
-
-
-export default CommandPalette;

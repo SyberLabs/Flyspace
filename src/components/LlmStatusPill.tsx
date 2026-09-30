@@ -179,5 +179,3 @@ export function LlmStatusPill() {
         </div>
     );
 }
-
-export default LlmStatusPill;

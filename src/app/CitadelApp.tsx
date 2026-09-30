@@ -10,21 +10,18 @@ import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { CommandPalette } from '@/components/CommandPalette';
 import { SkinModal } from '@/components/SkinModal';
-import { Sprout } from 'lucide-react';
-import Link from 'next/link';
 import { ApiDashboardModal } from '@/components/ApiDashboard';
 import { ShellPanel } from '@/components/ShellPanel';
 import { MindPanel } from '@/components/mind';
 import { MindDock } from '@/components/mind/MindDock';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { ContextCaptureModal } from '@/components/mind/ContextCaptureModal';
-import { useBlockStore, useToolStore } from '@/core/stores';
+import { useToolStore } from '@/core/stores';
 import { useApiStore } from '@/core/stores/apiStore';
 import { useMindShellSync, useShellNavigation } from '@/core/hooks';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 
 export default function CitadelApp() {
-    const { activeShellId } = useBlockStore();
     const { activeTool, selection, captureSelection, clearSelection } = useToolStore();
     const { initializeDefaults } = useApiStore();
 
@@ -84,22 +81,11 @@ export default function CitadelApp() {
                 {/* Canvas Workspace - follows the active shell (root by default,
                     or a template-spawned shell after using the Shell Store) */}
                 <main className="flex-1 overflow-hidden relative">
-                    <Canvas shellId={activeShellId} onBrowseShells={() => setIsShellsOpen(true)} />
+                    <Canvas onBrowseShells={() => setIsShellsOpen(true)} />
                     <VoiceControl />
 
                     {/* Mind Dock - Always Visible */}
                     <MindDock onExpandPanel={() => setIsMindOpen(true)} />
-
-                    {/* Garden FAB - Bottom Right */}
-                    <Link
-                        href="/garden"
-                        className="absolute bottom-6 right-6 z-30 group"
-                    >
-                        <div className="btn garden-pill">
-                            <Sprout />
-                            <span>Garden</span>
-                        </div>
-                    </Link>
                 </main>
             </div>
 

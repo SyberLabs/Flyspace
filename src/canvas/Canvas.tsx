@@ -29,19 +29,16 @@ import { spatialSession } from '@/core/interaction/session';
 import { point } from '@/core/interaction/coordinates';
 
 interface CanvasProps {
-    hideEmptyState?: boolean;
     /** Opens the Shell Store. The empty canvas leads with it. */
     onBrowseShells?: () => void;
-    shellId?: string; // Optional shell ID for filtering blocks
 }
 
-export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: CanvasProps) {
+export function Canvas({ onBrowseShells }: CanvasProps) {
     const {
         blocks,
         addBlock,
         removeBlock,
-        activeShellId,
-        setActiveShell
+        activeShellId
     } = useBlockStore();
     const { gridSnapping, gridSize } = useSettingsStore();
     const { draggingBlockId, setDraggingBlock, setSelectedBlock, selectedBlockId } = useUIStore();
@@ -50,22 +47,12 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
 
     const hasMounted = useClientMounted();
 
-    // Use shellId prop or fallback to active shell
-    const currentShell = shellId || activeShellId;
-
     // Filter blocks by shell (only after mount to avoid hydration mismatch).
     // Wires are rendered by WireRenderer straight from the wire store.
     const shellBlocks = useMemo(
-        () => hasMounted ? blocks.filter(b => b.shellId === currentShell) : [],
-        [hasMounted, blocks, currentShell]
+        () => hasMounted ? blocks.filter(b => b.shellId === activeShellId) : [],
+        [hasMounted, blocks, activeShellId]
     );
-
-    // Set active shell when shellId prop changes
-    useEffect(() => {
-        if (shellId && shellId !== activeShellId) {
-            setActiveShell(shellId);
-        }
-    }, [shellId, activeShellId, setActiveShell]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -99,7 +86,7 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
             addBlock(schema, {
                 x: Math.max(0, e.clientX - rect.left - 160),
                 y: Math.max(0, e.clientY - rect.top - 20)
-            }, currentShell);
+            }, activeShellId);
         }
         setDraggingBlock(null);
     };
@@ -196,7 +183,7 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
                 <WireRenderer
                     activeDragId={activeDragId}
                     dragDelta={dragDelta}
-                    shellId={currentShell}
+                    shellId={activeShellId}
                 />
 
                 {/* Drop indicator when dragging from Armory */}
@@ -213,7 +200,7 @@ export function Canvas({ hideEmptyState = false, shellId, onBrowseShells }: Canv
                 )}
 
                 {/* Empty state - shell-aware */}
-                {shellBlocks.length === 0 && !draggingBlockId && !hideEmptyState && (
+                {shellBlocks.length === 0 && !draggingBlockId && (
                     <>
                         {/* Ambient plate: empty state only, never under blocks */}
                         {hasMounted && <Atmosphere />}
@@ -457,5 +444,3 @@ function BlockContent({ block }: BlockContentProps) {
         </div>
     );
 }
-
-export default Canvas;

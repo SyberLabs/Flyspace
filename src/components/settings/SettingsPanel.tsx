@@ -369,5 +369,3 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         </AnimatePresence>
     );
 }
-
-export default SettingsPanel;
