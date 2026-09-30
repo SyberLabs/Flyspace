@@ -7,19 +7,50 @@ export interface SpeechFeedbackAdapter {
     cancel(): void;
 }
 
+function speechSynth(): SpeechSynthesis | undefined {
+    return typeof window === 'undefined' ? undefined : window.speechSynthesis;
+}
+
+/**
+ * speechSynthesis.cancel() drops every utterance on the page, including the
+ * content Speak block. This adapter only stops the utterance it started, and
+ * it does not touch the synth until it has spoken.
+ */
 export function browserSpeechFeedback(): SpeechFeedbackAdapter {
+    let owned: SpeechSynthesisUtterance | null = null;
+
+    function cancelOwned(): void {
+        const utterance = owned;
+        owned = null;
+        if (!utterance) return;
+        utterance.onend = null;
+        utterance.onerror = null;
+        utterance.volume = 0;
+        const synth = speechSynth();
+        if (!synth || synth.pending || !synth.speaking) return;
+        synth.cancel();
+    }
+
     return {
         id: 'browser-speech-synthesis',
         speak(text: string) {
-            const synth = typeof window === 'undefined' ? undefined : window.speechSynthesis;
+            const synth = speechSynth();
             if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return;
-            synth.cancel();
+            if (owned) cancelOwned();
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
+            owned = utterance;
+            utterance.onend = () => {
+                if (owned === utterance) owned = null;
+            };
+            utterance.onerror = () => {
+                if (owned === utterance) owned = null;
+            };
             synth.speak(utterance);
         },
         cancel() {
-            if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
+            if (!owned) return;
+            cancelOwned();
         }
     };
 }
