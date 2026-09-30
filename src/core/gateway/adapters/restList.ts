@@ -105,16 +105,7 @@ export function createRestListAdapter(
         cacheTtlMs: config.cacheTtlMs ?? 5 * 60 * 1000,
         rateLimitMs: config.rateLimitMs ?? 1000,
 
-        fetchFn: async (apiKey, params) => {
-            if (provider.requiresAuth && !apiKey) {
-                return {
-                    error: {
-                        code: 'NO_API_KEY',
-                        message: `${provider.name} requires an API key.`
-                    }
-                };
-            }
-
+        fetchFn: async (_apiKey, params) => {
             const url = new URL(config.path, provider.baseUrl);
             const mergedParams: Record<string, string | number | boolean> = {
                 ...(config.defaultParams || {})
@@ -147,23 +138,9 @@ export function createRestListAdapter(
                 }
             }
 
-            const shouldInjectAuth = !!apiKey && (provider.requiresAuth || !!config.auth);
-
-            // Auth injection
-            if (shouldInjectAuth && config.auth?.in === 'query') {
-                const paramName = config.auth.name || 'api_key';
-                url.searchParams.set(paramName, apiKey);
-            }
-
             const headers: Record<string, string> = {
                 ...(config.headers || {})
             };
-
-            if (shouldInjectAuth && config.auth?.in === 'header') {
-                const headerName = config.auth.name || 'Authorization';
-                const prefix = config.auth.prefix || '';
-                headers[headerName] = `${prefix}${apiKey}`;
-            }
 
             try {
                 const response = await fetch(url.toString(), {
