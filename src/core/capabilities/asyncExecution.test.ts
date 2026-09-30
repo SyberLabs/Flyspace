@@ -394,9 +394,47 @@ describe('async_poll execution', () => {
         expect(failed.error?.code).toBe('ASYNC_RUN_FAILED');
         expect(executionRecord(failed.runId!)?.lastObservedStatus).toBe('failed');
 
+        const read = admitProposal(asyncProposal({ effectHint: 'read' }), {
+            nowMs: NOW,
+            trustedEffectHints: { asyncRuntimes: ['maxun'] }
+        });
+        expect(read.manifest?.effect).toBe('read');
         bindAsyncRuntime('maxun', maxunFixture(clock, { outcome: 'malformed' }).runtime);
-        const malformed = await executeCapability(manifest.id, {}, { clock });
+        const malformed = await executeCapability(read.manifest!.id, {}, { clock });
         expect(malformed.error?.code).toBe('TYPED_OUTPUT_MISMATCH');
+        expect(executionRecord(malformed.runId!)?.status).toBe('failed');
+    });
+
+    it('keeps a side-effect schema mismatch uncertain so the same key does not start again', async () => {
+        for (const effectHint of ['write', 'destructive'] as const) {
+            const clock = virtualClock(NOW);
+            const fixture = maxunFixture(clock, { outcome: 'malformed' });
+            bindAsyncRuntime('maxun', fixture.runtime);
+            const manifest = effectHint === 'write'
+                ? installApproved()
+                : approveCapability(admitProposal(asyncProposal({ effectHint: 'destructive' }), {
+                    nowMs: NOW,
+                    trustedEffectHints: { asyncRuntimes: ['maxun'] }
+                }).manifest!.id).manifest!;
+            expect(manifest.effect).toBe(effectHint);
+
+            const key = `mismatch-${effectHint}-001`;
+            const result = await executeCapability(manifest.id, {}, { clock, idempotencyKey: key });
+            expect(result.error?.code).toBe('TYPED_OUTPUT_MISMATCH');
+            const record = executionRecord(result.runId!)!;
+            expect(record.status).toBe('uncertain');
+            expect(record.externalRunId).toBe('run_1');
+            expect(record.lastObservedStatus).toBe('succeeded');
+            expect(record.receipt).toMatchObject({ ok: false, code: 'TYPED_OUTPUT_MISMATCH' });
+            expect(record.receipt?.message).toContain('The destination reported success and the value was rejected');
+
+            const polls = fixture.calls.poll;
+            const replay = await executeCapability(manifest.id, {}, { clock, idempotencyKey: key });
+            expect(replay.error?.code).toBe('EFFECT_UNCERTAIN');
+            expect(replay.error?.message).toContain('The destination reported success and the value was rejected');
+            expect(fixture.calls.start).toBe(1);
+            expect(fixture.calls.poll).toBe(polls);
+        }
     });
 
     it('stops at the profile deadline: a write becomes uncertain, and nothing is started twice', async () => {

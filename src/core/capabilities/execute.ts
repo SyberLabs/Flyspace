@@ -182,8 +182,22 @@ function settleAsync(
     if (outcome.kind === 'succeeded') {
         const schemaErrors = validateValue(manifest.output.schema, outcome.value);
         if (schemaErrors.length > 0) {
-            result = failure(manifest.id, 'TYPED_OUTPUT_MISMATCH', schemaErrors.slice(0, 6).join('; '), false);
-            status = 'failed';
+            const detail = schemaErrors.slice(0, 6).join('; ');
+            if (sideEffect) {
+                // The external run id is already recorded, and the destination
+                // said the run succeeded. Rejecting the value must not read as
+                // a clean failure that invites another start under the same key.
+                result = failure(
+                    manifest.id,
+                    'TYPED_OUTPUT_MISMATCH',
+                    `The destination reported success and the value was rejected: ${detail}`,
+                    false
+                );
+                status = 'uncertain';
+            } else {
+                result = failure(manifest.id, 'TYPED_OUTPUT_MISMATCH', detail, false);
+                status = 'failed';
+            }
         } else {
             const typed: TypedValue = { schema: manifest.output.schema, value: outcome.value };
             result = { ok: true, capabilityId: manifest.id, typed, presentation: projectSuccess(manifest, typed) };

@@ -22,6 +22,12 @@ import { maxunEvaluation } from './maxun.evaluation';
 const NOW = 1_790_000_000_000;
 const KEY = 'maxun-fixture-key-not-real';
 const BASE = 'https://maxun.fixture.test';
+/** Public answer supplied by the test. The runtime does not resolve this name. */
+const PUBLIC_ADDRESSES = [{ address: '1.1.1.1' }];
+
+function boundRuntime(fetchImpl: typeof fetch) {
+    return createMaxunRuntime({ baseUrl: BASE, fetch: fetchImpl, addresses: PUBLIC_ADDRESSES });
+}
 const SLOT = transportCredentialSlot(
     { kind: 'async', runtimeId: 'maxun', operation: 'x' },
     { kind: 'apiKey', in: 'header', name: 'x-api-key' }
@@ -187,7 +193,7 @@ describe('maxun runtime through the async profile', () => {
     it('runs a scrape robot past the 15s request timeout and returns a typed value', async () => {
         const clock = virtualClock();
         const server = maxunServer(clock, { finishAfterMs: 45_000 });
-        bindAsyncRuntime('maxun', createMaxunRuntime({ baseUrl: BASE, fetch: server.fetchImpl }));
+        bindAsyncRuntime('maxun', boundRuntime(server.fetchImpl));
         capabilitySecrets.set(SLOT, KEY);
         const manifest = await install('rb-pricing');
         approveCapability(manifest.id);
@@ -216,17 +222,15 @@ describe('maxun runtime through the async profile', () => {
         const manifest = await install('rb-listing');
         approveCapability(manifest.id);
 
-        bindAsyncRuntime('maxun', createMaxunRuntime({
-            baseUrl: BASE,
-            fetch: maxunServer(clock, { data: { textData: { title: 'Desk', price: '$120' } } }).fetchImpl
-        }));
+        bindAsyncRuntime('maxun', boundRuntime(
+            maxunServer(clock, { data: { textData: { title: 'Desk', price: '$120' } } }).fetchImpl
+        ));
         const ok = await executeCapability(manifest.id, {}, { clock });
         expect(ok.typed?.value).toEqual({ title: 'Desk', price: '$120' });
 
-        bindAsyncRuntime('maxun', createMaxunRuntime({
-            baseUrl: BASE,
-            fetch: maxunServer(clock, { data: { textData: { title: 'Desk' } } }).fetchImpl
-        }));
+        bindAsyncRuntime('maxun', boundRuntime(
+            maxunServer(clock, { data: { textData: { title: 'Desk' } } }).fetchImpl
+        ));
         const partial = await executeCapability(manifest.id, {}, { clock });
         expect(partial.error?.code).toBe('TYPED_OUTPUT_MISMATCH');
     });
@@ -234,7 +238,7 @@ describe('maxun runtime through the async profile', () => {
     it('fails the next run deterministically after the slot is revoked and keeps the definition', async () => {
         const clock = virtualClock();
         const server = maxunServer(clock);
-        bindAsyncRuntime('maxun', createMaxunRuntime({ baseUrl: BASE, fetch: server.fetchImpl }));
+        bindAsyncRuntime('maxun', boundRuntime(server.fetchImpl));
         capabilitySecrets.set(SLOT, KEY);
         const manifest = await install('rb-pricing');
         approveCapability(manifest.id);
@@ -253,7 +257,7 @@ describe('maxun runtime through the async profile', () => {
     it('treats a refused start as failed and an ambiguous one as uncertain', async () => {
         const clock = virtualClock();
         capabilitySecrets.set(SLOT, 'wrong-key');
-        bindAsyncRuntime('maxun', createMaxunRuntime({ baseUrl: BASE, fetch: maxunServer(clock).fetchImpl }));
+        bindAsyncRuntime('maxun', boundRuntime(maxunServer(clock).fetchImpl));
         const manifest = await install('rb-pricing');
         approveCapability(manifest.id);
         const refused = await executeCapability(manifest.id, {}, { clock });
@@ -262,7 +266,7 @@ describe('maxun runtime through the async profile', () => {
 
         capabilitySecrets.set(SLOT, KEY);
         for (const status of [500, 409]) {
-            bindAsyncRuntime('maxun', createMaxunRuntime({ baseUrl: BASE, fetch: maxunServer(clock, { startStatus: status }).fetchImpl }));
+            bindAsyncRuntime('maxun', boundRuntime(maxunServer(clock, { startStatus: status }).fetchImpl));
             const ambiguous = await executeCapability(manifest.id, {}, { clock });
             expect(ambiguous.error?.code).toBe('EFFECT_UNCERTAIN');
         }
@@ -274,10 +278,10 @@ describe('maxun runtime through the async profile', () => {
         const manifest = await install('rb-pricing');
         approveCapability(manifest.id);
 
-        bindAsyncRuntime('maxun', createMaxunRuntime({ baseUrl: BASE, fetch: maxunServer(clock, { pollStatus: 'failed' }).fetchImpl }));
+        bindAsyncRuntime('maxun', boundRuntime(maxunServer(clock, { pollStatus: 'failed' }).fetchImpl));
         expect((await executeCapability(manifest.id, {}, { clock })).error?.code).toBe('ASYNC_RUN_FAILED');
 
-        bindAsyncRuntime('maxun', createMaxunRuntime({ baseUrl: BASE, fetch: maxunServer(clock, { pollStatus: 'mystery', finishAfterMs: 0 }).fetchImpl }));
+        bindAsyncRuntime('maxun', boundRuntime(maxunServer(clock, { pollStatus: 'mystery', finishAfterMs: 0 }).fetchImpl));
         const unknown = await executeCapability(manifest.id, {}, { clock });
         expect(unknown.ok).toBe(false);
         expect(unknown.error?.code).toBe('EFFECT_UNCERTAIN');
@@ -286,6 +290,23 @@ describe('maxun runtime through the async profile', () => {
     it('refuses a non-https or credential-bearing base URL', () => {
         expect(() => createMaxunRuntime({ baseUrl: 'http://maxun.fixture.test' })).toThrow(/https/);
         expect(() => createMaxunRuntime({ baseUrl: 'https://user:pw@maxun.fixture.test' })).toThrow(/credentials/);
+    });
+
+    it('allows the pinned origin without addresses and refuses loopback, private, and metadata bases', () => {
+        expect(() => createMaxunRuntime()).not.toThrow();
+        expect(() => createMaxunRuntime({ baseUrl: 'https://app.maxun.dev/robots' })).not.toThrow();
+        expect(() => createMaxunRuntime({ baseUrl: BASE, addresses: PUBLIC_ADDRESSES })).not.toThrow();
+
+        expect(() => createMaxunRuntime({ baseUrl: BASE })).toThrow(/did not resolve/);
+        expect(() => createMaxunRuntime({ baseUrl: 'https://127.0.0.1' })).toThrow(/public address/);
+        expect(() => createMaxunRuntime({ baseUrl: 'https://[::1]' })).toThrow(/public address/);
+        expect(() => createMaxunRuntime({ baseUrl: 'https://10.1.2.3' })).toThrow(/public address/);
+        expect(() => createMaxunRuntime({ baseUrl: 'https://localhost' })).toThrow(/public origin/);
+        expect(() => createMaxunRuntime({ baseUrl: 'https://metadata.google.internal' })).toThrow(/public origin/);
+        expect(() => createMaxunRuntime({
+            baseUrl: BASE,
+            addresses: [{ address: '1.1.1.1' }, { address: '127.0.0.1' }]
+        })).toThrow(/non-public/);
     });
 });
 

@@ -3,12 +3,15 @@
 // one request open until the robot finishes. The endpoint is host
 // configuration; nothing in a manifest can change it. Each request is one
 // bounded fetch with the caller's signal and no redirects, so the API key is
-// never forwarded to another origin.
+// never forwarded to another origin. The pinned cloud origin is the only host
+// accepted without resolved addresses. Any other base has to pass the broker
+// egress check, so a loopback, private, or metadata address never sees the key.
 //
 // The request and response shapes follow Maxun's public docs. They were not
 // checked against a live account in this environment.
 
 import { AsyncStartRejected, type AsyncJobRuntime, type AsyncObservation } from '../asyncRuntime';
+import { assessEgress, type ResolvedAddress } from '../egress';
 import { isRecord } from '../valueType';
 import { MAXUN_API_KEY_HEADER, parseMaxunOperation, type MaxunRobotMode } from './maxunProvider';
 
@@ -22,10 +25,16 @@ const FAILED = new Set(['failed', 'error', 'aborted', 'canceled', 'cancelled']);
 export interface MaxunRuntimeConfig {
     baseUrl?: string;
     fetch?: typeof fetch;
+    /**
+     * Addresses the caller already resolved for `baseUrl`. Required for any
+     * host other than the pinned cloud origin, unless the host is an IP literal
+     * the egress check can classify on its own. Missing answers are a refusal.
+     */
+    addresses?: ResolvedAddress[];
 }
 
 export function createMaxunRuntime(config: MaxunRuntimeConfig = {}): AsyncJobRuntime {
-    const base = hostBase(config.baseUrl ?? MAXUN_CLOUD_BASE_URL);
+    const base = hostBase(config.baseUrl ?? MAXUN_CLOUD_BASE_URL, config.addresses ?? []);
     const fetchImpl = config.fetch ?? fetch;
 
     return {
@@ -99,7 +108,7 @@ function onlyKey(headers: Record<string, string>): Record<string, string> {
     return value ? { [MAXUN_API_KEY_HEADER]: value } : {};
 }
 
-function hostBase(raw: string): string {
+function hostBase(raw: string, addresses: ResolvedAddress[]): string {
     let url: URL;
     try {
         url = new URL(raw);
@@ -109,6 +118,13 @@ function hostBase(raw: string): string {
     if (url.protocol !== 'https:') throw new Error('Maxun base URL must be https');
     if (url.username || url.password) throw new Error('Maxun base URL cannot embed credentials');
     if (url.search || url.hash) throw new Error('Maxun base URL cannot carry a query or fragment');
+    // The pinned origin is the product default. It does not need a DNS answer.
+    // Every other host goes through assessEgress, which classifies literals
+    // and refuses a name that was not resolved to public addresses.
+    if (url.origin !== new URL(MAXUN_CLOUD_BASE_URL).origin) {
+        const decision = assessEgress(url, addresses);
+        if (!decision.ok) throw new Error(`Maxun base URL is refused: ${decision.reason}`);
+    }
     return url.toString().replace(/\/+$/, '');
 }
 

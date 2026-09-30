@@ -41,11 +41,23 @@ interface Session {
 
 export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport {
     let session: Session | undefined;
+    // One header key has one in-flight session. Connect used to drop the
+    // current session and await close() before storing the next one, so two
+    // overlapping calls could each construct a client. The chain is the slot:
+    // a second call with the same key waits and reuses the session the first
+    // call publishes, instead of opening another.
+    let connectChain: Promise<void> = Promise.resolve();
 
-    async function connected(context: McpCallContext | undefined, signal: AbortSignal | undefined): Promise<Client> {
+    function connected(context: McpCallContext | undefined, signal: AbortSignal | undefined): Promise<Client> {
         const headers = { ...(config.headers ?? {}), ...(context?.headers ?? {}) };
         const key = sha256(canonicalize(headers));
-        if (session?.key === key) return session.ready;
+        const opening = connectChain.then(() => openSession(key, headers, signal));
+        connectChain = opening.then(() => undefined, () => undefined);
+        return opening;
+    }
+
+    async function openSession(key: string, headers: Record<string, string>, signal: AbortSignal | undefined): Promise<Client> {
+        if (session && session.key === key) return session.ready;
         const previous = session;
         session = undefined;
         if (previous) await previous.client.close().catch(() => undefined);
@@ -102,10 +114,14 @@ export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport
             return session?.client.getProtocolEra();
         },
 
-        async close() {
-            const current = session;
-            session = undefined;
-            if (current) await current.client.close().catch(() => undefined);
+        close() {
+            const closing = connectChain.then(async () => {
+                const current = session;
+                session = undefined;
+                if (current) await current.client.close().catch(() => undefined);
+            });
+            connectChain = closing.then(() => undefined, () => undefined);
+            return closing;
         }
     };
 }

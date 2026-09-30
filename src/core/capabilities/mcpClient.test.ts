@@ -13,11 +13,12 @@
 // was contacted. These tests show the SDK path works against both eras in
 // fixtures; they are not a measurement of any deployed server.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
+import { Client } from '@modelcontextprotocol/client';
 import { createMcpHandler, McpServer, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { createMcpHttpTransport, type McpSdkTransport } from './mcpClient';
@@ -219,6 +220,45 @@ describe('MCP client over the official SDK', () => {
         const transport = client({ url: fixture.url, versionNegotiation: { pin: '2026-07-28' } });
         await expect(transport.call('board', 'list', {})).rejects.toThrow(/negotiation/i);
         expect(fixture.seen.map(entry => entry.method)).not.toContain('tools/call');
+    });
+
+    it('opens one session when two calls for the same header key start together', async () => {
+        const fixture = await track(modernServer());
+        const transport = client({ url: fixture.url, headers: { 'x-api-key': 'first' } });
+        await transport.call('board', 'list', { limit: 1 });
+
+        let releaseClose: () => void = () => {};
+        const closeGate = new Promise<void>(resolve => { releaseClose = resolve; });
+        let markCloseStarted: () => void = () => {};
+        const closeStarted = new Promise<void>(resolve => { markCloseStarted = resolve; });
+        let connects = 0;
+        const originalClose = Client.prototype.close;
+        const originalConnect = Client.prototype.connect;
+        const closeSpy = vi.spyOn(Client.prototype, 'close').mockImplementation(function (this: Client) {
+            markCloseStarted();
+            return closeGate.then(() => originalClose.call(this));
+        });
+        const connectSpy = vi.spyOn(Client.prototype, 'connect').mockImplementation(function (this: Client, ...args) {
+            connects += 1;
+            return originalConnect.apply(this, args);
+        });
+
+        try {
+            const pending = Promise.all([
+                transport.call('board', 'list', { limit: 1 }, undefined, { headers: { 'x-api-key': 'second' } }),
+                transport.call('board', 'list', { limit: 2 }, undefined, { headers: { 'x-api-key': 'second' } })
+            ]);
+            await closeStarted;
+            releaseClose();
+            const [first, second] = await pending;
+            expect(first).toEqual({ items: ['alpha'], era: 'modern' });
+            expect(second).toEqual({ items: ['alpha', 'beta'], era: 'modern' });
+            expect(connects).toBe(1);
+        } finally {
+            releaseClose();
+            closeSpy.mockRestore();
+            connectSpy.mockRestore();
+        }
     });
 
     it('lists tools with annotations for the provider', async () => {
