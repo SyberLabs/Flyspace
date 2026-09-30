@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import { useBlockStore, useUIStore } from '@/core/stores';
 import { useWireStore } from '@/core/stores/wireStore';
-import { aggregateWireContext } from '@/core/services/wire.service';
 import { runPersonaTurn, stopPersonaTurn, regeneratePersonaTurn } from '@/core/services/personaTurn.service';
 import { planCascade, hasUpstreamPersonas } from '@/core/services/cascade.service';
 import { PersonaType } from '@/core/schemas/shell.schema';
@@ -45,7 +44,6 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
     const block = useBlockStore(state => state.blocks.find(b => b.instance_id === instanceId));
     const updateData = useBlockStore(state => state.updateData);
     const getWiresToBlock = useWireStore(state => state.getWiresToBlock);
-    const getBlock = useBlockStore(state => state.getBlock);
 
     const [input, setInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -105,16 +103,6 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
         setInput('');
         void runTurn(message);
     };
-
-    const handleUpdateContext = useCallback(() => {
-        // Use wireService to aggregate context from all connected blocks
-        const { context, lastUpdate } = aggregateWireContext(instanceId);
-
-        updatePersonaData({
-            currentContext: context,
-            lastContextUpdate: lastUpdate
-        });
-    }, [instanceId, updatePersonaData]);
 
     // Only offer the chain when there is one: a lone persona has nothing
     // upstream to run, and an always-visible button would imply otherwise.
@@ -197,12 +185,6 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                 <span className="text-[10px] text-[var(--text-muted)]">
                     {connectedWires.length === 0 ? 'No wires' : `${connectedWires.length} connected`}
                 </span>
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleUpdateContext(); }}
-                    className="text-[10px] text-[var(--citadel-primary)] hover:underline"
-                >
-                    Refresh
-                </button>
             </div>
 
             {/* Messages - maximized */}
@@ -586,5 +568,3 @@ function CrystallizeButton({ content, personaId }: { content: string; personaId:
         </button>
     );
 }
-
-export default PersonaBlockView;
