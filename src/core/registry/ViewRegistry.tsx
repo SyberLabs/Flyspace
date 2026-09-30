@@ -1,24 +1,14 @@
 import React, { useState } from 'react';
 import { PolymarketView } from '@/components/blocks/PolymarketView';
-import { NewsView } from '@/components/blocks/NewsView';
 import { CryptoView } from '@/components/blocks/CryptoView';
 import { HNView } from '@/components/blocks/HNView';
-import { MetaculusView } from '@/components/blocks/MetaculusView';
-import { AlphaVantageView } from '@/components/blocks/AlphaVantageView';
 import { OpenAlexView } from '@/components/blocks/OpenAlexView';
-import { FredView } from '@/components/blocks/FredView';
-import { BlsView } from '@/components/blocks/BlsView';
 import { WorldBankView } from '@/components/blocks/WorldBankView';
 import { OmniFeedView } from '@/components/blocks/OmniFeedView';
 import { usePolymarketBlock } from '@/blocks/truth/PolymarketBlock';
-import { useNewsBlock } from '@/blocks/truth/NewsApiBlock';
 import { useCoinGeckoBlock } from '@/blocks/truth/CoinGeckoBlock';
 import { useHackerNewsBlock } from '@/blocks/truth/HackerNewsBlock';
-import { useMetaculusBlock } from '@/blocks/truth/MetaculusBlock';
-import { useAlphaVantageBlock } from '@/blocks/truth/AlphaVantageBlock';
 import { useOpenAlexBlock } from '@/blocks/truth/OpenAlexBlock';
-import { useFredBlock } from '@/blocks/truth/FredBlock';
-import { useBlsBlock } from '@/blocks/truth/BlsBlock';
 import { useWorldBankBlock } from '@/blocks/truth/WorldBankBlock';
 import { useOmniFeedBlock } from '@/blocks/truth/OmniFeedBlock';
 import { API_CATALOG } from '@/core/schemas/api.schema';
@@ -72,23 +62,6 @@ function PolymarketBlockContent({ instanceId }: { instanceId: string }) {
     );
 }
 
-function NewsBlockContent({ instanceId }: { instanceId: string }) {
-    const stored = useBlockStore(s => s.getBlock(instanceId)?.params);
-    const query = typeof stored?.query === 'string' ? stored.query : undefined;
-    const category = typeof stored?.category === 'string' ? stored.category : undefined;
-    const { articles, status, lastUpdated, refresh, error } = useNewsBlock(instanceId, query, category);
-
-    return (
-        <NewsView
-            articles={articles}
-            status={status}
-            lastUpdated={lastUpdated ?? null}
-            onRefresh={refresh}
-            error={error}
-        />
-    );
-}
-
 function CryptoBlockContent({ instanceId }: { instanceId: string }) {
     const { assets, status, lastUpdated, refresh, error } = useCoinGeckoBlock(instanceId);
 
@@ -112,53 +85,6 @@ function HNBlockContent({ instanceId }: { instanceId: string }) {
             status={status}
             lastUpdated={lastUpdated ?? null}
             onRefresh={refresh}
-            error={error}
-        />
-    );
-}
-
-function MetaculusBlockContent({ instanceId }: { instanceId: string }) {
-    const { questions, status, lastUpdated, refresh, error } = useMetaculusBlock(instanceId);
-
-    return (
-        <MetaculusView
-            questions={questions}
-            status={status}
-            lastUpdated={lastUpdated ?? null}
-            onRefresh={refresh}
-            error={error}
-        />
-    );
-}
-
-function AlphaVantageBlockContent({ instanceId }: { instanceId: string }) {
-    const persistParams = useBlockStore(s => s.setParams);
-    const defaultSymbol = 'AAPL';
-    const initial = storedParams(instanceId);
-    const initialSymbol = typeof initial?.symbol === 'string' ? initial.symbol : defaultSymbol;
-    const [symbolInput, setSymbolInput] = useState(initialSymbol);
-    const [params, setParams] = useState<{ symbol: string }>({ symbol: initialSymbol });
-    const { items, metrics, status, lastUpdated, refresh, error } = useAlphaVantageBlock(instanceId, params);
-
-    const handleApplySymbol = () => {
-        const nextSymbol = symbolInput.trim().toUpperCase();
-        if (!nextSymbol) return;
-        const next = { ...params, symbol: nextSymbol };
-        if (params.symbol === nextSymbol) return;
-        setParams(next);
-        persistParams(instanceId, next);
-    };
-
-    return (
-        <AlphaVantageView
-            items={items}
-            metrics={metrics}
-            status={status}
-            lastUpdated={lastUpdated ?? null}
-            onRefresh={refresh}
-            symbolInput={symbolInput}
-            onSymbolInputChange={setSymbolInput}
-            onApplySymbol={handleApplySymbol}
             error={error}
         />
     );
@@ -225,97 +151,6 @@ function OpenAlexBlockContent({ instanceId }: { instanceId: string }) {
             onTopicInputChange={(value) => setDraft(prev => ({ ...prev, topic: value }))}
             onYearInputChange={(value) => setDraft(prev => ({ ...prev, year: value }))}
             onApplyFilters={handleApplyFilters}
-            error={error}
-        />
-    );
-}
-
-function FredBlockContent({ instanceId }: { instanceId: string }) {
-    const persistParams = useBlockStore(s => s.setParams);
-    const defaultSeries = 'GDP';
-    const initial = storedParams(instanceId);
-    const initialSeries = typeof initial?.seriesId === 'string' ? initial.seriesId : defaultSeries;
-    const [seriesInput, setSeriesInput] = useState(initialSeries);
-    const [params, setParams] = useState<{ seriesId: string; limit: number; sort_order: string }>({
-        seriesId: initialSeries,
-        limit: typeof initial?.limit === 'number' ? initial.limit : 24,
-        sort_order: typeof initial?.sort_order === 'string' ? initial.sort_order : 'desc'
-    });
-    const { items, metrics, status, lastUpdated, refresh, error } = useFredBlock(instanceId, params);
-
-    const handleApplySeries = () => {
-        const nextSeries = seriesInput.trim().toUpperCase();
-        if (!nextSeries) return;
-        if (params.seriesId === nextSeries) return;
-        const next = { ...params, seriesId: nextSeries };
-        setParams(next);
-        persistParams(instanceId, next);
-    };
-
-    return (
-        <FredView
-            items={items}
-            metrics={metrics}
-            status={status}
-            lastUpdated={lastUpdated ?? null}
-            onRefresh={refresh}
-            seriesInput={seriesInput}
-            onSeriesInputChange={setSeriesInput}
-            onApplySeries={handleApplySeries}
-            error={error}
-        />
-    );
-}
-
-function BlsBlockContent({ instanceId }: { instanceId: string }) {
-    const persistParams = useBlockStore(s => s.setParams);
-    const currentYear = new Date().getFullYear();
-    const defaultStart = String(currentYear - 5);
-    const defaultEnd = String(currentYear);
-    const initial = storedParams(instanceId);
-    const [draft, setDraft] = useState({
-        seriesId: typeof initial?.seriesId === 'string' ? initial.seriesId : 'LNS14000000',
-        startYear: typeof initial?.startYear === 'string' ? initial.startYear : defaultStart,
-        endYear: typeof initial?.endYear === 'string' ? initial.endYear : defaultEnd
-    });
-    const [params, setParams] = useState({
-        seriesId: typeof initial?.seriesId === 'string' ? initial.seriesId : 'LNS14000000',
-        startYear: typeof initial?.startYear === 'string' ? initial.startYear : defaultStart,
-        endYear: typeof initial?.endYear === 'string' ? initial.endYear : defaultEnd
-    });
-    const { items, metrics, status, lastUpdated, refresh, error } = useBlsBlock(instanceId, params);
-
-    const normalizeYear = (value: string, fallback: string) => {
-        const trimmed = value.trim();
-        return /^\d{4}$/.test(trimmed) ? trimmed : fallback;
-    };
-
-    const handleApplySeries = () => {
-        const seriesId = draft.seriesId.trim().toUpperCase();
-        if (!seriesId) return;
-
-        const startYear = normalizeYear(draft.startYear, defaultStart);
-        const endYear = normalizeYear(draft.endYear, defaultEnd);
-
-        const next = { seriesId, startYear, endYear };
-        setParams(next);
-        persistParams(instanceId, next);
-    };
-
-    return (
-        <BlsView
-            items={items}
-            metrics={metrics}
-            status={status}
-            lastUpdated={lastUpdated ?? null}
-            onRefresh={refresh}
-            seriesInput={draft.seriesId}
-            startYearInput={draft.startYear}
-            endYearInput={draft.endYear}
-            onSeriesInputChange={(value) => setDraft(prev => ({ ...prev, seriesId: value }))}
-            onStartYearInputChange={(value) => setDraft(prev => ({ ...prev, startYear: value }))}
-            onEndYearInputChange={(value) => setDraft(prev => ({ ...prev, endYear: value }))}
-            onApplySeries={handleApplySeries}
             error={error}
         />
     );
@@ -460,14 +295,9 @@ function OmniFeedBlockContent({ instanceId }: { instanceId: string }) {
 export const BlockViews: Record<string, React.ComponentType<{ instanceId: string }>> = {
     // Truth Blocks
     'polymarket_live_odds': PolymarketBlockContent,
-    'newsapi_feed': NewsBlockContent,
     'coingecko_crypto': CryptoBlockContent,
     'hackernews_feed': HNBlockContent,
-    'metaculus_forecast': MetaculusBlockContent,
-    'alpha_vantage_quote': AlphaVantageBlockContent,
     'openalex_works': OpenAlexBlockContent,
-    'fred_series': FredBlockContent,
-    'bls_series': BlsBlockContent,
     'worldbank_indicator': WorldBankBlockContent,
     'usgs_quakes': OmniFeedBlockContent,
     'openmeteo_forecast': OmniFeedBlockContent,

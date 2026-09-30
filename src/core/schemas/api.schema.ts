@@ -241,57 +241,6 @@ export const API_CATALOG: ApiProvider[] = [
         tags: ['prediction', 'betting', 'markets', 'probability']
     },
     {
-        id: 'metaculus',
-        name: 'Metaculus',
-        category: 'truth',
-        description: 'Forecasting platform with calibrated predictions',
-        icon: 'Target',
-        baseUrl: 'https://www.metaculus.com/api',
-        docsUrl: 'https://www.metaculus.com/api/',
-        pricing: 'free',
-        requiresAuth: true,
-        authType: 'api_key',
-        serverKeyed: true,
-        envVar: 'METACULUS_API_KEY',
-        blockIds: ['metaculus_forecast'],
-        integration: {
-            support: 'supported',
-            gateway: {
-                type: 'normalizer',
-                normalizerId: 'metaculus',
-                defaultParams: { limit: 50 }
-            },
-            testParams: { limit: 10 }
-        },
-        tags: ['forecasting', 'prediction', 'calibration']
-    },
-    {
-        id: 'alpha_vantage',
-        name: 'Alpha Vantage',
-        category: 'truth',
-        description: 'Stock, forex, and crypto market data',
-        icon: 'LineChart',
-        baseUrl: 'https://www.alphavantage.co',
-        docsUrl: 'https://www.alphavantage.co/documentation/',
-        pricing: 'freemium',
-        freeTierLimits: '25 requests/day',
-        requiresAuth: true,
-        serverKeyed: true,
-        authType: 'api_key',
-        envVar: 'ALPHA_VANTAGE_API_KEY',
-        blockIds: ['alpha_vantage_quote'],
-        integration: {
-            support: 'supported',
-            gateway: {
-                type: 'normalizer',
-                normalizerId: 'alpha_vantage',
-                defaultParams: { function: 'GLOBAL_QUOTE', symbol: 'IBM' }
-            },
-            testParams: { function: 'GLOBAL_QUOTE', symbol: 'IBM' }
-        },
-        tags: ['stocks', 'forex', 'crypto', 'finance']
-    },
-    {
         id: 'coingecko',
         name: 'CoinGecko',
         category: 'truth',
@@ -313,65 +262,6 @@ export const API_CATALOG: ApiProvider[] = [
             testParams: { currency: 'usd', limit: 10 }
         },
         tags: ['crypto', 'prices', 'market cap']
-    },
-    {
-        id: 'fred',
-        name: 'FRED',
-        category: 'truth',
-        description: 'Federal Reserve economic data',
-        icon: 'Building',
-        baseUrl: 'https://api.stlouisfed.org/fred',
-        docsUrl: 'https://fred.stlouisfed.org/docs/api/',
-        pricing: 'free',
-        requiresAuth: true,
-        serverKeyed: true,
-        authType: 'api_key',
-        envVar: 'FRED_API_KEY',
-        blockIds: ['fred_series'],
-        integration: {
-            support: 'supported',
-            gateway: {
-                type: 'normalizer',
-                normalizerId: 'fred',
-                defaultParams: {
-                    seriesId: 'GDP',
-                    limit: 24,
-                    sort_order: 'desc'
-                }
-            },
-            testParams: {
-                seriesId: 'GDP',
-                limit: 5,
-                sort_order: 'desc'
-            }
-        },
-        tags: ['economics', 'federal reserve', 'data']
-    },
-    {
-        id: 'newsapi',
-        name: 'NewsAPI',
-        category: 'pulse',
-        description: 'Aggregated news headlines worldwide',
-        icon: 'Newspaper',
-        baseUrl: 'https://newsapi.org/v2',
-        docsUrl: 'https://newsapi.org/docs',
-        pricing: 'freemium',
-        freeTierLimits: '100 requests/day',
-        requiresAuth: true,
-        serverKeyed: true,
-        authType: 'api_key',
-        envVar: 'NEWSAPI_KEY',
-        blockIds: ['newsapi_feed'],
-        integration: {
-            support: 'supported',
-            gateway: {
-                type: 'normalizer',
-                normalizerId: 'newsapi',
-                defaultParams: { endpoint: 'top-headlines', country: 'us', pageSize: 20 }
-            },
-            testParams: { endpoint: 'top-headlines', country: 'us', pageSize: 5 }
-        },
-        tags: ['news', 'headlines', 'media']
     },
     {
         id: 'hackernews',
@@ -737,35 +627,6 @@ export const API_CATALOG: ApiProvider[] = [
             }
         },
         tags: ['research', 'doi', 'papers', 'citations']
-    },
-    {
-        id: 'bls',
-        name: 'BLS',
-        category: 'economy',
-        description: 'US labor statistics',
-        icon: 'Users',
-        baseUrl: 'https://api.bls.gov/publicAPI/v2',
-        docsUrl: 'https://www.bls.gov/developers/',
-        pricing: 'free',
-        requiresAuth: true,
-        serverKeyed: true,
-        authType: 'api_key',
-        envVar: 'BLS_API_KEY',
-        blockIds: ['bls_series'],
-        integration: {
-            support: 'supported',
-            gateway: {
-                type: 'normalizer',
-                normalizerId: 'bls',
-                defaultParams: {
-                    seriesId: 'LNS14000000'
-                }
-            },
-            testParams: {
-                seriesId: 'LNS14000000'
-            }
-        },
-        tags: ['employment', 'labor', 'statistics']
     }
 ];
 

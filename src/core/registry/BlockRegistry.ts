@@ -93,22 +93,6 @@ blockRegistry.register({
     description: 'Real-time prediction market odds and probabilities'
 });
 
-// NewsAPI Block
-blockRegistry.register({
-    block_id: 'newsapi_feed',
-    display_name: 'News Feed',
-    category: 'pulse',
-    data_type: 'news_feed',
-    refresh_rate: '5m',
-    semantic_tags: ['news', 'narrative', 'sentiment', 'headlines', 'media'],
-    wiring_logic: 'map_to_narrative_agent',
-    ports: [
-        createJsonOutputPort('out', 'Article Feed')
-    ],
-    icon: 'Newspaper',
-    description: 'Aggregated news articles with sentiment analysis'
-});
-
 // CoinGecko Block
 blockRegistry.register({
     block_id: 'coingecko_crypto',
@@ -123,23 +107,6 @@ blockRegistry.register({
     ports: [
         createJsonOutputPort('out', 'Market Data')
     ],
-    isUserCreatable: true
-});
-
-// Alpha Vantage Block
-blockRegistry.register({
-    block_id: 'alpha_vantage_quote',
-    display_name: 'Alpha Vantage',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '1m',
-    semantic_tags: ['stocks', 'forex', 'crypto', 'market', 'quote'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Market Quote')
-    ],
-    icon: 'LineChart',
-    description: 'Market quote data from Alpha Vantage',
     isUserCreatable: true
 });
 
@@ -160,22 +127,6 @@ blockRegistry.register({
     isUserCreatable: true
 });
 
-// Metaculus Block
-blockRegistry.register({
-    block_id: 'metaculus_forecast',
-    display_name: 'Metaculus Forecast',
-    category: 'truth',
-    data_type: 'probabilistic_stream',
-    refresh_rate: '1m',
-    semantic_tags: ['metaculus', 'forecasting', 'prediction', 'probability', 'science'],
-    wiring_logic: 'map_to_game_theory_agent',
-    ports: [
-        createJsonOutputPort('out', 'Forecast Data')
-    ],
-    icon: 'Target',
-    description: 'Scientific forecasting and prediction questions'
-});
-
 // OpenAlex Block
 blockRegistry.register({
     block_id: 'openalex_works',
@@ -190,40 +141,6 @@ blockRegistry.register({
     ],
     icon: 'BookOpen',
     description: 'Recent research works and citations',
-    isUserCreatable: true
-});
-
-// FRED Block
-blockRegistry.register({
-    block_id: 'fred_series',
-    display_name: 'FRED',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '15m',
-    semantic_tags: ['economics', 'macro', 'time series', 'fred', 'fed'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Series Data')
-    ],
-    icon: 'LineChart',
-    description: 'Federal Reserve Economic Data series observations',
-    isUserCreatable: true
-});
-
-// BLS Block
-blockRegistry.register({
-    block_id: 'bls_series',
-    display_name: 'BLS',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '30m',
-    semantic_tags: ['labor', 'employment', 'time series', 'statistics'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Series Data')
-    ],
-    icon: 'LineChart',
-    description: 'Bureau of Labor Statistics time series data',
     isUserCreatable: true
 });
 

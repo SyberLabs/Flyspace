@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { GET as getData } from './data/route';
 import { POST as postLlm } from './llm/route';
 import { GET as getRuns } from './inference-runs/route';
 import { GET as getLineage } from './inference-runs/[id]/lineage/route';
@@ -17,7 +16,7 @@ afterEach(() => {
 });
 
 describe('public demo server boundary', () => {
-    it('blocks paid LLM and keyed data routes before making upstream calls', async () => {
+    it('blocks the paid LLM route before making upstream calls', async () => {
         process.env.OMNI_PUBLIC_DEMO = '1';
         const fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);
@@ -25,10 +24,8 @@ describe('public demo server boundary', () => {
         const llm = await postLlm(new NextRequest('https://omni.syberlabs.io/api/llm', {
             method: 'POST', body: '{}'
         }));
-        const data = await getData(new NextRequest('https://omni.syberlabs.io/api/data?provider=fred'));
 
         expect(llm.status).toBe(503);
-        expect(data.status).toBe(503);
         expect(fetchMock).not.toHaveBeenCalled();
     });
 

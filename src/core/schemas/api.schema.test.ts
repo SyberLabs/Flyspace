@@ -22,9 +22,8 @@ describe('catalog blockIds — the map shells use to know what they need', () =>
         }
     });
 
-    it('the four previously-wrong mappings are accurate', () => {
+    it('the three previously-wrong mappings are accurate', () => {
         const byId = Object.fromEntries(API_CATALOG.map(p => [p.id, p.blockIds]));
-        expect(byId.metaculus).toEqual(['metaculus_forecast']);
         expect(byId.coingecko).toEqual(['coingecko_crypto']);
         expect(byId.openalex).toEqual(['openalex_works']);
         expect(byId.hackernews).toEqual(['hackernews_feed']);
