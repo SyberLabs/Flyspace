@@ -115,10 +115,6 @@ export function extractBlockData(
             extracted = filters.summaryOnly
                 ? data.content.slice(0, 500) + (data.content.length > 500 ? '...' : '')
                 : data.content;
-        } else if (isRecord(data) && typeof data.code === 'string') {
-            // Code block
-            const language = typeof data.language === 'string' ? data.language : '';
-            extracted = `\`\`\`${language}\n${data.code}\n\`\`\``;
         } else if (isRecord(data) && Array.isArray(data.items)) {
             // OmniItem[] from the gateway (polymarket, coingecko, fred, metaculus,
             // hackernews, …). The useful signal lives in each item's `metadata`
