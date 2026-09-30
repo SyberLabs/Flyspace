@@ -10,23 +10,10 @@
 
 :root {
   /* Atlas v2 raw tokens */
-  --ink: #06051a;
-  --ink-2: #0c0a2a;
-  --ink-3: #141238;
-  --vellum: #eef0ff;
-  --body: #dfe2fb;
-  --mist: #b4bbe2;
-  --dim: #8990bb;
   --rule: rgba(170, 180, 255, 0.16);
   --rule-2: rgba(170, 180, 255, 0.32);
-  --deep: #0048f0;
   --blue: #4890f0;
   --ice: #90d8f0;
-  --violet: #9a6bff;
-  --magenta: #ff58d6;
-  --amber: #ffb54a;
-  --spectrum: linear-gradient(100deg, #90d8f0 0%, #4890f0 30%, #9a6bff 58%, #ff58d6 80%, #ffb54a 100%);
-  --accent-omnios: #f59be0;
   --cyan-glow: #90d8f0; /* highlighter tool (was referenced but never defined) */
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
@@ -52,11 +39,6 @@
   --text-secondary: #b4bbe2;
   --text-muted: #8990bb;
 
-  /* Glassmorphism */
-  --glass-bg: rgba(12, 10, 42, 0.8);
-  --glass-border: rgba(170, 180, 255, 0.16);
-  --glass-blur: 14px;
-
   /* Shadows */
   --shadow-glow: 0 0 32px -8px rgba(72, 144, 240, 0.45);
   --shadow-elevated: 0 30px 80px -20px rgba(0, 0, 0, 0.9);
@@ -72,12 +54,9 @@
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-6: 1.5rem;
-  --space-8: 2rem;
 
   /* Canvas Grid */
   --grid-size: 20px;
-  --block-min-width: 280px;
-  --block-min-height: 200px;
 
   /* ========================================
      MIND PALETTE - Frutiger Aero Solar Aquatic
@@ -91,30 +70,10 @@
 
   /* Aquatic Depths */
   --mind-aqua-surface: #4ecdc4;
-  --mind-aqua-mid: #44a3aa;
-  --mind-aqua-deep: #1a535c;
   --mind-aqua-abyss: #0d2d35;
-
-  /* Sublime Gradients */
-  --mind-gradient-horizon: linear-gradient(180deg, #ff9a56 0%, #ffd93d 25%, #87ceeb 50%, #4ecdc4 75%, #1a535c 100%);
-  --mind-gradient-solar: linear-gradient(135deg, #ffd93d 0%, #ff9a56 50%, #f472b6 100%);
-  --mind-gradient-aqua: linear-gradient(135deg, #4ecdc4 0%, #44a3aa 50%, #1a535c 100%);
-  --mind-gradient-aero: linear-gradient(180deg, rgba(255, 212, 128, 0.15) 0%, rgba(78, 205, 196, 0.1) 100%);
-
-  /* Glossy Glass Effects */
-  --mind-glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 100%);
-  --mind-glass-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 50%);
-  --mind-glass-border: rgba(255, 255, 255, 0.2);
-  --mind-glass-shadow: 0 8px 32px rgba(26, 83, 92, 0.4), 0 0 60px rgba(78, 205, 196, 0.15);
-
-  /* Bubble/Water Effects */
-  --mind-bubble-glow: 0 0 20px rgba(78, 205, 196, 0.4), 0 0 40px rgba(255, 212, 128, 0.2);
-  --mind-ripple-color: rgba(78, 205, 196, 0.3);
 }
 
 @theme inline {
-  --color-background: var(--citadel-void);
-  --color-foreground: var(--text-primary);
   --font-sans: var(--font-display);
   --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
@@ -150,25 +109,6 @@ body {
 
 ::selection {
   background: rgba(144, 216, 240, 0.25);
-}
-
-/* ============================================
-   GLASSMORPHISM UTILITIES
-   ============================================ */
-
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
-  border: 1px solid var(--glass-border);
-}
-
-.glass-elevated {
-  background: color-mix(in srgb, var(--citadel-surface) 92%, transparent);
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid var(--rule-2);
-  box-shadow: var(--shadow-elevated);
 }
 
 /* ============================================
@@ -303,13 +243,6 @@ body {
   }
 }
 
-.eyebrow {
-  font: 500 12px/1.4 var(--font-mono);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
 /* Plate frame: rule border + inset rule at 4px + corner registration ticks. */
 .plate-frame {
   position: relative;
@@ -343,23 +276,8 @@ body {
 }
 
 /* ============================================
-   CONNECTION LINES & WIRE PORTS
+   WIRE PORTS
    ============================================ */
-
-.connection-line {
-  stroke: var(--citadel-primary);
-  stroke-width: 2;
-  fill: none;
-  stroke-linecap: round;
-}
-
-.connection-line-glow {
-  stroke: var(--citadel-primary-glow);
-  stroke-width: 4;
-  fill: none;
-  opacity: 0.3;
-  filter: blur(4px);
-}
 
 /* Wire Port Styles */
 .wire-port {
@@ -382,12 +300,6 @@ body {
   color: var(--citadel-primary);
   transform: scale(1.1);
   box-shadow: 0 0 16px rgba(72, 144, 240, 0.3);
-}
-
-.wire-port-active {
-  border-color: var(--citadel-primary);
-  background: rgba(72, 144, 240, 0.1);
-  animation: pulse-glow 2s ease-in-out infinite;
 }
 
 .wire-port-source {
@@ -601,7 +513,7 @@ body {
 
 /* ============================================
    BUTTONS
-   .btn is the 46px pill. .btn-primary / .btn-line / .btn-ghost / .btn-skin
+   .btn is the 46px pill. .btn-primary / .btn-line / .btn-ghost
    are colour modifiers (.btn-ghost also rides on small icon buttons that do
    not carry .btn, so it must not set size or padding).
    ============================================ */
@@ -687,37 +599,6 @@ body {
   color: var(--text-primary);
 }
 
-.btn-skin {
-  background: linear-gradient(135deg, var(--citadel-accent) 0%, var(--citadel-primary) 100%);
-  color: #07061c;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.btn-skin:hover {
-  box-shadow: 0 0 30px -6px var(--citadel-accent);
-}
-
-/* Garden shortcut (bottom-right of the canvas): a line pill with the
-   success-green signal, replacing the solid emerald gradient. */
-.garden-pill {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--citadel-surface) 80%, transparent);
-  border-color: color-mix(in srgb, var(--truth-green) 45%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-
-.garden-pill svg {
-  color: var(--truth-green);
-}
-
-.garden-pill:hover {
-  border-color: var(--truth-green);
-  box-shadow: 0 0 26px -8px var(--truth-green);
-}
-
 /* Public-preview notice under the header */
 .demo-banner {
   padding: 8px 12px;
@@ -791,38 +672,6 @@ body {
 /* ============================================
    ANIMATIONS
    ============================================ */
-
-@keyframes pulse-glow {
-
-  0%,
-  100% {
-    box-shadow: 0 0 20px rgba(72, 144, 240, 0.2);
-  }
-
-  50% {
-    box-shadow: 0 0 40px rgba(72, 144, 240, 0.4);
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-.animate-fade-in {
-  animation: fade-in 0.2s ease-out;
-}
 
 /* Source → target flow while a persona is reading this wire.
    Motion is CSS (no per-frame React). The data-reading attribute is the
