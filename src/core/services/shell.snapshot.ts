@@ -28,9 +28,6 @@ export interface ShellSnapshot {
     /** Pinned/focused blocks (high priority) */
     focusedBlocks: ContextEntry[];
 
-    /** Current observations from awareness */
-    observations: ContextEntry[];
-
     /** Active wires between in-scope blocks */
     connections: {
         sourceBlockId: string;
@@ -128,14 +125,6 @@ export function captureShellSnapshot(): ShellSnapshot {
         e => e.sourceBlockId !== undefined && includedIds.has(e.sourceBlockId)
     );
 
-    // Get observations. Awareness entries are useMindShellSync's aggregate of
-    // ALL blocks of a type across every shell, so they are not part of what
-    // this scope shows; only real observations (e.g. earlier Think answers).
-    const observationsPool = contextPools.find(p => p.id === 'observations');
-    const observations = (observationsPool?.entries || []).filter(
-        e => e.metadata?.isAwareness !== true
-    );
-
     // Process each block
     const blockSnapshots: BlockSnapshotData[] = blocks.map(block => ({
         instanceId: block.instance_id,
@@ -161,7 +150,6 @@ export function captureShellSnapshot(): ShellSnapshot {
         totalBlocks: blocks.length,
         blocks: blockSnapshots,
         focusedBlocks,
-        observations: observations.slice(-20), // Last 20 observations
         connections: wires.map(w => ({
             sourceBlockId: w.sourceBlockId,
             targetBlockId: w.targetBlockId
@@ -421,18 +409,6 @@ export function formatSnapshotForLLM(snapshot: ShellSnapshot): string {
 
             lines.push('');
         }
-    }
-
-    // Recent observations
-    if (snapshot.observations.length > 0) {
-        lines.push('-'.repeat(60));
-        lines.push('');
-        lines.push('## RECENT OBSERVATIONS');
-        lines.push('');
-        for (const obs of snapshot.observations.slice(-10)) {
-            lines.push(`[${obs.type}] ${obs.content.slice(0, 200)}${obs.content.length > 200 ? '...' : ''}`);
-        }
-        lines.push('');
     }
 
     lines.push('='.repeat(60));

@@ -35,7 +35,6 @@ function snapshot(overrides: Partial<ShellSnapshot> = {}): ShellSnapshot {
         totalBlocks: 0,
         blocks: [],
         focusedBlocks: [],
-        observations: [],
         connections: [],
         stats: {
             connectedBlocks: 0,
@@ -77,28 +76,21 @@ describe('formatSnapshotForLLM', () => {
         expect(out).toContain('⚠️ Error: boom');
     });
 
-    it('includes focused blocks and recent observations when present', () => {
+    it('includes focused blocks when present', () => {
         const out = formatSnapshotForLLM(snapshot({
             focusedBlocks: [{
                 id: 'f1', type: 'observation', content: 'PINNED INSIGHT',
                 importance: 1, timestamp: Date.now()
-            }],
-            observations: [{
-                id: 'o1', type: 'analysis', content: 'an observation',
-                importance: 0.8, timestamp: Date.now()
             }]
         }));
 
         expect(out).toContain('FOCUSED BLOCKS');
         expect(out).toContain('PINNED INSIGHT');
-        expect(out).toContain('RECENT OBSERVATIONS');
-        expect(out).toContain('[analysis] an observation');
     });
 
     it('omits optional sections when empty', () => {
         const out = formatSnapshotForLLM(snapshot());
         expect(out).not.toContain('FOCUSED BLOCKS');
-        expect(out).not.toContain('RECENT OBSERVATIONS');
     });
 });
 
@@ -199,14 +191,15 @@ describe('captureShellSnapshot', () => {
         expect(snap.focusedBlocks.map(e => e.sourceBlockId)).toEqual(['pinned']);
     });
 
-    it('drops awareness aggregates (all blocks of a type, any shell) from observations', () => {
+    it('does not send the observations pool (earlier answers, awareness aggregates) to the model', () => {
         useMindStore.getState().updateAwareness('polymarket', 'ALL-SHELL AGGREGATE');
         useMindStore.getState().addToPool('observations', {
             type: 'analysis', content: 'a prior Think answer', importance: 0.8
         });
 
-        const snap = captureShellSnapshot();
+        const out = formatSnapshotForLLM(captureShellSnapshot());
 
-        expect(snap.observations.map(o => o.content)).toEqual(['a prior Think answer']);
+        expect(out).not.toContain('a prior Think answer');
+        expect(out).not.toContain('ALL-SHELL AGGREGATE');
     });
 });

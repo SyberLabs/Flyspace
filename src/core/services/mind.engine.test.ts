@@ -132,9 +132,9 @@ function scopedWire(id: string, from: string, to: string, shellId: string): Data
     } as unknown as DataWire;
 }
 
-/** Everything the model was sent for the last Think. */
-function sentPrompt(): string {
-    const messages = vi.mocked(runTurn).mock.calls[0][0];
+/** Everything the model was sent for the nth Think. */
+function sentPrompt(call = 0): string {
+    const messages = vi.mocked(runTurn).mock.calls[call][0];
     return messages.map(m => m.content).join('\n');
 }
 
@@ -216,6 +216,31 @@ describe('MindEngine.think — context is what the canvas shows', () => {
         await new MindEngine().think();
 
         expect(sentPrompt()).not.toContain('CROSS-SHELL AWARENESS SUMMARY');
+    });
+
+    it('does not carry a shell A answer into the prompt for shell B', async () => {
+        useBlockStore.setState({
+            blocks: [
+                scopedBlock('a1', 'A-One', 'A'), scopedBlock('a2', 'A-Two', 'A'),
+                scopedBlock('b1', 'B-One', 'B'), scopedBlock('b2', 'B-Two', 'B')
+            ],
+            activeShellId: 'A'
+        });
+        useWireStore.setState({
+            wires: [scopedWire('wa', 'a1', 'a2', 'A'), scopedWire('wb', 'b1', 'b2', 'B')]
+        });
+        const engine = new MindEngine();
+
+        vi.mocked(runTurn).mockResolvedValueOnce({ success: true, content: 'A-ANSWER-SECRET', tokensUsed: 1 });
+        expect((await engine.think()).success).toBe(true);
+
+        useBlockStore.setState({ activeShellId: 'B' });
+        expect((await engine.think()).success).toBe(true);
+
+        const second = sentPrompt(1);
+        expect(second).toContain('B-One');
+        expect(second).not.toContain('A-One');
+        expect(second).not.toContain('A-ANSWER-SECRET');
     });
 
     it('thinkStream applies the same scope', async () => {
