@@ -7,12 +7,11 @@ export interface ResolveInput {
     shellId: string;
     blocks: CanvasBlockView[];
     point?: FramedPoint;
-    region?: FramedPoint[];
     selection: string[];
     recentInteraction: string[];
     recentDiscourse: string[];
     noun?: string;
-    /** "these" may resolve to an explicit multi-selection or region. */
+    /** "these" may resolve to an explicit multi-selection. */
     allowSet?: boolean;
 }
 
@@ -31,19 +30,6 @@ function containsPoint(block: CanvasBlockView, point: FramedPoint): boolean {
         point.y >= block.y &&
         point.y <= block.y + block.height
     );
-}
-
-function pointInPolygon(point: FramedPoint, polygon: FramedPoint[]): boolean {
-    let inside = false;
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-        const xi = polygon[i].x;
-        const yi = polygon[i].y;
-        const xj = polygon[j].x;
-        const yj = polygon[j].y;
-        const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + 0.000001) + xi;
-        if (intersect) inside = !inside;
-    }
-    return inside;
 }
 
 function nounMatches(block: CanvasBlockView, noun: string): boolean {
@@ -70,17 +56,6 @@ export function resolveReferents(input: ResolveInput): ResolveResult {
         let hit = shell.filter(block => containsPoint(block, input.point!));
         if (noun) hit = hit.filter(block => nounMatches(block, noun));
         if (hit.length > 0) return finish(hit.map(block => block.id), false);
-    }
-
-    if (input.region && input.region.length >= 3) {
-        let hit = shell.filter(block =>
-            pointInPolygon(
-                { frame: 'canvas', x: block.x + block.width / 2, y: block.y + block.height / 2 },
-                input.region!
-            )
-        );
-        if (noun) hit = hit.filter(block => nounMatches(block, noun));
-        if (hit.length > 0) return finish(hit.map(block => block.id), input.allowSet === true);
     }
 
     if (input.selection.length > 0) {

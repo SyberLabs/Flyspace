@@ -3,9 +3,9 @@
 
 import type { SpatialAction } from './types';
 
-export type SpeechCommandAction = SpatialAction | 'open-shell' | 'confirm';
+type SpeechCommandAction = SpatialAction | 'open-shell' | 'confirm';
 
-export interface SpeechBlockKind {
+interface SpeechBlockKind {
     blockId: string;
     displayName: string;
     aliases: string[];
@@ -35,13 +35,15 @@ export interface SpeechIntent {
     destructive: boolean;
 }
 
-const BUILTIN_BLOCKS: SpeechBlockKind[] = Object.values({
+const PERSONAS: Record<string, { blockId: string; displayName: string }> = {
     researcher: { blockId: 'persona_researcher', displayName: 'Researcher' },
     analyst: { blockId: 'persona_analyst', displayName: 'Analyst' },
     strategist: { blockId: 'persona_strategist', displayName: 'Strategist' },
     creative: { blockId: 'persona_creative', displayName: 'Creative' },
     guardian: { blockId: 'persona_guardian', displayName: 'Guardian' }
-}).map(kind => ({ ...kind, aliases: [kind.displayName.toLowerCase()] }));
+};
+
+const BUILTIN_BLOCKS: SpeechBlockKind[] = Object.values(PERSONAS).map(kind => ({ ...kind, aliases: [kind.displayName.toLowerCase()] }));
 
 export function defaultSpeechCatalog(): SpeechCatalog {
     return {
@@ -56,7 +58,7 @@ function words(value: string): string[] {
     return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 
-export function matchCatalog<T extends { aliases: string[] }>(query: string, items: T[]): T | 'ambiguous' | null {
+function matchCatalog<T extends { aliases: string[] }>(query: string, items: T[]): T | 'ambiguous' | null {
     const needle = query.trim().toLowerCase();
     if (!needle) return null;
     const exact = items.filter(item => item.aliases.some(alias => alias === needle));
@@ -71,14 +73,6 @@ export function matchCatalog<T extends { aliases: string[] }>(query: string, ite
     if (partial.length > 1) return 'ambiguous';
     return null;
 }
-
-const PERSONAS: Record<string, { blockId: string; displayName: string }> = {
-    researcher: { blockId: 'persona_researcher', displayName: 'Researcher' },
-    analyst: { blockId: 'persona_analyst', displayName: 'Analyst' },
-    strategist: { blockId: 'persona_strategist', displayName: 'Strategist' },
-    creative: { blockId: 'persona_creative', displayName: 'Creative' },
-    guardian: { blockId: 'persona_guardian', displayName: 'Guardian' }
-};
 
 function persona(name: string) {
     return PERSONAS[name.toLowerCase()];
@@ -152,18 +146,6 @@ export function parseSpeech(transcript: string, catalog: SpeechCatalog = default
     if (text === 'cancel') return { action: 'cancel', deixis: 'none', destructive: false };
     if (text === 'confirm' || text === 'yes' || text === 'go ahead' || text === 'do it') {
         return { action: 'confirm', deixis: 'none', destructive: false };
-    }
-
-    const namedCreate = text.match(/^create persona:(researcher|analyst|strategist|creative|guardian)(?: as \w+)?$/);
-    if (namedCreate) {
-        const kind = persona(namedCreate[1]);
-        return {
-            action: 'create',
-            personaBlockId: kind.blockId,
-            displayName: kind.displayName,
-            deixis: 'none',
-            destructive: false
-        };
     }
 
     const wire = text.match(/^(?:wire|connect) (.+) to (?:the )?(.+)$/);

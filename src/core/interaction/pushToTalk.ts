@@ -10,7 +10,7 @@ export interface Voice {
     cancel(): void;
 }
 
-export interface Heard {
+interface Heard {
     transcript: string;
     heard: boolean;
     error?: string;
@@ -70,7 +70,7 @@ export function createPushToTalk(listen: () => DictationSession): PushToTalk {
     };
 }
 
-export interface RecognitionResultEvent {
+interface RecognitionResultEvent {
     results: ArrayLike<{
         0: { transcript: string };
         isFinal: boolean;
