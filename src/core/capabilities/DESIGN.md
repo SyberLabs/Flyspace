@@ -61,7 +61,7 @@ A manifest describes a capability. It does not grant itself authority.
 - Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and input replays. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
 - Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
 - HTTP capabilities are `browser_direct` or `server_broker`. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
-- MCP tools compile from schemas and run through a Streamable HTTP client once a server URL is bound.
+- MCP tools compile from schemas and run through `mcpClient.ts`, a thin adapter over the official TypeScript SDK v2 (`@modelcontextprotocol/client`). The SDK negotiates the protocol era (`auto`: probe 2026-07-28, fall back to the 2025 handshake) and forwards cancellation. An MCP credential slot is keyed by server id; execution resolves it and passes it as per-call headers, so revoking the slot stops the next call. A sync MCP call is bounded by the same 15 s request timeout as HTTP.
 - Speech has a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. A denied microphone is `Permission denied`, not the browser error code.
 
 ## Effects
