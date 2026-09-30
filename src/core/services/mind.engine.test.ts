@@ -181,20 +181,6 @@ describe('MindEngine.think — context is what the canvas shows', () => {
         expect(obs?.entries.at(-1)?.metadata?.blocksAnalyzed).toBe(2);
     });
 
-    it('ignores wires that are not active', async () => {
-        useBlockStore.setState({
-            blocks: [scopedBlock('a', 'StaleA', 'root'), scopedBlock('b', 'StaleB', 'root')],
-            activeShellId: 'root'
-        });
-        useWireStore.setState({
-            wires: [{ ...scopedWire('w1', 'a', 'b', 'root'), status: 'stale' }]
-        });
-
-        const result = await new MindEngine().think();
-        expect(result.success).toBe(false);
-        expect(runTurn).not.toHaveBeenCalled();
-    });
-
     it('includes an explicitly pinned block in the active shell, but not a pin from another shell', async () => {
         useBlockStore.setState({
             blocks: [

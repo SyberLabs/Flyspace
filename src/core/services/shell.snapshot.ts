@@ -28,7 +28,7 @@ export interface ShellSnapshot {
     /** Pinned/focused blocks (high priority) */
     focusedBlocks: ContextEntry[];
 
-    /** Active wires between in-scope blocks */
+    /** Wires between in-scope blocks */
     connections: {
         sourceBlockId: string;
         targetBlockId: string;
@@ -93,7 +93,7 @@ export interface BlockSnapshotData {
 
 /**
  * Capture what the canvas shows the Mind: the blocks of the ACTIVE shell that
- * are wired (an active wire in or out) or explicitly pinned. Nothing else.
+ * are wired (a wire in or out) or explicitly pinned. Nothing else.
  *
  * The product promise is that a mind's context is what you can point at. This
  * used to snapshot every stored block in every shell, so Think could answer
@@ -107,13 +107,10 @@ export function captureShellSnapshot(): ShellSnapshot {
     const shellBlocks = blockStore.getBlocksByShell(blockStore.activeShellId);
     const shellBlockIds = new Set(shellBlocks.map(b => b.instance_id));
 
-    // Single wire system: connections come from the wire store. Only active
-    // wires count (a stale wire carried no data), and both ends must be on
-    // this shell so a stray cross-shell wire cannot pull a foreign block in.
+    // Single wire system: connections come from the wire store. Both ends must
+    // be on this shell so a stray cross-shell wire cannot pull a foreign block in.
     const wires = useWireStore.getState().wires.filter(w =>
-        w.status === 'active'
-        && shellBlockIds.has(w.sourceBlockId)
-        && shellBlockIds.has(w.targetBlockId)
+        shellBlockIds.has(w.sourceBlockId) && shellBlockIds.has(w.targetBlockId)
     );
     const wiredIds = new Set(wires.flatMap(w => [w.sourceBlockId, w.targetBlockId]));
     const blocks = shellBlocks.filter(b => wiredIds.has(b.instance_id) || isPinned(b.instance_id));
