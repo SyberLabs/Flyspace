@@ -77,16 +77,7 @@ export function extractBlockData(
         // Handle different data types
         if (isRecord(data) && Array.isArray(data.markets)) {
             // Polymarket data
-            const markets = data.markets as PolymarketMarket[];
-            const filtered = filters.timeWindow && filters.timeWindow !== 'all'
-                ? filterByTimeWindow(markets, filters.timeWindow)
-                : markets;
-
-            if (filters.summaryOnly) {
-                extracted = formatMarketsSummary(filtered);
-            } else {
-                extracted = formatMarketsDetailed(filtered);
-            }
+            extracted = formatFilteredMarkets(data.markets as PolymarketMarket[], filters);
         } else if (isRecord(data) && Array.isArray(data.articles)) {
             // News data
             const articles = data.articles as NewsArticle[];
@@ -94,7 +85,9 @@ export function extractBlockData(
                 ? filterArticlesByTimeWindow(articles, filters.timeWindow)
                 : articles;
 
-            if (filters.summaryOnly) {
+            if (filtered.length === 0) {
+                extracted = '';
+            } else if (filters.summaryOnly) {
                 extracted = formatNewsSummary(filtered);
             } else {
                 extracted = formatNewsDetailed(filtered);
@@ -112,45 +105,31 @@ export function extractBlockData(
                 : lastAnswer.content;
         } else if (isRecord(data) && 'poolId' in data && Array.isArray(data.entries)) {
             // Memory block — a Mind pool wired in like any other source.
-            const entries = asMemoryEntries(data.entries);
-            extracted = entries.length === 0
-                ? '(No entries)'
-                : entries.map(e => `- ${e.content}`).join('\n');
+            extracted = asMemoryEntries(data.entries)
+                .filter(e => e.content.trim() !== '')
+                .map(e => `- ${e.content}`)
+                .join('\n');
         } else if (isRecord(data) && typeof data.content === 'string') {
             // Text block
             extracted = filters.summaryOnly
                 ? data.content.slice(0, 500) + (data.content.length > 500 ? '...' : '')
                 : data.content;
-        } else if (isRecord(data) && typeof data.code === 'string') {
-            // Code block
-            const language = typeof data.language === 'string' ? data.language : '';
-            extracted = `\`\`\`${language}\n${data.code}\n\`\`\``;
         } else if (isRecord(data) && Array.isArray(data.items)) {
             // OmniItem[] from the gateway (polymarket, coingecko, fred, metaculus,
             // hackernews, …). The useful signal lives in each item's `metadata`
             // (probability, volume, price, value, …) — include it, don't drop it.
             const items = data.items;
-            if (items.length === 0) {
-                extracted = '(No data)';
-            } else {
-                const limit = filters.summaryOnly ? 8 : 25;
-                extracted = items.slice(0, limit)
-                    .map(item => formatOmniItem(item))
-                    .join('\n');
-                if (items.length > limit) extracted += `\n… ${items.length - limit} more`;
-            }
+            const limit = filters.summaryOnly ? 8 : 25;
+            extracted = items.slice(0, limit)
+                .map(item => formatOmniItem(item))
+                .join('\n');
+            if (items.length > limit) extracted += `\n… ${items.length - limit} more`;
         } else if (Array.isArray(data)) {
             const first = data[0];
             if (isRecord(first) && 'question' in first && 'outcomes' in first) {
                 // PolymarketMarket[] (how the Polymarket block stores its data):
                 // use the dedicated formatter so outcomes + volume are included.
-                const markets = data as PolymarketMarket[];
-                const filtered = filters.timeWindow && filters.timeWindow !== 'all'
-                    ? filterByTimeWindow(markets, filters.timeWindow)
-                    : markets;
-                extracted = filters.summaryOnly
-                    ? formatMarketsSummary(filtered)
-                    : formatMarketsDetailed(filtered);
+                extracted = formatFilteredMarkets(data as PolymarketMarket[], filters);
             } else if (isRecord(first) && 'metadata' in first) {
                 // OmniItem[] stored directly.
                 const limit = filters.summaryOnly ? 8 : 25;
@@ -175,7 +154,11 @@ export function extractBlockData(
             // For now, we'll just include everything
         }
 
-        return extracted;
+        // A source that carried nothing is not grounding. Return null, not a
+        // placeholder like '(No data)': aggregateWireContext cites every
+        // source that returns text, so a placeholder would be cited as
+        // evidence. The wire's stale/empty status is UI, not provenance.
+        return extracted.trim() === '' ? null : extracted;
     } catch (error) {
         console.error('Error extracting block data:', error);
         return null;
@@ -220,6 +203,18 @@ function formatOmniItem(item: unknown): string {
     const metaStr = parts.length > 0 ? ` (${parts.join(' | ')})` : '';
     const descStr = desc ? ` — ${desc}` : '';
     return `- ${title}${metaStr}${descStr}`;
+}
+
+/**
+ * Apply the wire's time window and format what is left. '' when nothing is
+ * left, so no formatter emits a header for zero rows.
+ */
+function formatFilteredMarkets(markets: PolymarketMarket[], filters: WireFilters): string {
+    const filtered = filters.timeWindow && filters.timeWindow !== 'all'
+        ? filterByTimeWindow(markets, filters.timeWindow)
+        : markets;
+    if (filtered.length === 0) return '';
+    return filters.summaryOnly ? formatMarketsSummary(filtered) : formatMarketsDetailed(filtered);
 }
 
 /**

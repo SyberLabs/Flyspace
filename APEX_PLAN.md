@@ -14,29 +14,36 @@ AI personas and seeing which sources informed each response.
 
 ## 2. Current boundaries
 
-- **Wires connect blocks, not typed ports.** A wire stores source and target
-  block IDs. `PortSchema` types are visual hints shown on the first handle for
-  each side; the canvas does not validate compatibility or convert wire data.
-- **Mind context is global across the blocks currently in the stores.**
-  `useMindShellSync` reads every stored block into shared Mind pools, without
-  filtering by shell. `captureShellSnapshot` includes every stored block and
-  wire. Mind-panel Think therefore has broader context than persona turns,
-  which use only their active inbound wires. Per-shell Mind isolation is not
-  implemented.
+- **Wires are block-to-block, admitted by a two-layer check on the first ports
+  only.** A wire stores source and target block IDs. `addWire` runs
+  `admitConnection` (schema level, yields a projection) and then
+  `evaluateWireAdmission` (the `dataType` check in
+  `src/core/interaction/ports.ts`), and only the first input and first output
+  port are checked. An untyped output acts as `any`: it feeds `any` inputs
+  (personas) or string-sink schemas through a `text` projection, and typed
+  text/json inputs without a string sink refuse it. Persona context
+  (`aggregateWireContext`) ignores ports and projections; projections apply
+  only in capability execution (`wireInputs.ts`).
+- **Mind-panel Think sees what the canvas shows.** `captureShellSnapshot`
+  (used by `think()`) keeps only blocks of the active shell that have a wire in
+  or out, or are pinned, plus only the wires between them and the pins on them.
+  It does not read the observations pool, so neither earlier answers nor
+  `useMindShellSync`'s all-shell awareness entries reach the prompt. With
+  nothing in scope, Think is refused unless the caller passes a question
+  (Quick Ask).
 
 ## 3. Remaining work
 
-1. **Keep provenance honest.** Empty data arrays and empty Memory pools currently
-   produce placeholder text that can still be cited as a source. Return no source
-   for empty content. See `FINDINGS.md`.
-2. **Resolve Mind-panel scope.** Decide whether Mind-panel Think should be retired
-   or limited to explicitly selected sources; do not describe its current
-   whole-store snapshot as per-shell context.
-3. **Fix the block accessibility tree.** A draggable BlockCard can be exposed as
+1. **Fix the block accessibility tree.** A draggable BlockCard can be exposed as
    a button around its own controls. Keep drag semantics on the handle and give
    nested controls independent names. See `FINDINGS.md`.
-4. **Expose recorded inference lineage.** The server can return the runs behind a
+2. **Expose recorded inference lineage.** The server can return the runs behind a
    persona answer; the canvas does not yet show that tree from a source chip.
+3. **Re-validate persisted wires on load.** Shell restore and templates
+   re-run only `admitConnection`, via `replaceWiresForShell`; they skip the
+   `dataType` check in `evaluateWireAdmission`, and wires loaded from storage
+   are not re-validated at all. A wire the live canvas would refuse can
+   therefore reappear after a reload. Separate work package; not fixed here.
 
 ## 4. Cuts
 

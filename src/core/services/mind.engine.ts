@@ -4,7 +4,7 @@
 // ============================================
 
 import { LLMMessage } from './llm.service';
-import { runTurn, runTurnStream } from '@/core/cognition';
+import { runTurn } from '@/core/cognition';
 import {
     getPersonaSystemPrompt,
     parseInsightsFromResponse,
@@ -24,6 +24,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // ============================================
 // MIND ENGINE
 // ============================================
+
+const NO_SCOPE_ERROR =
+    'Nothing to think about: no wired or pinned blocks in this shell. Wire a block to another block, or pin one, first.';
 
 export class MindEngine {
     private isProcessing: boolean = false;
@@ -49,15 +52,14 @@ export class MindEngine {
                 throw new Error('No active persona');
             }
 
-            // Capture complete Shell snapshot
+            // Snapshot of what the canvas shows: wired or pinned blocks of the
+            // active shell, nothing else. Nothing in scope is only a refusal
+            // for a context-only Think; an explicit question (Quick Ask) runs.
             const snapshot = captureShellSnapshot();
 
-            if (snapshot.totalBlocks === 0) {
+            if (snapshot.totalBlocks === 0 && !question?.trim()) {
                 mindStore.setStatus('ready');
-                return {
-                    success: false,
-                    error: 'No data blocks available. Add blocks to the canvas first.'
-                };
+                return { success: false, error: NO_SCOPE_ERROR };
             }
 
             // Build messages with rich snapshot context
@@ -122,87 +124,6 @@ export class MindEngine {
     }
 
     /**
-     * Stream a response for real-time display
-     */
-    async *thinkStream(question?: string): AsyncGenerator<string, ThinkResult> {
-        if (this.isProcessing) {
-            return { success: false, error: 'Already processing' };
-        }
-
-        this.isProcessing = true;
-        const mindStore = useMindStore.getState();
-        mindStore.setStatus('processing');
-
-        try {
-            const { personas, activePersonaId } = mindStore;
-            const activePersona = personas.find(p => p.id === activePersonaId);
-
-            if (!activePersona) {
-                throw new Error('No active persona');
-            }
-
-            // Capture complete Shell snapshot
-            const snapshot = captureShellSnapshot();
-            const systemPrompt = getPersonaSystemPrompt(activePersona);
-            const snapshotContext = formatSnapshotForLLM(snapshot);
-            const userPrompt = this.buildSnapshotAnalysisPrompt(snapshotContext, question);
-
-            const messages: LLMMessage[] = [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-            ];
-
-            // The Cognition Kernel owns the turn lifecycle (apex A4).
-            const turn = runTurnStream(messages);
-            let step = await turn.next();
-            let fullResponse = '';
-            while (!step.done) {
-                fullResponse += step.value;
-                yield step.value;
-                step = await turn.next();
-            }
-            if (!step.value.success) {
-                mindStore.setStatus('error');
-                return { success: false, error: step.value.error };
-            }
-
-            const insights = parseInsightsFromResponse(fullResponse);
-            // Disable auto-distribution to prevent noise - keep only raw observation
-            // this.distributeInsights(insights, activePersona);
-
-            // Manually save the streamed response to observations
-            mindStore.addToPool('observations', {
-                type: 'analysis',
-                content: fullResponse,
-                importance: 0.8,
-                metadata: {
-                    source: activePersona.name,
-                    tokensUsed: 0, // Stream doesn't report tokens yet
-                    blocksAnalyzed: snapshot.totalBlocks,
-                    snapshotTimestamp: snapshot.timestamp
-                }
-            });
-
-            mindStore.setStatus('ready');
-
-            return {
-                success: true,
-                response: fullResponse,
-                insights
-            };
-
-        } catch (error) {
-            useMindStore.getState().setStatus('error');
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            };
-        } finally {
-            this.isProcessing = false;
-        }
-    }
-
-    /**
      * Summarize a block of context into a single concise insight
      */
     async summarizeContext(context: string): Promise<string> {
@@ -233,7 +154,7 @@ Rules:
      */
     private buildSnapshotAnalysisPrompt(snapshotContext: string, question?: string): string {
         const taskDescription = question ||
-            'Analyze the current Shell landscape and provide your perspective based on your persona. What patterns, insights, or concerns do you observe across the data streams?';
+            'Analyze the wired and pinned blocks in this shell and provide your perspective based on your persona. What patterns, insights, or concerns do you observe across the data streams?';
 
         return `${snapshotContext}
 
@@ -244,7 +165,7 @@ Rules:
 ${taskDescription}
 
 **Instructions:**
-- Consider the complete landscape context above, including all blocks, their relationships, and current state
+- Consider only the blocks listed above (wired or pinned in this shell), their relationships, and current state; do not assume anything about blocks that are not listed
 - Pay special attention to FOCUSED BLOCKS (📌) - these have been pinned for deep analysis
 - Note the status and freshness of data across different streams
 - Respond concisely but thoroughly, being specific about what the data tells you

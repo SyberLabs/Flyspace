@@ -71,14 +71,15 @@ const DEFAULT_THINK_TASK =
 export function preparePersonaTurn(input: PersonaTurnInput): PersonaTurnPrepared {
     const { context, sourceIds, sources } = aggregateWireContext(input.instanceId);
     // aggregateWireContext returns a human sentinel string when nothing is
-    // wired, so presence of real context is keyed off sourceIds, not the text.
+    // wired and another when every wired source is empty, so presence of real
+    // context is keyed off sourceIds, not the text.
     const hasContext = sourceIds.length > 0;
 
     const system = buildPersonaSystemPrompt(input.personaType, input.customName);
 
-    const contextBlock = hasContext
-        ? `## Wired Data Context\n\n${context}`
-        : '## Wired Data Context\n\n(No data blocks are currently wired into you.)';
+    // The sentinels say which case it is, so the persona is not told nothing is
+    // wired when wires exist but carried no data.
+    const contextBlock = `## Wired Data Context\n\n${context}`;
 
     const task = input.userMessage?.trim() || DEFAULT_THINK_TASK;
 

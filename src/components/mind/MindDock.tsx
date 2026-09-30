@@ -47,6 +47,9 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
             if (result.success && result.response) {
                 setQuickResponse(result.response.slice(0, 200) + (result.response.length > 200 ? '...' : ''));
                 setTimeout(() => setQuickResponse(null), 5000);
+            } else if (result.error) {
+                setQuickResponse(result.error);
+                setTimeout(() => setQuickResponse(null), 5000);
             }
         } catch (error) {
             console.error('Quick think error:', error);
@@ -68,6 +71,9 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
                 setQuickResponse(result.response.slice(0, 300) + (result.response.length > 300 ? '...' : ''));
                 setQuickMessage('');
                 setTimeout(() => setQuickResponse(null), 8000);
+            } else if (result.error) {
+                setQuickResponse(result.error);
+                setTimeout(() => setQuickResponse(null), 5000);
             }
         } catch (error) {
             console.error('Quick ask error:', error);

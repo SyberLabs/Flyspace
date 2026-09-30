@@ -19,19 +19,16 @@ export interface ShellSnapshot {
     /** Timestamp when snapshot was taken */
     timestamp: number;
 
-    /** Total number of blocks on canvas */
+    /** Number of blocks in scope (active shell, wired or pinned) */
     totalBlocks: number;
 
-    /** All block instances with their data */
+    /** In-scope block instances with their data */
     blocks: BlockSnapshotData[];
 
     /** Pinned/focused blocks (high priority) */
     focusedBlocks: ContextEntry[];
 
-    /** Current observations from awareness */
-    observations: ContextEntry[];
-
-    /** Canvas connections */
+    /** Wires between in-scope blocks */
     connections: {
         sourceBlockId: string;
         targetBlockId: string;
@@ -92,24 +89,35 @@ export interface BlockSnapshotData {
 }
 
 /**
- * Capture a complete snapshot of the current Shell state
+ * Capture what the canvas shows the Mind: the blocks of the ACTIVE shell that
+ * are wired (a wire in or out) or explicitly pinned. Nothing else.
+ *
+ * The product promise is that a mind's context is what you can point at. This
+ * used to snapshot every stored block in every shell, so Think could answer
+ * from blocks with no wire, or from a shell that was not on screen.
  */
 export function captureShellSnapshot(): ShellSnapshot {
     const blockStore = useBlockStore.getState();
     const mindStore = useMindStore.getState();
 
-    const { blocks } = blockStore;
     const { contextPools, isPinned } = mindStore;
-    // Single wire system: connections come from the wire store.
-    const wires = useWireStore.getState().wires;
+    const shellBlocks = blockStore.getBlocksByShell(blockStore.activeShellId);
+    const shellBlockIds = new Set(shellBlocks.map(b => b.instance_id));
 
-    // Get focused blocks
+    // Single wire system: connections come from the wire store. Both ends must
+    // be on this shell so a stray cross-shell wire cannot pull a foreign block in.
+    const wires = useWireStore.getState().wires.filter(w =>
+        shellBlockIds.has(w.sourceBlockId) && shellBlockIds.has(w.targetBlockId)
+    );
+    const wiredIds = new Set(wires.flatMap(w => [w.sourceBlockId, w.targetBlockId]));
+    const blocks = shellBlocks.filter(b => wiredIds.has(b.instance_id) || isPinned(b.instance_id));
+    const includedIds = new Set(blocks.map(b => b.instance_id));
+
+    // Get focused blocks (pins on blocks outside this scope stay out)
     const focusPool = contextPools.find(p => p.id === 'focus');
-    const focusedBlocks = focusPool?.entries || [];
-
-    // Get observations
-    const observationsPool = contextPools.find(p => p.id === 'observations');
-    const observations = observationsPool?.entries || [];
+    const focusedBlocks = (focusPool?.entries || []).filter(
+        e => e.sourceBlockId !== undefined && includedIds.has(e.sourceBlockId)
+    );
 
     // Process each block
     const blockSnapshots: BlockSnapshotData[] = blocks.map(block => ({
@@ -135,7 +143,6 @@ export function captureShellSnapshot(): ShellSnapshot {
         totalBlocks: blocks.length,
         blocks: blockSnapshots,
         focusedBlocks,
-        observations: observations.slice(-20), // Last 20 observations
         connections: wires.map(w => ({
             sourceBlockId: w.sourceBlockId,
             targetBlockId: w.targetBlockId
@@ -230,7 +237,7 @@ export function formatSnapshotForLLM(snapshot: ShellSnapshot): string {
 
     // Overview
     lines.push('## OVERVIEW');
-    lines.push(`Total Blocks: ${snapshot.totalBlocks}`);
+    lines.push(`Blocks in scope: ${snapshot.totalBlocks}`);
     lines.push(`Connected: ${snapshot.stats.connectedBlocks} | Disconnected: ${snapshot.stats.disconnectedBlocks} | Errors: ${snapshot.stats.errorBlocks}`);
     lines.push(`Categories: ${Object.entries(snapshot.stats.blocksByCategory).map(([k, v]) => `${k}: ${v}`).join(', ')}`);
     if (snapshot.stats.dataAge.newest) {
@@ -252,7 +259,7 @@ export function formatSnapshotForLLM(snapshot: ShellSnapshot): string {
     }
 
     // All blocks
-    lines.push('## ALL BLOCKS ON CANVAS');
+    lines.push('## WIRED OR PINNED BLOCKS IN THIS SHELL');
     lines.push('');
 
     // Group blocks by category
@@ -286,18 +293,6 @@ export function formatSnapshotForLLM(snapshot: ShellSnapshot): string {
 
             lines.push('');
         }
-    }
-
-    // Recent observations
-    if (snapshot.observations.length > 0) {
-        lines.push('-'.repeat(60));
-        lines.push('');
-        lines.push('## RECENT OBSERVATIONS');
-        lines.push('');
-        for (const obs of snapshot.observations.slice(-10)) {
-            lines.push(`[${obs.type}] ${obs.content.slice(0, 200)}${obs.content.length > 200 ? '...' : ''}`);
-        }
-        lines.push('');
     }
 
     lines.push('='.repeat(60));

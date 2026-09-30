@@ -95,7 +95,30 @@ describe('preparePersonaTurn — message assembly', () => {
         });
 
         expect(hasContext).toBe(false);
-        expect(messages[messages.length - 1].content).toMatch(/No data blocks are currently wired/i);
+        expect(messages[messages.length - 1].content).toMatch(/No active data sources connected/i);
+    });
+
+    it('says the wired sources are empty when every wired source carried no data', () => {
+        useBlockStore.setState({
+            blocks: [
+                makeBlock('feed_1', 'hackernews_feed', { items: [] }),
+                makeBlock(personaId, 'persona_analyst', createPersonaBlockData('analyst'))
+            ],
+            activeShellId: 'root'
+        });
+        useWireStore.getState().addWire('feed_1', personaId);
+
+        const { messages, hasContext, sourceIds } = preparePersonaTurn({
+            instanceId: personaId,
+            personaType: 'analyst',
+            userMessage: 'Hello'
+        });
+
+        expect(hasContext).toBe(false);
+        expect(sourceIds).toEqual([]);
+        const prompt = messages[messages.length - 1].content;
+        expect(prompt).toMatch(/Connected sources have no data available yet/i);
+        expect(prompt).not.toMatch(/No active data sources connected/i);
     });
 
     it('uses the default Think task when no user message is given', () => {

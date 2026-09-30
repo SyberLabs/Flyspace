@@ -70,3 +70,43 @@ describe('extractBlockData — includes the signal, not just titles', () => {
         expect(out).toContain('forecasters: 120');
     });
 });
+
+describe('extractBlockData — empty content carries nothing', () => {
+    beforeEach(() => useBlockStore.setState({ blocks: [], activeShellId: 'root' }));
+
+    const empties: Array<[string, unknown]> = [
+        ['an empty items array', { items: [] }],
+        ['an empty direct array', []],
+        ['an empty Memory pool', { poolId: 'memory', limit: 10, entries: [] }],
+        ['a Memory pool of blank entries', { poolId: 'memory', limit: 10, entries: [{ content: '' }, { content: '  ' }] }],
+        ['an empty markets array', { markets: [] }],
+        ['an empty articles array', { articles: [] }],
+        ['an empty text block', { content: '' }]
+    ];
+
+    it.each(empties)('returns null for %s (no placeholder to cite)', (_label, data) => {
+        seed('empty', data);
+        expect(extractBlockData('empty', DEFAULT_WIRE_FILTERS)).toBeNull();
+        expect(extractBlockData('empty', { ...DEFAULT_WIRE_FILTERS, summaryOnly: true })).toBeNull();
+    });
+
+    const expiredMarket = {
+        id: 'm', question: 'Old?', outcomes: [{ id: 'y', name: 'Yes', probability: 0.5 }],
+        volume: 1, liquidity: 0, endDate: '2001-01-01', category: 'x', tags: []
+    };
+
+    it.each([
+        ['wrapped { markets }', { markets: [expiredMarket] }],
+        ['direct PolymarketMarket[]', [expiredMarket]]
+    ])('returns null when a time window filters every market of a %s away', (_shape, data) => {
+        seed('old', data);
+        for (const summaryOnly of [true, false]) {
+            expect(extractBlockData('old', { ...DEFAULT_WIRE_FILTERS, timeWindow: 'day', summaryOnly })).toBeNull();
+        }
+    });
+
+    it('still returns text for non-empty content, skipping blank Memory entries', () => {
+        seed('ok', { poolId: 'memory', limit: 10, entries: [{ content: '' }, { content: 'Kept.' }] });
+        expect(extractBlockData('ok', DEFAULT_WIRE_FILTERS)).toBe('- Kept.');
+    });
+});
