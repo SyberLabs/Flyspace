@@ -1,12 +1,10 @@
-import { defineConfig, globalIgnores } from "eslint/config";
+import { defineConfig } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // eslint-config-next already ignores .next, out, build and next-env.d.ts.
-  globalIgnores(["dist/**", ".vinext/**"]),
   {
     rules: {
       // Pragmatic: `any` is used in external-JSON parsing / gateway / generic

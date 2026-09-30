@@ -35,6 +35,3 @@ next-env.d.ts
 
 # agent working notes, not product source
 working_memory/
-/dist/
-.vinext/
-.wrangler/
