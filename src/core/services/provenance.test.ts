@@ -143,6 +143,19 @@ describe('aggregateWireContext — wired sources', () => {
         expect(context).not.toContain('(No data)');
     });
 
+    it('does NOT cite a source whose data is an empty object', () => {
+        useBlockStore.setState({
+            blocks: [seedPersona(), block('empty', 'Empty Feed', {})],
+            activeShellId: 'root'
+        });
+        useWireStore.setState({ wires: [wire('w1', 'empty', PERSONA)] });
+
+        const { sources, sourceIds, context } = aggregateWireContext(PERSONA);
+        expect(sources).toHaveLength(0);
+        expect(sourceIds).toHaveLength(0);
+        expect(context).not.toContain('{}');
+    });
+
     it('still cites a source whose items array has content', () => {
         useBlockStore.setState({
             blocks: [
