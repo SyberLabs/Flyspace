@@ -79,9 +79,9 @@ the ledger; they are never sent to a provider and never change the prompt.
 Malformed entries are dropped rather than rejected: a bad label must not cost
 the user their answer.
 
-The Mind panel's shell-snapshot path and skin generation send no `sources`,
-because they have no per-source provenance to report. Their rows have no
-source children, which is the truth about them.
+The Mind panel's shell-snapshot path sends no `sources`, because it has no
+per-source provenance to report. Its rows have no source children, which is the
+truth about it.
 
 ### Lineage: the cascade edge
 

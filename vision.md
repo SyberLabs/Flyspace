@@ -60,7 +60,7 @@ The Citadel remembers how you like to think.
 │ Polymarket  │──────▶│                         │
 └─────────────┘       │   🎯 ANALYST PERSONA    │
 ┌─────────────┐       │                         │
-│ NewsAPI     │──────▶│   "Based on market odds │
+│ Hacker News │──────▶│   "Based on market odds │
 └─────────────┘       │    and recent news..."  │
                       └─────────────────────────┘
                                  │
@@ -101,7 +101,7 @@ The Citadel rejects all of this. It is:
 
 You open The Citadel in the morning.
 
-Your *Morning Briefing* shell loads: Polymarket on the left, NewsAPI in the center, your Analyst persona on the right. The wires are already connected. You click "Think". The Analyst pulses, reads the connected data, and offers observations.
+Your *Morning Briefing* shell loads: Polymarket on the left, Hacker News in the center, your Analyst persona on the right. The wires are already connected. You click "Think". The Analyst pulses, reads the connected data, and offers observations.
 
 You notice something interesting. You ask a follow-up question. The Analyst responds, citing which data sources informed its answer.
 
