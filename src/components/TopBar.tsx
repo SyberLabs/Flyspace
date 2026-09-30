@@ -7,7 +7,6 @@
 
 import {
     Command,
-    Palette,
     Settings,
     Wifi,
     Database,
@@ -24,13 +23,11 @@ import { useClientMounted } from '@/core/hooks';
 import { Sigil } from './brand/Sigil';
 
 export function TopBar({
-    onOpenSkin,
     onOpenSettings,
     onOpenShells,
     children,
     customRight
 }: {
-    onOpenSkin?: () => void;
     onOpenSettings?: () => void;
     onOpenShells?: () => void;
     children?: React.ReactNode;
@@ -228,17 +225,6 @@ export function TopBar({
                         ) : (
                             <Wifi className="w-3.5 h-3.5" />
                         )}
-                    </button>
-
-                    <div className="w-px h-4 bg-[var(--citadel-border)]" />
-
-                    {/* SKIN Button */}
-                    <button
-                        onClick={onOpenSkin}
-                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-full text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--citadel-elevated)] transition-colors"
-                        title="Appearance Settings"
-                    >
-                        <Palette className="w-3.5 h-3.5" />
                     </button>
                 </div>
 

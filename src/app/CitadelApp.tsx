@@ -9,7 +9,6 @@ import { Canvas } from '@/canvas/Canvas';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { CommandPalette } from '@/components/CommandPalette';
-import { SkinModal } from '@/components/SkinModal';
 import { Sprout } from 'lucide-react';
 import Link from 'next/link';
 import { ShellPanel } from '@/components/ShellPanel';
@@ -26,7 +25,6 @@ export default function CitadelApp() {
     const { activeTool, selection, captureSelection, clearSelection } = useToolStore();
 
     const [isMindOpen, setIsMindOpen] = useState(false);
-    const [isSkinOpen, setIsSkinOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isShellsOpen, setIsShellsOpen] = useState(false);
 
@@ -55,7 +53,6 @@ export default function CitadelApp() {
         >
             {/* Top Bar */}
             <TopBar
-                onOpenSkin={() => setIsSkinOpen(true)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onOpenShells={() => setIsShellsOpen(true)}
             />
@@ -101,9 +98,6 @@ export default function CitadelApp() {
 
             {/* Mind Panel */}
             <MindPanel isOpen={isMindOpen} onClose={() => setIsMindOpen(false)} />
-
-            {/* Skin Modal */}
-            <SkinModal isOpen={isSkinOpen} onClose={() => setIsSkinOpen(false)} />
 
             {/* Settings Panel */}
             <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

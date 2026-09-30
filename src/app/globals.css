@@ -3,9 +3,7 @@
 /* ============================================
    PROJECT OMNI: THE CITADEL - DESIGN SYSTEM
    SyberLabs Design System v2 ("Atlas"): ink ground, vellum text, hairline
-   rules, spectrum as an accent only. The --citadel-* names are the skinnable
-   contract (SkinService + PRESET_THEMES); PRESET_THEMES[0] ("command") must
-   stay identical to the values below.
+   rules, spectrum as an accent only.
    ============================================ */
 
 :root {
