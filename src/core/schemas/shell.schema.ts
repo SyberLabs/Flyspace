@@ -13,8 +13,6 @@ export type PersonaType =
     | 'quant'       // Risk/EV analysis
     | 'muse'        // Creative synthesis
     | 'analyst'     // Causal reasoning / Data-driven insights
-    | 'sentinel'    // Monitoring/alerts
-    | 'weaver'      // Personalization
     // Persona block types
     | 'strategist'  // Long-term planning and tactical decisions
     | 'researcher'  // Deep investigation and knowledge synthesis
@@ -121,50 +119,15 @@ export interface ShellBlockState {
 }
 
 /**
- * Command Palette command structure
- */
-export interface PaletteCommand {
-    /** Unique command ID */
-    id: string;
-
-    /** Display label */
-    label: string;
-
-    /** Category for grouping */
-    category: 'shell' | 'block' | 'action' | 'navigation';
-
-    /** Icon identifier */
-    icon?: string;
-
-    /** Keyboard shortcut */
-    shortcut?: string;
-
-    /** Action to execute */
-    action: () => void | Promise<void>;
-
-    /** Search keywords */
-    keywords?: string[];
-}
-
-/**
  * Global application settings
  */
 export interface OmniSettings {
     /** Use mock data for APIs */
     useMockData: boolean;
 
-    /** Currently active shell ID */
-    activeShellId: string | null;
-
     /** Canvas grid snapping enabled */
     gridSnapping: boolean;
 
     /** Grid size in pixels */
     gridSize: number;
-
-    /** Auto-connect related blocks */
-    autoWiring: boolean;
-
-    /** Show connection lines */
-    showConnections: boolean;
 }

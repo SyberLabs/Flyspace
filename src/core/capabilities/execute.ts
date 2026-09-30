@@ -5,21 +5,19 @@ import { sha256 } from './hash';
 import {
     admitExecution,
     finishExecution,
-    getExecutionRecord,
-    latestExecutionRecord,
     markExecutionDispatched,
+    type ExecutionPhase,
     type ExecutionRecord
 } from './executionLedger';
 import { readCapability } from './state';
 import { capabilitySecrets } from './secrets';
 import {
-    brandResult,
     projectError,
     projectSuccess,
     type CapabilityResult,
     type TypedValue
 } from './project';
-import type { CapabilityEffect, CapabilityManifest } from './manifest';
+import type { CapabilityManifest } from './manifest';
 import { isRecord, validateValue } from './valueType';
 
 const MAX_BODY_CHARS = 1_000_000;
@@ -33,24 +31,8 @@ export interface LocalCall {
     signal?: AbortSignal;
 }
 
-export type ExecutionStatus = 'admitted' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'uncertain';
-
-export interface CapabilityExecution {
-    runId: string;
-    capabilityId: string;
-    manifestDigest: string;
-    effect: CapabilityEffect;
-    inputDigest: string;
-    idempotencyKey: string;
-    startedAt: number;
-    deadlineAt: number;
-    dispatchedAt?: number;
-    status: ExecutionStatus;
-}
-
 const mcpTransports = new Map<string, McpTransport>();
 const localHandlers = new Map<string, (args: Record<string, unknown>, call?: LocalCall) => Promise<unknown>>();
-const lastResult = new Map<string, CapabilityResult>();
 
 export function bindLocalHandler(
     handler: string,
@@ -69,25 +51,6 @@ export function bindMcpTransport(serverId: string, transport: McpTransport): voi
 
 export function unbindMcpTransport(serverId: string): void {
     mcpTransports.delete(serverId);
-}
-
-export function getLastResult(capabilityId: string): CapabilityResult | undefined {
-    return lastResult.get(capabilityId);
-}
-
-export function clearLastResult(capabilityId?: string): void {
-    if (capabilityId) lastResult.delete(capabilityId);
-    else lastResult.clear();
-}
-
-export function getExecution(runId: string): CapabilityExecution | undefined {
-    const record = getExecutionRecord(runId);
-    return record ? toExecution(record) : undefined;
-}
-
-export function latestExecution(capabilityId: string): CapabilityExecution | undefined {
-    const record = latestExecutionRecord(capabilityId);
-    return record ? toExecution(record) : undefined;
 }
 
 export interface ExecuteOptions {
@@ -137,13 +100,13 @@ export async function executeCapability(
     });
     if (admission.kind !== 'admit') return replay(manifest, admission.record, admission.kind);
 
-    const run = toExecution(admission.record);
+    const runId = admission.record.runId;
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
     let dispatched = false;
 
     try {
         if (options.signal?.aborted) {
-            return finish(failure(capabilityId, 'CANCELED', 'Execution was canceled', false), run, 'canceled');
+            return finish(failure(capabilityId, 'CANCELED', 'Execution was canceled', false), runId, 'canceled');
         }
         const step = await dispatch(
             manifest,
@@ -156,14 +119,12 @@ export async function executeCapability(
             auth.secret,
             () => {
                 dispatched = true;
-                markExecutionDispatched(run.runId);
-                run.dispatchedAt = Date.now();
-                run.status = 'running';
+                markExecutionDispatched(runId);
             }
         );
         if (step.type === 'halt') {
             const uncertain = step.result.error?.code === 'EFFECT_UNCERTAIN';
-            return finish(step.result, run, uncertain ? 'uncertain' : 'failed');
+            return finish(step.result, runId, uncertain ? 'uncertain' : 'failed');
         }
         const value = step.value;
 
@@ -174,7 +135,7 @@ export async function executeCapability(
                 'TYPED_OUTPUT_MISMATCH',
                 schemaErrors.slice(0, 6).join('; '),
                 false
-            ), run, 'failed');
+            ), runId, 'failed');
         }
         const typed: TypedValue = { schema: manifest.output.schema, value };
         return finish({
@@ -182,7 +143,7 @@ export async function executeCapability(
             capabilityId,
             typed,
             presentation: projectSuccess(manifest, typed)
-        }, run, 'succeeded');
+        }, runId, 'succeeded');
     } catch (error) {
         if (dispatched && sideEffect) {
             return finish(failure(
@@ -190,18 +151,18 @@ export async function executeCapability(
                 'EFFECT_UNCERTAIN',
                 'The call was dispatched and the outcome was not observed. Do not retry automatically.',
                 false
-            ), run, 'uncertain');
+            ), runId, 'uncertain');
         }
         const aborted = options.signal?.aborted || (error instanceof Error && error.name === 'AbortError');
         if (aborted) {
-            return finish(failure(capabilityId, 'CANCELED', 'Execution was canceled', false), run, 'canceled');
+            return finish(failure(capabilityId, 'CANCELED', 'Execution was canceled', false), runId, 'canceled');
         }
         return finish(failure(
             capabilityId,
             'UPSTREAM_ERROR',
             error instanceof Error ? error.message : 'Unknown execution error',
             manifest.effect === 'read' || manifest.effect === 'compute'
-        ), run, 'failed');
+        ), runId, 'failed');
     }
 }
 
@@ -467,21 +428,6 @@ function encodeBase64(value: string): string {
     return btoa(binary);
 }
 
-function toExecution(record: ExecutionRecord): CapabilityExecution {
-    return {
-        runId: record.runId,
-        capabilityId: record.capabilityId,
-        manifestDigest: record.manifestDigest,
-        effect: record.effect,
-        inputDigest: record.inputDigest,
-        idempotencyKey: record.idempotencyKey,
-        startedAt: record.startedAt,
-        deadlineAt: record.deadlineAt,
-        ...(record.dispatchedAt ? { dispatchedAt: record.dispatchedAt } : {}),
-        status: record.status
-    };
-}
-
 function replay(manifest: CapabilityManifest, record: ExecutionRecord, kind: 'replay' | 'conflict' | 'in_flight' | 'uncertain'): CapabilityResult {
     if (kind === 'conflict') {
         return remembered(failure(manifest.id, 'IDEMPOTENCY_CONFLICT', 'Idempotency key was already used for a different input', false), record.runId);
@@ -516,8 +462,6 @@ function replay(manifest: CapabilityManifest, record: ExecutionRecord, kind: 're
 
 function remembered(result: CapabilityResult, runId: string): CapabilityResult {
     result.runId = runId;
-    brandResult(result);
-    lastResult.set(result.capabilityId, result);
     return result;
 }
 
@@ -534,20 +478,15 @@ function failure(capabilityId: string, code: string, message: string, retryable:
 
 function finish(
     result: CapabilityResult,
-    run?: CapabilityExecution,
-    status?: ExecutionStatus
+    runId?: string,
+    status?: Exclude<ExecutionPhase, 'admitted' | 'running'>
 ): CapabilityResult {
-    if (run && status && status !== 'admitted' && status !== 'running') {
-        run.status = status;
+    if (runId && status) {
         const receipt = result.ok
             ? { ok: true, value: result.typed?.value }
             : { ok: false, code: result.error?.code, message: result.error?.message };
-        finishExecution(run.runId, status, receipt);
-        result.runId = run.runId;
-    } else if (run) {
-        result.runId = run.runId;
+        finishExecution(runId, status, receipt);
+        result.runId = runId;
     }
-    brandResult(result);
-    lastResult.set(result.capabilityId, result);
     return result;
 }

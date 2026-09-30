@@ -93,22 +93,6 @@ blockRegistry.register({
     description: 'Real-time prediction market odds and probabilities'
 });
 
-// NewsAPI Block
-blockRegistry.register({
-    block_id: 'newsapi_feed',
-    display_name: 'News Feed',
-    category: 'pulse',
-    data_type: 'news_feed',
-    refresh_rate: '5m',
-    semantic_tags: ['news', 'narrative', 'sentiment', 'headlines', 'media'],
-    wiring_logic: 'map_to_narrative_agent',
-    ports: [
-        createJsonOutputPort('out', 'Article Feed')
-    ],
-    icon: 'Newspaper',
-    description: 'Aggregated news articles with sentiment analysis'
-});
-
 // CoinGecko Block
 blockRegistry.register({
     block_id: 'coingecko_crypto',
@@ -123,22 +107,6 @@ blockRegistry.register({
     ports: [
         createJsonOutputPort('out', 'Market Data')
     ]
-});
-
-// Alpha Vantage Block
-blockRegistry.register({
-    block_id: 'alpha_vantage_quote',
-    display_name: 'Alpha Vantage',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '1m',
-    semantic_tags: ['stocks', 'forex', 'crypto', 'market', 'quote'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Market Quote')
-    ],
-    icon: 'LineChart',
-    description: 'Market quote data from Alpha Vantage'
 });
 
 // Hacker News Block
@@ -157,22 +125,6 @@ blockRegistry.register({
     ]
 });
 
-// Metaculus Block
-blockRegistry.register({
-    block_id: 'metaculus_forecast',
-    display_name: 'Metaculus Forecast',
-    category: 'truth',
-    data_type: 'probabilistic_stream',
-    refresh_rate: '1m',
-    semantic_tags: ['metaculus', 'forecasting', 'prediction', 'probability', 'science'],
-    wiring_logic: 'map_to_game_theory_agent',
-    ports: [
-        createJsonOutputPort('out', 'Forecast Data')
-    ],
-    icon: 'Target',
-    description: 'Scientific forecasting and prediction questions'
-});
-
 // OpenAlex Block
 blockRegistry.register({
     block_id: 'openalex_works',
@@ -187,38 +139,6 @@ blockRegistry.register({
     ],
     icon: 'BookOpen',
     description: 'Recent research works and citations'
-});
-
-// FRED Block
-blockRegistry.register({
-    block_id: 'fred_series',
-    display_name: 'FRED',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '15m',
-    semantic_tags: ['economics', 'macro', 'time series', 'fred', 'fed'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Series Data')
-    ],
-    icon: 'LineChart',
-    description: 'Federal Reserve Economic Data series observations'
-});
-
-// BLS Block
-blockRegistry.register({
-    block_id: 'bls_series',
-    display_name: 'BLS',
-    category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '30m',
-    semantic_tags: ['labor', 'employment', 'time series', 'statistics'],
-    wiring_logic: 'map_to_quant_agent',
-    ports: [
-        createJsonOutputPort('out', 'Series Data')
-    ],
-    icon: 'LineChart',
-    description: 'Bureau of Labor Statistics time series data'
 });
 
 // World Bank Block
@@ -360,62 +280,6 @@ blockRegistry.register({
     ],
     icon: 'FileText',
     description: 'Markdown notes with preview toggle'
-});
-
-// Code Block
-blockRegistry.register({
-    block_id: 'code_sandbox',
-    display_name: 'Code',
-    category: 'workspace',
-    data_type: 'code',
-    refresh_rate: 'manual',
-    semantic_tags: ['code', 'programming', 'scripts', 'analysis', 'developer'],
-    wiring_logic: 'map_to_developer_agent',
-    icon: 'Code',
-    description: 'Syntax-highlighted code display'
-});
-
-// Chat Block
-blockRegistry.register({
-    block_id: 'mind_chat',
-    display_name: 'Mind Chat',
-    category: 'workspace',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
-    semantic_tags: ['chat', 'conversation', 'ai', 'assistant', 'mind'],
-    wiring_logic: 'map_to_active_persona',
-    ports: [
-        createAnyInputPort('in', 'Context Input'),
-        createTextOutputPort('out', 'Conversation')
-    ],
-    icon: 'MessageSquare',
-    description: 'Direct conversation with the Mind'
-});
-
-// Media Block
-blockRegistry.register({
-    block_id: 'media_gallery',
-    display_name: 'Media',
-    category: 'workspace',
-    data_type: 'media',
-    refresh_rate: 'manual',
-    semantic_tags: ['images', 'video', 'gallery', 'media', 'files'],
-    wiring_logic: 'map_to_analyst_agent',
-    icon: 'Image',
-    description: 'Image and video gallery'
-});
-
-// Embed Block
-blockRegistry.register({
-    block_id: 'web_embed',
-    display_name: 'Web Embed',
-    category: 'workspace',
-    data_type: 'embed',
-    refresh_rate: 'manual',
-    semantic_tags: ['embed', 'iframe', 'website', 'external', 'browser'],
-    wiring_logic: 'map_to_analyst_agent',
-    icon: 'Globe',
-    description: 'Embed external web content'
 });
 
 // ============================================

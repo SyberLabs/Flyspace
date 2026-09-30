@@ -231,7 +231,6 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                     title="System Shells"
                                     shells={systemShells}
                                     activeShellId={currentActiveShell}
-                                    hotkeySlots={hotkeySlots}
                                     onLoad={handleLoadShell}
                                     onDelete={handleDeleteShell}
                                     onDuplicate={handleDuplicateShell}
@@ -246,7 +245,6 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                     title="Custom Shells"
                                     shells={customShells}
                                     activeShellId={currentActiveShell}
-                                    hotkeySlots={hotkeySlots}
                                     onLoad={handleLoadShell}
                                     onDelete={handleDeleteShell}
                                     onDuplicate={handleDuplicateShell}
@@ -261,7 +259,6 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                     title="Templates"
                                     shells={templateShells}
                                     activeShellId={currentActiveShell}
-                                    hotkeySlots={hotkeySlots}
                                     onLoad={handleLoadShell}
                                     onDelete={handleDeleteShell}
                                     onDuplicate={handleDuplicateShell}
@@ -350,7 +347,6 @@ interface ShellSectionProps {
     title: string;
     shells: ShellConfig[];
     activeShellId: string;
-    hotkeySlots: Record<number, string>;
     onLoad: (shellId: string) => void;
     onDelete: (shellId: string) => void;
     onDuplicate: (shellId: string) => void;
@@ -546,5 +542,3 @@ function ShellDialog({
         </motion.div>
     );
 }
-
-export default ShellPanel;

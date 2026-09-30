@@ -15,13 +15,8 @@ import { API_CATALOG } from '../schemas/api.schema';
 
 // Import normalizers
 import { polymarketNormalizer } from './normalizers/polymarket';
-import { newsapiNormalizer } from './normalizers/newsapi';
 import { coingeckoNormalizer } from './normalizers/coingecko';
 import { hackernewsNormalizer } from './normalizers/hackernews';
-import { metaculusNormalizer } from './normalizers/metaculus';
-import { alphavantageNormalizer } from './normalizers/alphavantage';
-import { fredNormalizer } from './normalizers/fred';
-import { blsNormalizer } from './normalizers/bls';
 import { worldbankNormalizer } from './normalizers/worldbank';
 import { openmeteoNormalizer } from './normalizers/openmeteo';
 import { frankfurterNormalizer } from './normalizers/frankfurter';
@@ -38,13 +33,8 @@ const defaultParamsRegistry = new Map<string, Record<string, unknown>>();
 
 const normalizerRegistry = new Map<string, RegisteredApi>([
     ['polymarket', polymarketNormalizer as RegisteredApi],
-    ['newsapi', newsapiNormalizer as RegisteredApi],
     ['coingecko', coingeckoNormalizer as RegisteredApi],
     ['hackernews', hackernewsNormalizer as RegisteredApi],
-    ['metaculus', metaculusNormalizer as RegisteredApi],
-    ['alpha_vantage', alphavantageNormalizer as RegisteredApi],
-    ['fred', fredNormalizer as RegisteredApi],
-    ['bls', blsNormalizer as RegisteredApi],
     ['worldbank', worldbankNormalizer as RegisteredApi],
     ['openmeteo', openmeteoNormalizer as RegisteredApi],
     ['frankfurter', frankfurterNormalizer as RegisteredApi]
@@ -204,8 +194,7 @@ class ApiGatewayService {
         }
 
         // 3. Wait for rate limit. FetchFn still takes an apiKey argument from
-        //    when the client held keys; shipped keyed providers ignore it and
-        //    go through /api/data. Pass empty so nothing client-side can inject.
+        //    when the client held keys. Pass empty so nothing client-side can inject.
         await this.waitForRateLimit(apiId);
 
         try {

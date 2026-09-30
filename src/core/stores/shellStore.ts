@@ -61,9 +61,6 @@ interface ShellState {
     /** Save ANY shell with metadata (universal save) */
     saveShell: (shellId: string, metadata?: Partial<ShellConfig>) => ShellConfig;
 
-    /** Save current canvas state to a shell */
-    saveToShell: (shellId: string) => void;
-
     /** Load a shell configuration with block recreation */
     loadShell: (shellId: string) => boolean;
 
@@ -78,9 +75,6 @@ interface ShellState {
 
     /** Delete a shell */
     deleteShell: (shellId: string) => void;
-
-    /** Update shell name/description */
-    updateShell: (shellId: string, updates: Partial<Pick<ShellConfig, 'name' | 'description'>>) => void;
 
     /** Set current persona */
     setPersona: (persona: PersonaType) => void;
@@ -132,31 +126,6 @@ export const useShellStore = create<ShellState>()(
                 return newShell;
             },
 
-            saveToShell: (shellId) => {
-                const blockStore = useBlockStore.getState();
-
-                set(state => ({
-                    shells: state.shells.map(shell =>
-                        shell.id === shellId
-                            ? {
-                                ...shell,
-                                blocks: blockStore.blocks.map(b => ({
-                                    blockId: b.schema.block_id,
-                                    instanceId: b.instance_id,
-                                    position: b.position,
-                                    dimensions: b.dimensions,
-                                    ...(b.params ? { params: b.params } : {})
-                                })),
-                                wires: useWireStore.getState().getWiresByShell(shellId),
-                                persona: state.currentPersona,
-                                aesthetic: state.currentAesthetic,
-                                updatedAt: Date.now()
-                            }
-                            : shell
-                    )
-                }));
-            },
-
             deleteShell: (shellId) => {
                 const blockStore = useBlockStore.getState();
                 const wasActiveOnCanvas = blockStore.activeShellId === shellId;
@@ -175,16 +144,6 @@ export const useShellStore = create<ShellState>()(
                     activeShellId: state.activeShellId === shellId
                         ? (wasActiveOnCanvas ? 'root' : null)
                         : state.activeShellId
-                }));
-            },
-
-            updateShell: (shellId, updates) => {
-                set(state => ({
-                    shells: state.shells.map(shell =>
-                        shell.id === shellId
-                            ? { ...shell, ...updates, updatedAt: Date.now() }
-                            : shell
-                    )
                 }));
             },
 

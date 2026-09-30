@@ -87,9 +87,6 @@ export interface BlockSnapshotData {
     /** Human-readable summary of the data */
     summary: string;
 
-    /** Key metrics extracted from the data */
-    keyMetrics: string[];
-
     /** Error message if any */
     error?: string;
 }
@@ -127,7 +124,6 @@ export function captureShellSnapshot(): ShellSnapshot {
         isPinned: isPinned(block.instance_id),
         data: block.data,
         summary: summarizeBlockData(block),
-        keyMetrics: extractKeyMetrics(block),
         error: block.error
     }));
 
@@ -160,59 +156,8 @@ function summarizeBlockData(block: BlockInstance): string {
     }
 
     switch (blockType) {
-        case 'polymarket': {
-            const markets = data as Array<{
-                question: string;
-                outcomes: Array<{ name: string; probability: number }>;
-                volume?: number;
-            }>;
-            if (!markets || !markets.length) return 'No markets loaded';
-
-            const market = markets[0];
-            const topOutcome = market.outcomes?.[0];
-            return `"${market.question}" - ${topOutcome?.name}: ${(topOutcome?.probability * 100).toFixed(1)}%${market.volume ? ` | Vol: $${(market.volume / 1000).toFixed(0)}k` : ''}`;
-        }
-
-        case 'newsapi': {
-            const articles = data as Array<{
-                title: string;
-                source: { name: string };
-                sentiment?: string;
-            }>;
-            if (!articles || !articles.length) return 'No articles loaded';
-
-            const sentiments = articles.map(a => a.sentiment).filter(Boolean);
-            const sentimentCounts = sentiments.reduce((acc, s) => {
-                acc[s!] = (acc[s!] || 0) + 1;
-                return acc;
-            }, {} as Record<string, number>);
-
-            return `${articles.length} articles | Latest: "${articles[0]?.title.slice(0, 60)}..." (${articles[0]?.source?.name})${Object.keys(sentimentCounts).length ? ` | Sentiment: ${Object.entries(sentimentCounts).map(([k, v]) => `${k}: ${v}`).join(', ')}` : ''}`;
-        }
-
-        case 'tradingview': {
-            const d = isRecord(data) ? data : {};
-            if (typeof d.symbol === 'string') {
-                const interval = typeof d.interval === 'string' ? d.interval : '1D';
-                const price = d.price != null ? ` | Price: $${d.price}` : '';
-                return `Chart: ${d.symbol} - ${interval} timeframe${price}`;
-            }
-            return 'No symbol configured';
-        }
-
-        case 'gdelt': {
-            const events = isRecord(data) && Array.isArray(data.events) ? data.events : [];
-            if (!events.length) return 'No events loaded';
-
-            const categories = [...new Set(events.slice(0, 10).map((e) =>
-                isRecord(e) && typeof e.category === 'string' ? e.category : undefined
-            ).filter((c): c is string => !!c))];
-            return `${events.length} global events | Categories: ${categories.slice(0, 3).join(', ')}${categories.length > 3 ? '...' : ''}`;
-        }
-
         case 'persona_analyst':
         case 'persona_strategist':
-        case 'persona_oracle':
         case 'persona_guardian': {
             const messages = isRecord(data) && Array.isArray(data.messages) ? data.messages : [];
             if (!messages.length) return 'No conversation yet';
@@ -230,60 +175,6 @@ function summarizeBlockData(block: BlockInstance): string {
             return 'Data loaded';
         }
     }
-}
-
-/**
- * Extract key metrics from block data
- */
-function extractKeyMetrics(block: BlockInstance): string[] {
-    const metrics: string[] = [];
-    const blockType = block.schema.block_id;
-    const data = block.data;
-
-    if (!data) return metrics;
-
-    switch (blockType) {
-        case 'polymarket': {
-            const markets = data as Array<{
-                outcomes: Array<{ name: string; probability: number }>;
-                volume?: number;
-            }>;
-            if (markets && markets.length > 0) {
-                const market = markets[0];
-                const topOutcome = market.outcomes?.[0];
-                if (topOutcome) {
-                    metrics.push(`${topOutcome.name}: ${(topOutcome.probability * 100).toFixed(1)}%`);
-                }
-                if (market.volume) {
-                    metrics.push(`Vol: $${(market.volume / 1000).toFixed(0)}k`);
-                }
-            }
-            break;
-        }
-
-        case 'newsapi': {
-            const articles = data as Array<{ sentiment?: string }>;
-            if (articles && articles.length > 0) {
-                metrics.push(`${articles.length} articles`);
-                const sentiments = articles.map(a => a.sentiment).filter(Boolean);
-                if (sentiments.length > 0) {
-                    const positive = sentiments.filter(s => s === 'positive').length;
-                    const negative = sentiments.filter(s => s === 'negative').length;
-                    metrics.push(`+${positive}/-${negative}`);
-                }
-            }
-            break;
-        }
-
-        case 'tradingview': {
-            const d = isRecord(data) ? data : {};
-            if (typeof d.price === 'number') metrics.push(`$${d.price}`);
-            if (typeof d.change === 'number') metrics.push(`${d.change > 0 ? '+' : ''}${d.change.toFixed(2)}%`);
-            break;
-        }
-    }
-
-    return metrics;
 }
 
 /**
@@ -383,10 +274,6 @@ export function formatSnapshotForLLM(snapshot: ShellSnapshot): string {
 
             lines.push(`${pinIcon}${statusIcon} **${block.displayName}** (${block.blockType})`);
             lines.push(`   Summary: ${block.summary}`);
-
-            if (block.keyMetrics.length > 0) {
-                lines.push(`   Metrics: ${block.keyMetrics.join(' | ')}`);
-            }
 
             if (block.error) {
                 lines.push(`   ⚠️ Error: ${block.error}`);

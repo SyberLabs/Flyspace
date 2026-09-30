@@ -46,23 +46,3 @@ export const useToolStore = create<ToolStore>((set) => ({
 
     clearSelection: () => set({ selection: null }),
 }));
-
-// ============================================
-// KEYBOARD SHORTCUTS HOOK (Optional)
-// ============================================
-
-export function useToolShortcuts() {
-    const setTool = useToolStore((s) => s.setTool);
-
-    // useEffect(() => {
-    //     const handleKeyDown = (e: KeyboardEvent) => {
-    //         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    //         if (e.key === 'v' || e.key === 'V') setTool('navigate');
-    //         if (e.key === 'h' || e.key === 'H') setTool('highlighter');
-    //     };
-    //     window.addEventListener('keydown', handleKeyDown);
-    //     return () => window.removeEventListener('keydown', handleKeyDown);
-    // }, [setTool]);
-
-    return { setTool };
-}

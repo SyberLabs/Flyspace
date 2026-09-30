@@ -28,8 +28,6 @@ interface BlockCardProps {
     block: BlockInstance;
     children: ReactNode;
     onClose?: () => void;
-    onExpand?: () => void;
-    isExpanded?: boolean;
     isDragging?: boolean;
     dragListeners?: SyntheticListenerMap;
 }
@@ -209,15 +207,6 @@ export function BlockCard({
                 ports={outputPorts}
                 connectionCount={wiresFromBlock.length}
             />
-
-            {/* Wire target data for persona blocks */}
-            {block.schema.block_id.startsWith('persona_') && (
-                <div
-                    data-persona-block="true"
-                    data-block-id={block.instance_id}
-                    className="absolute inset-0 pointer-events-none"
-                />
-            )}
         </motion.div>
     );
 }
@@ -231,5 +220,3 @@ function getStatusColor(status: ConnectionStatus): string {
         default: return 'var(--text-muted)';
     }
 }
-
-export default BlockCard;

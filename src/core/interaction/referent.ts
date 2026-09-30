@@ -52,7 +52,7 @@ export function resolveReferents(input: ResolveInput): ResolveResult {
     const shell = inShell(input.blocks, input.shellId);
     const noun = input.noun?.trim();
 
-    if (input.point && input.point.frame === 'canvas') {
+    if (input.point) {
         let hit = shell.filter(block => containsPoint(block, input.point!));
         if (noun) hit = hit.filter(block => nounMatches(block, noun));
         if (hit.length > 0) return finish(hit.map(block => block.id), false);
