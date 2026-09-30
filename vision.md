@@ -113,28 +113,6 @@ This is not "using AI." This is *thinking with AI*.
 
 ---
 
-## Current Status
-
-### Implemented
-- [x] Block canvas with drag-and-drop
-- [x] 5 Persona blocks (Analyst, Strategist, Researcher, Creative, Guardian)
-- [x] Wire system (schema, store, visual rendering)
-- [x] Drag-to-wire interaction
-- [x] Context gathering from wired blocks
-- [x] Inline chat with personas
-- [x] API Dashboard & Marketplace (50+ APIs)
-- [x] Workspace blocks (Text, Code, Media, Embed)
-- [x] Mind Panel for settings and memory
-
-### Next
-- [ ] LLM integration via API Dashboard
-- [ ] Memory crystallization
-- [ ] Persona-to-persona wiring
-- [ ] Full shell save/load
-- [ ] Mobile companion
-
----
-
 ## The Name
 
 **The Citadel** — a fortress for thought.
