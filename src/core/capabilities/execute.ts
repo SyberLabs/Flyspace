@@ -23,8 +23,19 @@ import { isRecord, validateValue } from './valueType';
 const MAX_BODY_CHARS = 1_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 
+/** Per-call credential placement resolved from the manifest's slot. */
+export interface McpCallContext {
+    headers: Record<string, string>;
+}
+
 export interface McpTransport {
-    call(serverId: string, toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+    call(
+        serverId: string,
+        toolName: string,
+        args: Record<string, unknown>,
+        signal?: AbortSignal,
+        context?: McpCallContext
+    ): Promise<unknown>;
 }
 
 export interface LocalCall {
@@ -224,7 +235,7 @@ async function dispatch(
         return executeHttp(manifest, input, authHeaders, authQuery, fetchImpl, signal, idempotencyKey, secret, markDispatched);
     }
     markDispatched();
-    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, input, signal);
+    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, input, authHeaders, signal);
     return executeLocal(manifest, input, signal);
 }
 
@@ -387,7 +398,12 @@ async function executeBroker(
     return { type: 'value', value: payload.value };
 }
 
-async function executeMcp(manifest: CapabilityManifest, input: Record<string, unknown>, signal?: AbortSignal): Promise<Step> {
+async function executeMcp(
+    manifest: CapabilityManifest,
+    input: Record<string, unknown>,
+    authHeaders: Record<string, string>,
+    signal?: AbortSignal
+): Promise<Step> {
     if (manifest.transport.kind !== 'mcp') {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an mcp capability', false));
     }
@@ -399,7 +415,18 @@ async function executeMcp(manifest: CapabilityManifest, input: Record<string, un
     for (const entry of manifest.inputs) {
         if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
     }
-    return { type: 'value', value: await transport.call(manifest.transport.serverId, manifest.transport.toolName, args, signal) };
+    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    return {
+        type: 'value',
+        value: await transport.call(
+            manifest.transport.serverId,
+            manifest.transport.toolName,
+            args,
+            requestSignal,
+            { headers: { ...authHeaders } }
+        )
+    };
 }
 
 function fillPath(path: string, input: Record<string, unknown>): string {

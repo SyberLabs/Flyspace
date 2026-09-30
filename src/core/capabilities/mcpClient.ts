@@ -1,151 +1,137 @@
-// Live MCP client over Streamable HTTP.
-// The compiler still only reads schemas. This speaks JSON-RPC: initialize,
-// then tools/call. A bound client is what executeCapability dispatches to.
+// MCP client over the official TypeScript SDK v2 (Streamable HTTP).
+// The SDK owns version negotiation, framing, SSE, and cancellation. This
+// adapter owns only what Omni needs from it: a bound McpTransport for
+// executeCapability and a tool lister for the MCP provider. Tool import
+// policy, effect classification, and credential slots stay in Omni.
 
-import type { McpTransport } from './execute';
+import { Client, StreamableHTTPClientTransport, type VersionNegotiationMode } from '@modelcontextprotocol/client';
+import type { McpCallContext, McpTransport } from './execute';
+import { canonicalize, sha256 } from './hash';
+import type { McpToolSchema } from './mcp';
 
-const PROTOCOL = '2025-03-26';
-
-export interface McpClientOptions {
+export interface McpServerConfig {
     url: string;
-    fetchImpl?: typeof fetch;
+    /** Labels tools returned by listTools. The provider re-labels them with its own server id. */
+    serverId?: string;
+    /**
+     * Headers sent on every request, visible to whoever builds this config.
+     * A secret belongs in a credential slot instead: execution resolves the
+     * slot and passes it per call, so revoking the slot stops the next call.
+     */
+    headers?: Record<string, string>;
     clientName?: string;
+    clientVersion?: string;
+    /** Defaults to `auto`: probe the modern era, fall back to the 2025 handshake. */
+    versionNegotiation?: VersionNegotiationMode;
 }
 
-interface JsonRpcResponse {
-    jsonrpc?: string;
-    id?: number | string;
-    result?: unknown;
-    error?: { code?: number; message?: string };
+export type McpProtocolEra = 'legacy' | 'modern';
+
+export interface McpSdkTransport extends McpTransport {
+    listTools(signal?: AbortSignal, context?: McpCallContext): Promise<McpToolSchema[]>;
+    protocolEra(): McpProtocolEra | undefined;
+    close(): Promise<void>;
 }
 
-export function createMcpHttpTransport(options: McpClientOptions): McpTransport {
-    const fetchImpl = options.fetchImpl ?? fetch;
-    let sessionId: string | undefined;
-    let initialized = false;
-    let nextId = 1;
+interface Session {
+    key: string;
+    client: Client;
+    ready: Promise<Client>;
+}
+
+export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport {
+    let session: Session | undefined;
+
+    async function connected(context: McpCallContext | undefined, signal: AbortSignal | undefined): Promise<Client> {
+        const headers = { ...(config.headers ?? {}), ...(context?.headers ?? {}) };
+        const key = sha256(canonicalize(headers));
+        if (session?.key === key) return session.ready;
+        const previous = session;
+        session = undefined;
+        if (previous) await previous.client.close().catch(() => undefined);
+
+        const client = new Client(
+            { name: config.clientName ?? 'omni', version: config.clientVersion ?? '0.1.0' },
+            { versionNegotiation: { mode: config.versionNegotiation ?? 'auto' } }
+        );
+        const transport = new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers } });
+        const ready = client.connect(transport, signal ? { signal } : undefined).then(() => client);
+        const current: Session = { key, client, ready };
+        session = current;
+        ready.catch(() => {
+            if (session === current) session = undefined;
+        });
+        return ready;
+    }
 
     return {
-        async call(_serverId, toolName, args, signal) {
-            if (!initialized) {
-                await initialize(options.url, fetchImpl, (id) => { sessionId = id; }, signal, options.clientName);
-                initialized = true;
-            }
-            const response = await rpc(options.url, fetchImpl, sessionId, {
-                jsonrpc: '2.0',
-                id: nextId++,
-                method: 'tools/call',
-                params: { name: toolName, arguments: args }
-            }, signal);
-            const result = asRecord(response.result);
-            if (result?.isError === true) {
-                throw new Error(textContent(result) || 'MCP tool returned an error');
-            }
-            if (result && 'structuredContent' in result && result.structuredContent !== undefined) {
-                return result.structuredContent;
-            }
-            const text = result ? textContent(result) : '';
-            if (text) {
-                try {
-                    return JSON.parse(text) as unknown;
-                } catch {
-                    return text;
+        async call(_serverId, toolName, args, signal, context) {
+            const client = await connected(context, signal);
+            const result = await client.callTool({ name: toolName, arguments: args }, signal ? { signal } : undefined);
+            return toolValue(result as Record<string, unknown>);
+        },
+
+        async listTools(signal, context) {
+            const client = await connected(context, signal);
+            const tools: McpToolSchema[] = [];
+            let cursor: string | undefined;
+            do {
+                const page = await client.listTools(cursor ? { cursor } : undefined, signal ? { signal } : undefined);
+                for (const tool of page.tools) {
+                    tools.push({
+                        serverId: config.serverId ?? '',
+                        name: tool.name,
+                        ...(tool.description ? { description: tool.description } : {}),
+                        inputSchema: tool.inputSchema,
+                        ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+                        ...(tool.annotations ? {
+                            annotations: {
+                                ...(tool.annotations.readOnlyHint !== undefined ? { readOnlyHint: tool.annotations.readOnlyHint } : {}),
+                                ...(tool.annotations.destructiveHint !== undefined ? { destructiveHint: tool.annotations.destructiveHint } : {}),
+                                ...(tool.annotations.idempotentHint !== undefined ? { idempotentHint: tool.annotations.idempotentHint } : {})
+                            }
+                        } : {})
+                    });
                 }
-            }
-            return response.result;
+                cursor = page.nextCursor;
+            } while (cursor);
+            return tools;
+        },
+
+        protocolEra() {
+            return session?.client.getProtocolEra();
+        },
+
+        async close() {
+            const current = session;
+            session = undefined;
+            if (current) await current.client.close().catch(() => undefined);
         }
     };
 }
 
-async function initialize(
-    url: string,
-    fetchImpl: typeof fetch,
-    setSession: (id: string | undefined) => void,
-    signal: AbortSignal | undefined,
-    clientName: string | undefined
-): Promise<void> {
-    const opened = await rpcRaw(url, fetchImpl, undefined, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-            protocolVersion: PROTOCOL,
-            capabilities: {},
-            clientInfo: { name: clientName ?? 'omni', version: '0.1.0' }
+function toolValue(result: Record<string, unknown>): unknown {
+    if (result.isError === true) {
+        throw new Error(textContent(result) || 'MCP tool returned an error');
+    }
+    if ('structuredContent' in result && result.structuredContent !== undefined) {
+        return result.structuredContent;
+    }
+    const text = textContent(result);
+    if (text) {
+        try {
+            return JSON.parse(text) as unknown;
+        } catch {
+            return text;
         }
-    }, signal);
-    setSession(opened.sessionId);
-    await rpcRaw(url, fetchImpl, opened.sessionId, {
-        jsonrpc: '2.0',
-        method: 'notifications/initialized'
-    }, signal);
-}
-
-async function rpc(
-    url: string,
-    fetchImpl: typeof fetch,
-    sessionId: string | undefined,
-    body: unknown,
-    signal: AbortSignal | undefined
-): Promise<JsonRpcResponse> {
-    const opened = await rpcRaw(url, fetchImpl, sessionId, body, signal);
-    if (!opened.message) throw new Error('MCP server returned an empty response');
-    if (opened.message.error) {
-        throw new Error(opened.message.error.message || 'MCP request failed');
     }
-    return opened.message;
-}
-
-async function rpcRaw(
-    url: string,
-    fetchImpl: typeof fetch,
-    sessionId: string | undefined,
-    body: unknown,
-    signal: AbortSignal | undefined
-): Promise<{ sessionId?: string; message?: JsonRpcResponse }> {
-    const headers: Record<string, string> = {
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        'mcp-protocol-version': PROTOCOL
-    };
-    if (sessionId) headers['mcp-session-id'] = sessionId;
-    const response = await fetchImpl(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal
-    });
-    if (!response.ok) throw new Error(`MCP HTTP ${response.status}`);
-    const nextSession = response.headers.get('mcp-session-id') ?? sessionId;
-    const text = await response.text();
-    if (!text.trim()) return { sessionId: nextSession ?? undefined };
-    return { sessionId: nextSession ?? undefined, message: parseRpc(text, response.headers.get('content-type') ?? '') };
-}
-
-function parseRpc(text: string, contentType: string): JsonRpcResponse {
-    if (contentType.includes('text/event-stream') || text.includes('\ndata:') || text.startsWith('data:')) {
-        const data = text
-            .split('\n')
-            .filter(line => line.startsWith('data:'))
-            .map(line => line.slice(5).trim())
-            .filter(line => line && line !== '[DONE]');
-        const last = data[data.length - 1];
-        if (!last) throw new Error('MCP event stream had no payload');
-        return JSON.parse(last) as JsonRpcResponse;
-    }
-    return JSON.parse(text) as JsonRpcResponse;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-        ? value as Record<string, unknown>
-        : null;
+    return result;
 }
 
 function textContent(result: Record<string, unknown>): string {
     if (!Array.isArray(result.content)) return '';
     return result.content
-        .map(entry => asRecord(entry)?.text)
+        .map(entry => (typeof entry === 'object' && entry !== null ? (entry as { text?: unknown }).text : undefined))
         .filter((text): text is string => typeof text === 'string')
         .join('\n');
 }

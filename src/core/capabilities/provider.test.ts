@@ -3,11 +3,11 @@ import { compileOpenApi } from './openapi';
 import { compileMcpTools, type McpToolSchema } from './mcp';
 import { compileBring, type BringApiDescription } from './bring';
 import { admitProposal, manifestFromProposal } from './admission';
-import { credentialSlot } from './identity';
+import { credentialSlot, transportCredentialSlot } from './identity';
 import { clearCapabilities, ensureSpeechCapabilities, getCapability, installProposal, approveCapability } from './registry';
 import { executeCapability } from './execute';
 import { capabilitySecrets } from './secrets';
-import { validateManifest, type CapabilityManifest } from './manifest';
+import { sealManifest, validateManifest, type CapabilityManifest } from './manifest';
 import type { CapabilityProposalV1, CapabilityProvider } from './provider';
 import { openapiProvider } from './providers/openapiProvider';
 import { mcpProvider } from './providers/mcpProvider';
@@ -246,6 +246,20 @@ describe('host admission gate', () => {
         const result = admitProposal({ ...create, auth: { ...create.auth, secretRef: foreign } });
         expect(result.ok).toBe(false);
         expect(result.errors[0]).toMatch(/^proposal\.auth\.secretRef is not a proposal field/);
+    });
+
+    it('binds an MCP credential to the server id, never to an HTTP origin slot', async () => {
+        const auth = { kind: 'apiKey' as const, in: 'header' as const, name: 'x-api-key' };
+        const [list] = await proposalsOf(mcpProvider, { serverId: 'board', tools: TOOLS, auth });
+        const admitted = admitProposal(list).manifest!;
+        expect(admitted.auth.secretRef).toBe(transportCredentialSlot(admitted.transport, admitted.auth));
+        const httpSlot = credentialSlot('https://board.example.test', auth);
+        expect(admitted.auth.secretRef).not.toBe(httpSlot);
+        const { digest: _digest, ...draft } = admitted;
+        const borrowed = sealManifest({ ...draft, auth: { ...admitted.auth, secretRef: httpSlot } });
+        expect(validateManifest(borrowed).errors.some(error => error.startsWith('auth.secretRef must be'))).toBe(true);
+        const query = await proposalsOf(mcpProvider, { serverId: 'board', tools: TOOLS, auth: { ...auth, in: 'query' } });
+        expect(admitProposal(query[0]).errors).toContain('mcp credentials travel in a header');
     });
 
     it('refuses a local transport, a mismatched origin, or a provenance that names another provider', async () => {

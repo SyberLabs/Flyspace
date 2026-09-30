@@ -4,7 +4,7 @@
 // pair is rejected before anything is registered.
 
 import { canonicalize, sha256 } from './hash';
-import { canonicalCapabilityId, credentialSlot } from './identity';
+import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
 import { validateValueType, type ValueType } from './valueType';
 
 export const CAPABILITY_MANIFEST_VERSION = 1 as const;
@@ -529,6 +529,12 @@ export function validateManifest(input: unknown): ManifestValidation {
         if (transport.kind === 'http' && isRecord(input.auth) && input.auth.kind !== 'none') {
             const auth = input.auth as unknown as AuthBinding;
             const slot = credentialSlot(transport.baseUrl, auth);
+            if (auth.secretRef !== slot) errors.push(`auth.secretRef must be ${slot}`);
+        }
+        if (transport.kind === 'mcp' && isRecord(input.auth) && input.auth.kind !== 'none') {
+            const auth = input.auth as unknown as AuthBinding;
+            if (auth.kind === 'apiKey' && auth.in !== 'header') errors.push('mcp credentials travel in a header');
+            const slot = transportCredentialSlot(transport, auth);
             if (auth.secretRef !== slot) errors.push(`auth.secretRef must be ${slot}`);
         }
     }

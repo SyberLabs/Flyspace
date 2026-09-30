@@ -4,7 +4,12 @@
 
 import { compileMcpTools, type McpToolSchema } from '../mcp';
 import type { CapabilityEffect } from '../manifest';
-import { ProviderMaterializeError, type CapabilityDiscovery, type CapabilityProvider } from '../provider';
+import {
+    ProviderMaterializeError,
+    type CapabilityDiscovery,
+    type CapabilityProvider,
+    type ProposedAuthRequirement
+} from '../provider';
 import { candidateFromManifest, proposalFromManifest, type ProposalSource } from './fromManifest';
 
 export interface McpToolLister {
@@ -13,6 +18,8 @@ export interface McpToolLister {
 
 export interface McpDiscoveryRequest {
     serverId: string;
+    /** How the server authenticates a call. Admission turns it into a slot; the secret never passes here. */
+    auth?: ProposedAuthRequirement;
     /** Static schemas, or a live lister (the SDK client in `mcpClient.ts`). */
     tools?: readonly McpToolSchema[];
     lister?: McpToolLister;
@@ -57,7 +64,10 @@ export const mcpProvider: CapabilityProvider<McpDiscoveryRequest> = {
             const compiled = compileMcpTools([tool], { trustedAnnotations: false });
             const manifest = compiled.manifests[0];
             if (manifest) {
-                discovery.candidates.push(candidateFromManifest(manifest, sourceFor(tool, request, now)));
+                discovery.candidates.push({
+                    ...candidateFromManifest(manifest, sourceFor(tool, request, now)),
+                    authHint: request.auth?.kind ?? 'none'
+                });
             } else {
                 discovery.issues.push({ externalId: tool.name, message: compiled.errors[0]?.message ?? 'tool did not compile' });
             }
@@ -72,6 +82,9 @@ export const mcpProvider: CapabilityProvider<McpDiscoveryRequest> = {
         const compiled = compileMcpTools(matches, { trustedAnnotations: false });
         const manifest = compiled.manifests[0];
         if (!manifest) throw new ProviderMaterializeError(compiled.errors[0]?.message ?? 'tool did not compile');
-        return proposalFromManifest(manifest, sourceFor(matches[0], context.request, candidate.provenance.discoveredAtMs));
+        return {
+            ...proposalFromManifest(manifest, sourceFor(matches[0], context.request, candidate.provenance.discoveredAtMs)),
+            auth: context.request.auth ?? { kind: 'none' }
+        };
     }
 };

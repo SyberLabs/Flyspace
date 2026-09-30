@@ -4,7 +4,7 @@
 // approval from the effect, and the credential slot from the destination.
 // The result still goes through validateManifest and installProposal.
 
-import { canonicalCapabilityId, credentialSlot } from './identity';
+import { canonicalCapabilityId, transportCredentialSlot } from './identity';
 import {
     approvalForEffect,
     canonicalInput,
@@ -163,18 +163,17 @@ function hostEffect(
 
 function hostAuth(auth: ProposedAuthRequirement, transport: CapabilityTransport): { auth: AuthBinding } | { error: string } {
     if (auth.kind === 'none') return { auth: { kind: 'none' } };
-    if (transport.kind !== 'http') {
-        return { error: `${transport.kind} transports cannot bind a credential slot yet` };
-    }
     const placement = {
         kind: auth.kind,
         ...(auth.kind === 'apiKey' ? { in: auth.in, name: auth.name } : {})
     } as Pick<AuthBinding, 'kind' | 'in' | 'name'>;
+    const secretRef = transportCredentialSlot(transport, placement);
+    if (!secretRef) return { error: `${transport.kind} transports cannot bind a credential slot` };
     return {
         auth: {
             ...placement,
             ...('prefix' in auth && auth.prefix ? { prefix: auth.prefix } : {}),
-            secretRef: credentialSlot(transport.baseUrl, placement)
+            secretRef
         }
     };
 }

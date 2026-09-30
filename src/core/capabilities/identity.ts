@@ -30,7 +30,23 @@ export function canonicalCapabilityId(transport: CapabilityTransport): string {
 
 /** Slot name for one origin + scheme + placement. Never reused across origins. */
 export function credentialSlot(baseUrl: string, auth: Pick<AuthBinding, 'kind' | 'in' | 'name'>): string {
-    const origin = new URL(baseUrl).origin;
+    return slotFor(new URL(baseUrl).origin, auth);
+}
+
+/**
+ * Slot for any transport that can carry a credential. Non-HTTP destinations
+ * are named by kind and host-bound id, which cannot collide with a URL origin.
+ */
+export function transportCredentialSlot(
+    transport: CapabilityTransport,
+    auth: Pick<AuthBinding, 'kind' | 'in' | 'name'>
+): string | undefined {
+    if (transport.kind === 'http') return credentialSlot(transport.baseUrl, auth);
+    if (transport.kind === 'mcp') return slotFor(`mcp:${transport.serverId}`, auth);
+    return undefined;
+}
+
+function slotFor(destination: string, auth: Pick<AuthBinding, 'kind' | 'in' | 'name'>): string {
     const placement = auth.kind === 'apiKey' ? `${auth.in ?? ''}:${auth.name ?? ''}` : auth.kind;
-    return `cred_${sha256(`${origin}|${auth.kind}|${placement}`).slice(0, 20)}`;
+    return `cred_${sha256(`${destination}|${auth.kind}|${placement}`).slice(0, 20)}`;
 }
