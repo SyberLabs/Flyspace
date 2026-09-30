@@ -14,11 +14,10 @@ import { useWireStore } from '@/core/stores/wireStore';
 import { createInitialMindState } from '@/core/schemas/mind.schema';
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import type { DataWire } from '@/core/schemas/wire.schema';
-import { runTurn, runTurnStream } from '@/core/cognition';
+import { runTurn } from '@/core/cognition';
 
 vi.mock('@/core/cognition', () => ({
-    runTurn: vi.fn(),
-    runTurnStream: vi.fn()
+    runTurn: vi.fn()
 }));
 
 function seedBlock() {
@@ -42,7 +41,6 @@ beforeEach(() => {
     useBlockStore.setState({ blocks: [], activeShellId: 'root' });
     useWireStore.setState({ wires: [] });
     vi.mocked(runTurn).mockReset();
-    vi.mocked(runTurnStream).mockReset();
 });
 
 describe('MindEngine.think', () => {
@@ -241,41 +239,5 @@ describe('MindEngine.think — context is what the canvas shows', () => {
         expect(second).toContain('B-One');
         expect(second).not.toContain('A-One');
         expect(second).not.toContain('A-ANSWER-SECRET');
-    });
-
-    it('thinkStream applies the same scope', async () => {
-        useBlockStore.setState({
-            blocks: [
-                scopedBlock('src', 'WiredSource', 'root'),
-                scopedBlock('sink', 'WiredSink', 'root'),
-                scopedBlock('loose', 'UnwiredLoose', 'root')
-            ],
-            activeShellId: 'root'
-        });
-        useWireStore.setState({ wires: [scopedWire('w1', 'src', 'sink', 'root')] });
-        vi.mocked(runTurnStream).mockImplementation((async function* () {
-            yield 'ok';
-            return { success: true, content: 'ok' };
-        }) as unknown as typeof runTurnStream);
-
-        const stream = new MindEngine().thinkStream();
-        let step = await stream.next();
-        while (!step.done) step = await stream.next();
-
-        const messages = vi.mocked(runTurnStream).mock.calls[0][0];
-        const prompt = messages.map(m => m.content).join('\n');
-        expect(prompt).toContain('WiredSource');
-        expect(prompt).not.toContain('UnwiredLoose');
-    });
-
-    it('thinkStream refuses when nothing is wired or pinned', async () => {
-        useBlockStore.setState({
-            blocks: [scopedBlock('loose', 'UnwiredLoose', 'root')],
-            activeShellId: 'root'
-        });
-        const step = await new MindEngine().thinkStream().next();
-        expect(step.done).toBe(true);
-        expect(step.value).toMatchObject({ success: false });
-        expect(runTurnStream).not.toHaveBeenCalled();
     });
 });

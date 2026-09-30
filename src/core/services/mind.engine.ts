@@ -4,7 +4,7 @@
 // ============================================
 
 import { LLMMessage } from './llm.service';
-import { runTurn, runTurnStream } from '@/core/cognition';
+import { runTurn } from '@/core/cognition';
 import {
     getPersonaSystemPrompt,
     parseInsightsFromResponse,
@@ -116,93 +116,6 @@ export class MindEngine {
             return {
                 success: false,
                 error: errorMessage
-            };
-        } finally {
-            this.isProcessing = false;
-        }
-    }
-
-    /**
-     * Stream a response for real-time display
-     */
-    async *thinkStream(question?: string): AsyncGenerator<string, ThinkResult> {
-        if (this.isProcessing) {
-            return { success: false, error: 'Already processing' };
-        }
-
-        this.isProcessing = true;
-        const mindStore = useMindStore.getState();
-        mindStore.setStatus('processing');
-
-        try {
-            const { personas, activePersonaId } = mindStore;
-            const activePersona = personas.find(p => p.id === activePersonaId);
-
-            if (!activePersona) {
-                throw new Error('No active persona');
-            }
-
-            // Same scope as think(): wired or pinned blocks of the active shell.
-            const snapshot = captureShellSnapshot();
-
-            if (snapshot.totalBlocks === 0) {
-                mindStore.setStatus('ready');
-                return { success: false, error: NO_SCOPE_ERROR };
-            }
-
-            const systemPrompt = getPersonaSystemPrompt(activePersona);
-            const snapshotContext = formatSnapshotForLLM(snapshot);
-            const userPrompt = this.buildSnapshotAnalysisPrompt(snapshotContext, question);
-
-            const messages: LLMMessage[] = [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-            ];
-
-            // The Cognition Kernel owns the turn lifecycle (apex A4).
-            const turn = runTurnStream(messages);
-            let step = await turn.next();
-            let fullResponse = '';
-            while (!step.done) {
-                fullResponse += step.value;
-                yield step.value;
-                step = await turn.next();
-            }
-            if (!step.value.success) {
-                mindStore.setStatus('error');
-                return { success: false, error: step.value.error };
-            }
-
-            const insights = parseInsightsFromResponse(fullResponse);
-            // Disable auto-distribution to prevent noise - keep only raw observation
-            // this.distributeInsights(insights, activePersona);
-
-            // Manually save the streamed response to observations
-            mindStore.addToPool('observations', {
-                type: 'analysis',
-                content: fullResponse,
-                importance: 0.8,
-                metadata: {
-                    source: activePersona.name,
-                    tokensUsed: 0, // Stream doesn't report tokens yet
-                    blocksAnalyzed: snapshot.totalBlocks,
-                    snapshotTimestamp: snapshot.timestamp
-                }
-            });
-
-            mindStore.setStatus('ready');
-
-            return {
-                success: true,
-                response: fullResponse,
-                insights
-            };
-
-        } catch (error) {
-            useMindStore.getState().setStatus('error');
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
             };
         } finally {
             this.isProcessing = false;
