@@ -60,8 +60,7 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
         const shellId = `shell_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         saveShell(shellId, {
             name: saveShellName,
-            description: saveShellDescription,
-            type: 'custom'
+            description: saveShellDescription
         });
 
         setSaveShellName('');
@@ -107,11 +106,6 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
             alert('Invalid slot number. Please enter a number between 1-9.');
         }
     };
-
-    // Group shells by type
-    const systemShells = shells.filter(s => s.type === 'system');
-    const customShells = shells.filter(s => s.type === 'custom');
-    const templateShells = shells.filter(s => s.type === 'template');
 
     return (
         <AnimatePresence>
@@ -225,39 +219,11 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                 </div>
                             )}
 
-                            {/* System Shells */}
-                            {systemShells.length > 0 && (
+                            {/* Saved Shells */}
+                            {shells.length > 0 && (
                                 <ShellSection
-                                    title="System Shells"
-                                    shells={systemShells}
-                                    activeShellId={currentActiveShell}
-                                    onLoad={handleLoadShell}
-                                    onDelete={handleDeleteShell}
-                                    onDuplicate={handleDuplicateShell}
-                                    onAssignHotkey={handleAssignHotkey}
-                                    getHotkeyForShell={getHotkeyForShell}
-                                />
-                            )}
-
-                            {/* Custom Shells */}
-                            {customShells.length > 0 && (
-                                <ShellSection
-                                    title="Custom Shells"
-                                    shells={customShells}
-                                    activeShellId={currentActiveShell}
-                                    onLoad={handleLoadShell}
-                                    onDelete={handleDeleteShell}
-                                    onDuplicate={handleDuplicateShell}
-                                    onAssignHotkey={handleAssignHotkey}
-                                    getHotkeyForShell={getHotkeyForShell}
-                                />
-                            )}
-
-                            {/* Template Shells */}
-                            {templateShells.length > 0 && (
-                                <ShellSection
-                                    title="Templates"
-                                    shells={templateShells}
+                                    title="Saved Shells"
+                                    shells={shells}
                                     activeShellId={currentActiveShell}
                                     onLoad={handleLoadShell}
                                     onDelete={handleDeleteShell}
@@ -412,10 +378,6 @@ function ShellSection({
                             {/* Shell Metadata */}
                             <div className="flex items-center gap-3 text-[10px] text-[var(--text-muted)] mb-2">
                                 <span>{shell.blocks.length} blocks</span>
-                                <span>•</span>
-                                <span>{shell.persona}</span>
-                                <span>•</span>
-                                <span>{shell.aesthetic}</span>
                             </div>
 
                             {/* Actions */}

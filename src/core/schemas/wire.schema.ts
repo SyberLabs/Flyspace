@@ -190,20 +190,6 @@ export const PERSONA_CONFIGS: Record<PersonaType, {
     color: string;
     description: string;
 }> = {
-    // Original personas (from Mind Panel)
-    quant: {
-        name: 'Quant',
-        avatar: '📊',
-        color: 'var(--truth-green)',
-        description: 'Risk and expected value analysis'
-    },
-    muse: {
-        name: 'Muse',
-        avatar: '✨',
-        color: 'var(--mind-solar-dawn)',
-        description: 'Creative synthesis and inspiration'
-    },
-    // Persona block types
     analyst: {
         name: 'Analyst',
         avatar: '🎯',

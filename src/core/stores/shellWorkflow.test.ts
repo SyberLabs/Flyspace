@@ -111,7 +111,6 @@ describe('shell workflow — wire cleanup (A1 orphan-wire regressions)', () => {
         // Simulate a pre-A1 persisted shell carrying legacy connections.
         const legacyShell = {
             id: 'shell_legacy_1',
-            type: 'custom' as const,
             name: 'Legacy',
             blocks: [
                 { blockId: 'polymarket_live_odds', instanceId: 'pm_1', position: { x: 0, y: 0 }, dimensions: { width: 320, height: 240 } },
@@ -119,8 +118,6 @@ describe('shell workflow — wire cleanup (A1 orphan-wire regressions)', () => {
             ],
             wires: undefined as never,
             connections: [{ id: 'c1', sourceBlockId: 'pm_1', sourcePort: 'out', targetBlockId: 'an_1', targetPort: 'in' }],
-            persona: 'analyst' as const,
-            aesthetic: 'command' as const,
             createdAt: 1,
             updatedAt: 1
         };

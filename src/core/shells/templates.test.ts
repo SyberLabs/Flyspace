@@ -62,8 +62,6 @@ describe('validateTemplate — catches authoring mistakes', () => {
         name: 'Test',
         description: 'x',
         tags: [],
-        persona: 'analyst',
-        aesthetic: 'command',
         blocks: [
             { ref: 'a', blockId: 'persona_analyst', position: { x: 0, y: 0 } },
             { ref: 'b', blockId: 'newsapi_feed', position: { x: 0, y: 0 } },

@@ -11,13 +11,9 @@ import {
     Search,
     Layers,
     Save,
-    Palette,
-    Zap,
     Moon,
     Sun,
-    Grid,
-    TrendingUp,
-    Globe
+    Grid
 } from 'lucide-react';
 import { useUIStore, useShellStore, useBlockStore, useSettingsStore } from '@/core/stores';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
@@ -25,7 +21,7 @@ import { BlockGlyph } from '@/components/blockIcons';
 
 export function CommandPalette() {
     const { commandPaletteOpen, closeCommandPalette, toggleCommandPalette } = useUIStore();
-    const { shells, createShell, loadShell, setPersona } = useShellStore();
+    const { shells, createShell, loadShell } = useShellStore();
     const { addBlock, clearCanvas } = useBlockStore();
     const { useMockData, toggleMockData, gridSnapping, updateSetting } = useSettingsStore();
 
@@ -130,16 +126,6 @@ export function CommandPalette() {
                                         label="Clear Canvas"
                                         onSelect={handleClearCanvas}
                                     />
-                                    <CommandItem
-                                        icon={<Palette className="w-4 h-4" />}
-                                        label="[SKIN] Change Aesthetic"
-                                        shortcut="⌘⇧S"
-                                        onSelect={() => {
-                                            // Stub for Phase 2
-                                            alert('SKIN feature coming in Phase 2!');
-                                            closeCommandPalette();
-                                        }}
-                                    />
                                 </Command.Group>
 
                                 {/* Add Blocks */}
@@ -163,34 +149,12 @@ export function CommandPalette() {
                                                 key={shell.id}
                                                 icon={<Layers className="w-4 h-4" />}
                                                 label={shell.name}
-                                                description={`${shell.blocks.length} blocks • ${shell.persona}`}
+                                                description={`${shell.blocks.length} blocks`}
                                                 onSelect={() => handleLoadShell(shell.id)}
                                             />
                                         ))}
                                     </Command.Group>
                                 )}
-
-                                {/* Personas */}
-                                <Command.Group heading="Set Persona" className="px-2 py-2">
-                                    <CommandItem
-                                        icon={<TrendingUp className="w-4 h-4" />}
-                                        label="The Quant"
-                                        description="Risk/EV analysis mode"
-                                        onSelect={() => { setPersona('quant'); closeCommandPalette(); }}
-                                    />
-                                    <CommandItem
-                                        icon={<Zap className="w-4 h-4" />}
-                                        label="The Muse"
-                                        description="Creative synthesis mode"
-                                        onSelect={() => { setPersona('muse'); closeCommandPalette(); }}
-                                    />
-                                    <CommandItem
-                                        icon={<Globe className="w-4 h-4" />}
-                                        label="The Analyst"
-                                        description="Causal reasoning mode"
-                                        onSelect={() => { setPersona('analyst'); closeCommandPalette(); }}
-                                    />
-                                </Command.Group>
 
                                 {/* Settings */}
                                 <Command.Group heading="Settings" className="px-2 py-2">

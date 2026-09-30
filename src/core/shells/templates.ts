@@ -7,7 +7,6 @@
 // See CITADEL_SHELL_STORE_PLAN.md.
 // ============================================
 
-import type { PersonaType, AestheticTheme } from '@/core/schemas/shell.schema';
 import { API_CATALOG, type ApiProvider } from '@/core/schemas/api.schema';
 
 /** A block placement inside a template (placeholder instanceId, remapped on use). */
@@ -34,8 +33,6 @@ export interface ShellTemplate {
     name: string;
     description: string;
     tags: string[];
-    persona: PersonaType;
-    aesthetic: AestheticTheme;
     blocks: TemplateBlock[];
     connections: TemplateConnection[];
 }
@@ -53,8 +50,6 @@ const INVESTOR_SHELL: ShellTemplate = {
         'Prediction markets, crypto, US GDP growth, and tech signals wired into an ' +
         'Analyst and Strategist — a ready-made environment that works without API keys.',
     tags: ['finance', 'markets', 'macro'],
-    persona: 'analyst',
-    aesthetic: 'command',
     blocks: [
         // --- Markets (left column) ---
         { ref: 'polymarket', blockId: 'polymarket_live_odds', position: { x: 40, y: 40 } },
@@ -88,8 +83,6 @@ const RESEARCHER_SHELL: ShellTemplate = {
         'OpenAlex papers on foundation models, Hacker News, and live prediction markets ' +
         'wired into a Researcher with Memory — works without API keys.',
     tags: ['research', 'papers', 'tech'],
-    persona: 'researcher',
-    aesthetic: 'journal',
     blocks: [
         { ref: 'openalex', blockId: 'openalex_works', position: { x: 40, y: 40 }, params: { search: 'foundation models' } },
         { ref: 'hn', blockId: 'hackernews_feed', position: { x: 40, y: 320 } },
@@ -118,8 +111,6 @@ const WORLD_WATCH_SHELL: ShellTemplate = {
         'Live weather, earthquakes, Wikipedia, ECB FX, and GitHub wired into an ' +
         'Analyst — every block works with nothing in .env.',
     tags: ['demo', 'live', 'keyless'],
-    persona: 'analyst',
-    aesthetic: 'command',
     blocks: [
         { ref: 'weather', blockId: 'openmeteo_forecast', position: { x: 40, y: 40 }, params: { latitude: 40.71, longitude: -74.01 } },
         { ref: 'quakes', blockId: 'usgs_quakes', position: { x: 40, y: 320 } },

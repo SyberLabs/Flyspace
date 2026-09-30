@@ -2,7 +2,7 @@
 // PROJECT OMNI: OMNIVAULT — STORAGE ADAPTER (apex A2)
 // IndexedDB-backed async StateStorage for zustand persist. Breaks the
 // localStorage ceiling (~5MB, synchronous, easily wiped) for the core canvas
-// stores; the Garden's longitudinal history (apex C1) lands here later.
+// stores.
 //
 // Key properties:
 // - Drop-in behind createJSONStorage: stores keep their name/version/migrate.

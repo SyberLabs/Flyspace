@@ -8,7 +8,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { BlockInstance, BlockConnection } from '../schemas/block.schema';
-import { ShellConfig, PersonaType, AestheticTheme } from '../schemas/shell.schema';
+import { ShellConfig } from '../schemas/shell.schema';
 import { DataWire, DEFAULT_WIRE_FILTERS } from '../schemas/wire.schema';
 import { vaultStorage } from '../vault';
 import { useWireStore } from './wireStore';
@@ -49,12 +49,6 @@ interface ShellState {
     /** Hotkey slot assignments (1-9 → shellId) */
     hotkeySlots: Record<number, string>;
 
-    /** Current persona */
-    currentPersona: PersonaType;
-
-    /** Current aesthetic */
-    currentAesthetic: AestheticTheme;
-
     /** Create a new shell */
     createShell: (name: string, description?: string) => ShellConfig;
 
@@ -76,12 +70,6 @@ interface ShellState {
     /** Delete a shell */
     deleteShell: (shellId: string) => void;
 
-    /** Set current persona */
-    setPersona: (persona: PersonaType) => void;
-
-    /** Set current aesthetic */
-    setAesthetic: (aesthetic: AestheticTheme) => void;
-
     /** Get active shell */
     getActiveShell: () => ShellConfig | undefined;
 }
@@ -92,8 +80,6 @@ export const useShellStore = create<ShellState>()(
             shells: [],
             activeShellId: null,
             hotkeySlots: {},
-            currentPersona: 'analyst',
-            currentAesthetic: 'command',
 
             createShell: (name, description) => {
                 const now = Date.now();
@@ -102,13 +88,10 @@ export const useShellStore = create<ShellState>()(
                 // canvas. (To snapshot the current canvas, use "Save Current".)
                 const newShell: ShellConfig = {
                     id: `shell_${now}_${Math.random().toString(36).substr(2, 9)}`,
-                    type: 'custom',  // User-created shells are 'custom' type
                     name,
                     description,
                     blocks: [],
                     wires: [],
-                    persona: get().currentPersona,
-                    aesthetic: get().currentAesthetic,
                     createdAt: now,
                     updatedAt: now
                 };
@@ -147,16 +130,10 @@ export const useShellStore = create<ShellState>()(
                 }));
             },
 
-            setPersona: (persona) => set({ currentPersona: persona }),
-
-            setAesthetic: (aesthetic) => set({ currentAesthetic: aesthetic }),
-
             getActiveShell: () => {
                 const state = get();
                 return state.shells.find(s => s.id === state.activeShellId);
             },
-
-            // NEW Phase 4 methods
 
             saveShell: (shellId, metadata) => {
                 const blockStore = useBlockStore.getState();
@@ -169,10 +146,8 @@ export const useShellStore = create<ShellState>()(
                 const now = Date.now();
                 const shellConfig: ShellConfig = {
                     id: shellId,
-                    type: metadata?.type || 'custom',
                     name: metadata?.name || `Shell ${now}`,
                     description: metadata?.description,
-                    systemType: metadata?.systemType,
                     blocks: shellBlocks.map(b => ({
                         blockId: b.schema.block_id,
                         instanceId: b.instance_id,
@@ -182,11 +157,6 @@ export const useShellStore = create<ShellState>()(
                         ...(b.params ? { params: b.params } : {})
                     })),
                     wires: shellWires,
-                    persona: metadata?.persona || get().currentPersona,
-                    aesthetic: metadata?.aesthetic || get().currentAesthetic,
-                    hotkeySlot: metadata?.hotkeySlot,
-                    isTemplate: metadata?.isTemplate,
-                    templateTags: metadata?.templateTags,
                     createdAt: metadata?.createdAt || now,
                     updatedAt: now,
                     lastAccessedAt: now
@@ -250,9 +220,7 @@ export const useShellStore = create<ShellState>()(
                     shells: state.shells.map(s =>
                         s.id === shellId ? { ...s, lastAccessedAt: Date.now() } : s
                     ),
-                    activeShellId: shellId,
-                    currentPersona: shell.persona,
-                    currentAesthetic: shell.aesthetic
+                    activeShellId: shellId
                 }));
 
                 return true;
@@ -269,9 +237,6 @@ export const useShellStore = create<ShellState>()(
                     ...source,
                     id: newShellId,
                     name: name || `${source.name} (Copy)`,
-                    type: 'custom',
-                    isTemplate: false,
-                    hotkeySlot: undefined,
                     // Fresh wire ids + ownership so the copy's wires can't collide
                     // with the source shell's when both are loaded.
                     wires: (source.wires ?? legacyConnectionsToWires(source.connections, newShellId))
@@ -334,15 +299,10 @@ export const useShellStore = create<ShellState>()(
 
                 const shellConfig: ShellConfig = {
                     id: newShellId,
-                    type: 'custom',
                     name: name || template.name,
                     description: template.description,
                     blocks,
                     wires,
-                    persona: template.persona,
-                    aesthetic: template.aesthetic,
-                    isTemplate: false,
-                    templateTags: template.tags,
                     createdAt: now,
                     updatedAt: now,
                     lastAccessedAt: now
@@ -359,10 +319,7 @@ export const useShellStore = create<ShellState>()(
                 if (slot < 1 || slot > 9) return false;
 
                 set(state => ({
-                    hotkeySlots: { ...state.hotkeySlots, [slot]: shellId },
-                    shells: state.shells.map(s =>
-                        s.id === shellId ? { ...s, hotkeySlot: slot } : s
-                    )
+                    hotkeySlots: { ...state.hotkeySlots, [slot]: shellId }
                 }));
 
                 return true;
@@ -376,9 +333,7 @@ export const useShellStore = create<ShellState>()(
             partialize: (state) => ({
                 shells: state.shells,
                 activeShellId: state.activeShellId,
-                hotkeySlots: state.hotkeySlots,
-                currentPersona: state.currentPersona,
-                currentAesthetic: state.currentAesthetic
+                hotkeySlots: state.hotkeySlots
             }),
             // v0 → v1 (A1 wire unification): shells saved before A1 carry legacy
             // BlockConnection[] in `connections`; convert to DataWires once.

@@ -94,14 +94,6 @@ describe('instantiateTemplate', () => {
         expect(idsA.some(id => idsB.includes(id))).toBe(false);
     });
 
-    it('applies the template persona and aesthetic to the new shell', () => {
-        const shellId = useShellStore.getState().instantiateTemplate(investor)!;
-        const shell = useShellStore.getState().shells.find(s => s.id === shellId)!;
-        expect(shell.persona).toBe(investor.persona);
-        expect(shell.aesthetic).toBe(investor.aesthetic);
-        expect(shell.type).toBe('custom'); // a working copy, not a template
-    });
-
     it('honors a custom name', () => {
         const shellId = useShellStore.getState().instantiateTemplate(investor, 'My Investor')!;
         const shell = useShellStore.getState().shells.find(s => s.id === shellId)!;
