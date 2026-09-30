@@ -10,10 +10,6 @@ import { useBlockStore, useMindStore } from '../stores';
  * Hook to automatically sync Shell block data changes to the Mind system
  * Place this at the app root level to enable continuous Mind-Shell sync
  */
-/**
- * Hook to automatically sync Shell block data changes to the Mind system
- * Place this at the app root level to enable continuous Mind-Shell sync
- */
 export function useMindShellSync() {
     const blocks = useBlockStore(state => state.blocks);
     const mindStatus = useMindStore(state => state.status);
@@ -98,48 +94,3 @@ export function useMindShellSync() {
         mindStatus
     };
 }
-
-/**
- * Hook to get the active persona's response context
- * Returns the system prompt and relevant context pool entries
- */
-export function usePersonaContext() {
-    const activePersona = useMindStore(state => state.getActivePersona());
-    const contextPools = useMindStore(state => state.contextPools);
-    const getPoolEntries = useMindStore(state => state.getPoolEntries);
-
-    if (!activePersona) {
-        return {
-            systemPrompt: '',
-            context: [],
-            persona: null
-        };
-    }
-
-    // Gather context from subscribed pools
-    const context: Array<{ pool: string; entries: Array<{ type: string; content: string }> }> = [];
-
-    for (const poolId of activePersona.activeContextPools) {
-        const entries = getPoolEntries(poolId);
-        const pool = contextPools.find(p => p.id === poolId);
-
-        if (pool && entries.length > 0) {
-            context.push({
-                pool: pool.name,
-                entries: entries.slice(-10).map(e => ({
-                    type: e.type,
-                    content: e.content
-                }))
-            });
-        }
-    }
-
-    return {
-        systemPrompt: activePersona.systemPrompt,
-        context,
-        persona: activePersona
-    };
-}
-
-const mindShellSync = { useMindShellSync, usePersonaContext };
-export default mindShellSync;

@@ -12,10 +12,7 @@ import {
     LLMProvider,
     LLM_DEFAULTS,
     KnowledgeNode,
-    KnowledgeEdge,
-    KnowledgeNodeType,
     PersonaConfig,
-    ContextPool,
     ContextEntry,
     createInitialMindState
 } from '../schemas/mind.schema';
@@ -37,29 +34,17 @@ interface MindStore extends MindState {
     // LLM Configuration
     // ==================
     setProvider: (provider: LLMProvider) => void;
-    updateLLMConfig: (config: Partial<LLMConfig>) => void;
 
     // ==================
     // Knowledge Graph
     // ==================
     addNode: (node: Omit<KnowledgeNode, 'id' | 'createdAt' | 'updatedAt'>) => string;
-    updateNode: (nodeId: string, updates: Partial<KnowledgeNode>) => void;
-    removeNode: (nodeId: string) => void;
-    addEdge: (edge: Omit<KnowledgeEdge, 'id' | 'createdAt'>) => string;
-    removeEdge: (edgeId: string) => void;
-    getNode: (nodeId: string) => KnowledgeNode | undefined;
-    getNodesByType: (type: KnowledgeNodeType) => KnowledgeNode[];
-    getConnectedNodes: (nodeId: string, depth?: number) => KnowledgeNode[];
-    clearGraph: () => void;
 
     // ==================
     // Personas
     // ==================
     setActivePersona: (personaId: string) => void;
     getActivePersona: () => PersonaConfig | undefined;
-    createPersona: (persona: Omit<PersonaConfig, 'id' | 'createdAt' | 'updatedAt' | 'isBuiltIn'>) => string;
-    updatePersona: (personaId: string, updates: Partial<PersonaConfig>) => void;
-    deletePersona: (personaId: string) => void;
 
     // ==================
     // Context Pools
@@ -68,10 +53,6 @@ interface MindStore extends MindState {
     addToPool: (poolId: string, entry: Omit<ContextEntry, 'id' | 'timestamp'>) => string; // Alias for pushContext
     getPoolEntries: (poolId: string) => ContextEntry[];
     clearPool: (poolId: string) => void;
-    createPool: (pool: Omit<ContextPool, 'id' | 'entries' | 'createdAt' | 'updatedAt' | 'isSystem'>) => string;
-    deletePool: (poolId: string) => void;
-    subscribePersonaToPool: (personaId: string, poolId: string) => void;
-    unsubscribePersonaFromPool: (personaId: string, poolId: string) => void;
 
     // ==================
     // Focus Management
@@ -79,7 +60,6 @@ interface MindStore extends MindState {
     pinBlock: (blockId: string, blockType: string, data: unknown) => boolean;
     unpinBlock: (blockId: string) => void;
     isPinned: (blockId: string) => boolean;
-    getPinnedBlocks: () => ContextEntry[];
     clearFocus: () => void;
     saveToMemory: (blockId: string, blockType: string, data: unknown) => void;
     clearEphemeralContext: () => void;
@@ -195,10 +175,6 @@ export const useMindStore = create<MindStore>()(
                 set({ llmConfig: { ...LLM_DEFAULTS[provider] } });
             },
 
-            updateLLMConfig: (config) => set(state => ({
-                llmConfig: { ...state.llmConfig, ...config }
-            })),
-
             // ==================
             // Knowledge Graph
             // ==================
@@ -223,100 +199,6 @@ export const useMindStore = create<MindStore>()(
                 return id;
             },
 
-            updateNode: (nodeId, updates) => {
-                const now = Date.now();
-                set(state => ({
-                    graph: {
-                        ...state.graph,
-                        nodes: state.graph.nodes.map(n =>
-                            n.id === nodeId ? { ...n, ...updates, updatedAt: now } : n
-                        ),
-                        lastUpdated: now
-                    }
-                }));
-            },
-
-            removeNode: (nodeId) => {
-                set(state => ({
-                    graph: {
-                        ...state.graph,
-                        nodes: state.graph.nodes.filter(n => n.id !== nodeId),
-                        edges: state.graph.edges.filter(
-                            e => e.sourceId !== nodeId && e.targetId !== nodeId
-                        ),
-                        lastUpdated: Date.now()
-                    }
-                }));
-            },
-
-            addEdge: (edge) => {
-                const id = generateId('edge');
-                const newEdge: KnowledgeEdge = {
-                    ...edge,
-                    id,
-                    createdAt: Date.now()
-                };
-
-                set(state => ({
-                    graph: {
-                        ...state.graph,
-                        edges: [...state.graph.edges, newEdge],
-                        lastUpdated: Date.now()
-                    }
-                }));
-
-                return id;
-            },
-
-            removeEdge: (edgeId) => {
-                set(state => ({
-                    graph: {
-                        ...state.graph,
-                        edges: state.graph.edges.filter(e => e.id !== edgeId),
-                        lastUpdated: Date.now()
-                    }
-                }));
-            },
-
-            getNode: (nodeId) => get().graph.nodes.find(n => n.id === nodeId),
-
-            getNodesByType: (type) => get().graph.nodes.filter(n => n.type === type),
-
-            getConnectedNodes: (nodeId, depth = 1) => {
-                const { nodes, edges } = get().graph;
-                const visited = new Set<string>();
-                const result: KnowledgeNode[] = [];
-
-                function traverse(currentId: string, currentDepth: number) {
-                    if (currentDepth > depth || visited.has(currentId)) return;
-                    visited.add(currentId);
-
-                    const connectedEdges = edges.filter(
-                        e => e.sourceId === currentId || e.targetId === currentId
-                    );
-
-                    for (const edge of connectedEdges) {
-                        const neighborId = edge.sourceId === currentId ? edge.targetId : edge.sourceId;
-                        const neighbor = nodes.find(n => n.id === neighborId);
-                        if (neighbor && !visited.has(neighbor.id)) {
-                            result.push(neighbor);
-                            traverse(neighbor.id, currentDepth + 1);
-                        }
-                    }
-                }
-
-                traverse(nodeId, 0);
-                return result;
-            },
-
-            clearGraph: () => set(() => ({
-                graph: {
-                    nodes: [],
-                    edges: [],
-                    lastUpdated: Date.now()
-                }
-            })),
-
             // ==================
             // Personas
             // ==================
@@ -325,47 +207,6 @@ export const useMindStore = create<MindStore>()(
             getActivePersona: () => {
                 const state = get();
                 return state.personas.find(p => p.id === state.activePersonaId);
-            },
-
-            createPersona: (persona) => {
-                const id = generateId('persona');
-                const now = Date.now();
-                const newPersona: PersonaConfig = {
-                    ...persona,
-                    id,
-                    isBuiltIn: false,
-                    createdAt: now,
-                    updatedAt: now
-                };
-
-                set(state => ({
-                    personas: [...state.personas, newPersona]
-                }));
-
-                return id;
-            },
-
-            updatePersona: (personaId, updates) => {
-                set(state => ({
-                    personas: state.personas.map(p =>
-                        p.id === personaId ? { ...p, ...updates, updatedAt: Date.now() } : p
-                    )
-                }));
-            },
-
-            deletePersona: (personaId) => {
-                const state = get();
-                const persona = state.personas.find(p => p.id === personaId);
-
-                // Don't allow deleting built-in personas
-                if (persona?.isBuiltIn) return;
-
-                set(state => ({
-                    personas: state.personas.filter(p => p.id !== personaId),
-                    activePersonaId: state.activePersonaId === personaId
-                        ? 'analyst'
-                        : state.activePersonaId
-                }));
             },
 
             // ==================
@@ -439,56 +280,6 @@ export const useMindStore = create<MindStore>()(
                 }));
             },
 
-            createPool: (pool) => {
-                const id = generateId('pool');
-                const now = Date.now();
-                const newPool: ContextPool = {
-                    ...pool,
-                    id,
-                    entries: [],
-                    isSystem: false,
-                    createdAt: now,
-                    updatedAt: now
-                };
-
-                set(state => ({
-                    contextPools: [...state.contextPools, newPool]
-                }));
-
-                return id;
-            },
-
-            deletePool: (poolId) => {
-                const pool = get().contextPools.find(p => p.id === poolId);
-
-                // Don't allow deleting system pools
-                if (pool?.isSystem) return;
-
-                set(state => ({
-                    contextPools: state.contextPools.filter(p => p.id !== poolId)
-                }));
-            },
-
-            subscribePersonaToPool: (personaId, poolId) => {
-                set(state => ({
-                    contextPools: state.contextPools.map(pool =>
-                        pool.id === poolId && !pool.subscribers.includes(personaId)
-                            ? { ...pool, subscribers: [...pool.subscribers, personaId] }
-                            : pool
-                    )
-                }));
-            },
-
-            unsubscribePersonaFromPool: (personaId, poolId) => {
-                set(state => ({
-                    contextPools: state.contextPools.map(pool =>
-                        pool.id === poolId
-                            ? { ...pool, subscribers: pool.subscribers.filter(id => id !== personaId) }
-                            : pool
-                    )
-                }));
-            },
-
             // ==================
             // Focus Management
             // ==================
@@ -533,11 +324,6 @@ export const useMindStore = create<MindStore>()(
             isPinned: (blockId) => {
                 const focusPool = get().contextPools.find(p => p.id === 'focus');
                 return focusPool?.entries.some(e => e.sourceBlockId === blockId) || false;
-            },
-
-            getPinnedBlocks: () => {
-                const focusPool = get().contextPools.find(p => p.id === 'focus');
-                return focusPool?.entries || [];
             },
 
             clearFocus: () => {
@@ -809,5 +595,3 @@ function formatBlockDataForFocus(blockType: string, data: unknown): string {
             }
     }
 }
-
-export default useMindStore;
