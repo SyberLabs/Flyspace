@@ -9,6 +9,7 @@ import {
     approvalForEffect,
     canonicalInput,
     canonicalOutput,
+    canonicalScopes,
     effectAllowedForMethod,
     effectForMethod,
     isRecord,
@@ -46,7 +47,7 @@ const PROPOSAL_KEYS = new Set([
 ]);
 const PROVIDER_KEYS = new Set(['id', 'kind']);
 const IDENTITY_KEYS = new Set(['origin', 'operationId', 'sourceLocator', 'sourceRevision']);
-const AUTH_KEYS = new Set(['kind', 'in', 'name', 'prefix']);
+const AUTH_KEYS = new Set(['kind', 'in', 'name', 'prefix', 'scopes']);
 const HTTP_TRANSPORT_KEYS = new Set(['kind', 'access', 'baseUrl', 'method', 'path']);
 const MCP_TRANSPORT_KEYS = new Set(['kind', 'serverId', 'toolName']);
 const ASYNC_TRANSPORT_KEYS = new Set(['kind', 'runtimeId', 'operation']);
@@ -61,7 +62,8 @@ const SOURCE_KIND_FOR: Partial<Record<CapabilityProviderKind, CapabilitySourceKi
     openapi: 'openapi',
     mcp: 'mcp',
     manual: 'bring',
-    web_data: 'web_data'
+    web_data: 'web_data',
+    managed_integration: 'managed_integration'
 };
 
 /** Build the manifest a proposal would become. Nothing is installed. */
@@ -184,8 +186,9 @@ function hostAuth(auth: ProposedAuthRequirement, transport: CapabilityTransport)
     if (auth.kind === 'none') return { auth: { kind: 'none' } };
     const placement = {
         kind: auth.kind,
-        ...(auth.kind === 'apiKey' ? { in: auth.in, name: auth.name } : {})
-    } as Pick<AuthBinding, 'kind' | 'in' | 'name'>;
+        ...(auth.kind === 'apiKey' ? { in: auth.in, name: auth.name } : {}),
+        ...(auth.kind === 'oauth' ? { scopes: canonicalScopes(auth.scopes) } : {})
+    } as Pick<AuthBinding, 'kind' | 'in' | 'name' | 'scopes'>;
     const secretRef = transportCredentialSlot(transport, placement);
     if (!secretRef) return { error: `${transport.kind} transports cannot bind a credential slot` };
     return {
@@ -246,12 +249,17 @@ function shapeErrors(input: unknown): string[] {
         errors.push('proposal.auth is required');
     } else {
         closed(input.auth, AUTH_KEYS, 'proposal.auth', errors, {
-            secretRef: 'credential slots are derived by admission'
+            secretRef: 'credential slots are derived by admission',
+            token: 'tokens are bound to a slot by the host, never proposed',
+            accessToken: 'tokens are bound to a slot by the host, never proposed',
+            refreshToken: 'tokens are bound to a slot by the host, never proposed'
         });
         const kind = input.auth.kind;
-        if (kind !== 'none' && kind !== 'apiKey' && kind !== 'bearer' && kind !== 'basic') {
+        if (kind !== 'none' && kind !== 'apiKey' && kind !== 'bearer' && kind !== 'basic' && kind !== 'oauth') {
             errors.push('proposal.auth.kind is invalid');
         }
+        if (kind === 'oauth' && !Array.isArray(input.auth.scopes)) errors.push('proposal.auth.scopes is required for oauth');
+        if (kind !== 'oauth' && input.auth.scopes !== undefined) errors.push('proposal.auth.scopes is only for oauth');
     }
 
     if (!isRecord(input.transport)) {

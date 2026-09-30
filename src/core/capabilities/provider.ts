@@ -40,7 +40,9 @@ export type ProposedAuthRequirement =
     | { kind: 'none' }
     | { kind: 'apiKey'; in: 'header' | 'query'; name: string; prefix?: string }
     | { kind: 'bearer'; prefix?: string }
-    | { kind: 'basic' };
+    | { kind: 'basic' }
+    /** Scopes only. A token enters the slot through a host connect flow, never a proposal. */
+    | { kind: 'oauth'; scopes: string[] };
 
 export type ProposedTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }

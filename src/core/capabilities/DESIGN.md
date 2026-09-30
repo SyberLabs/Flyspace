@@ -47,6 +47,13 @@ text fields, and a robot with no declared fields is reported, not admitted as
 `any`. Its proposals use the async `maxun` runtime (`providers/maxunRuntime.ts`,
 Maxun's REST start and run lookup) with the API key in the `x-api-key` slot.
 `providers/maxun.evaluation.ts` records that no live Maxun run was performed.
+`providers/managedProvider.ts` is a `managed_integration` provider: a
+Pipedream- or Composio-style catalog entry becomes an http proposal against the
+SaaS API itself, with `oauth` auth. An `oauth` binding carries scopes and a
+slot (one slot per origin and scope set); the token enters the slot through a
+host connect flow that does not exist yet, so until then execution is
+`AUTH_UNBOUND`. `oauth` is http-only and never rides `server_broker`.
+`providers/managed.decision.ts` rejects both vendors as dependencies.
 Admission
 does not place blocks or wires. The OpenAPI install panel still calls
 `compileOpenApi` directly.

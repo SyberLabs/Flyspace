@@ -94,5 +94,6 @@ function proposedAuth(manifest: CapabilityManifest): ProposedAuthRequirement {
     }
     if (auth.kind === 'bearer') return { kind: 'bearer', ...(auth.prefix ? { prefix: auth.prefix } : {}) };
     if (auth.kind === 'basic') return { kind: 'basic' };
+    if (auth.kind === 'oauth') return { kind: 'oauth', scopes: [...(auth.scopes ?? [])] };
     return { kind: 'none' };
 }

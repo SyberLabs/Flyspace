@@ -470,7 +470,7 @@ function applyAuth(manifest: CapabilityManifest): { headers: Record<string, stri
             error: failure(manifest.id, 'AUTH_UNBOUND', `Secret slot ${auth.secretRef ?? '(missing)'} is empty`, false)
         };
     }
-    if (auth.kind === 'bearer') {
+    if (auth.kind === 'bearer' || auth.kind === 'oauth') {
         headers.Authorization = `Bearer ${secret}`;
     } else if (auth.kind === 'basic') {
         headers.Authorization = `Basic ${encodeBase64(secret)}`;

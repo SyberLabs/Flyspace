@@ -11,7 +11,7 @@ export const CAPABILITY_MANIFEST_VERSION = 1 as const;
 
 export type CapabilityEffect = 'read' | 'compute' | 'write' | 'destructive';
 export type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
-export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring' | 'web_data';
+export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring' | 'web_data' | 'managed_integration';
 export type CapabilityInvocation = 'auto' | 'manual';
 export type CapabilityTrigger =
     | { kind: 'manual' }
@@ -29,10 +29,15 @@ export interface CapabilitySource {
 }
 
 export interface AuthBinding {
-    kind: 'none' | 'apiKey' | 'bearer' | 'basic';
+    kind: 'none' | 'apiKey' | 'bearer' | 'basic' | 'oauth';
     in?: 'header' | 'query';
     name?: string;
     prefix?: string;
+    /**
+     * oauth only: the scopes the token in the slot must carry. The slot holds
+     * a token the host bound after a connect flow; the manifest never does.
+     */
+    scopes?: string[];
     /** Slot name. The secret value is never stored on the manifest. */
     secretRef?: string;
 }
@@ -122,7 +127,7 @@ const APPROVALS: CapabilityApproval[] = ['auto', 'pending', 'approved', 'denied'
 const METHODS: HttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const LOCATIONS: InputLocation[] = ['path', 'query', 'header', 'body', 'argument'];
 const EFFECT_SOURCES: EffectSource[] = ['method', 'extension', 'annotation', 'declared'];
-const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring', 'web_data'];
+const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring', 'web_data', 'managed_integration'];
 
 const PROVIDER_KINDS: CapabilityProviderKind[] = ['openapi', 'mcp', 'managed_integration', 'web_data', 'manual'];
 
@@ -132,6 +137,8 @@ const MANIFEST_KEYS = new Set([
 ]);
 
 const RUNTIME_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/;
+const MAX_OAUTH_SCOPES = 20;
+const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5B\x5D-\x7E]{1,200}$/;
 const OPERATION_PATTERN = /^[A-Za-z0-9_.:-]{1,120}$/;
 
 const PROVENANCE_KEYS = new Set([
@@ -248,14 +255,26 @@ function validateAuth(auth: unknown, errors: string[]): void {
         errors.push('auth must be an object');
         return;
     }
-    const allowed = new Set(['kind', 'in', 'name', 'prefix', 'secretRef']);
+    const allowed = new Set(['kind', 'in', 'name', 'prefix', 'secretRef', 'scopes']);
     for (const key of Object.keys(auth)) {
         if (!allowed.has(key)) errors.push(`auth.${key} is not a manifest field`);
     }
     const kind = auth.kind;
-    if (kind !== 'none' && kind !== 'apiKey' && kind !== 'bearer' && kind !== 'basic') {
+    if (kind !== 'none' && kind !== 'apiKey' && kind !== 'bearer' && kind !== 'basic' && kind !== 'oauth') {
         errors.push('auth.kind is invalid');
         return;
+    }
+    if (kind === 'oauth') {
+        if (auth.in !== undefined || auth.name !== undefined || auth.prefix !== undefined) {
+            errors.push('oauth auth is sent as a bearer token and carries no placement');
+        }
+        const scopes = auth.scopes;
+        if (!Array.isArray(scopes) || scopes.length === 0 || scopes.length > MAX_OAUTH_SCOPES
+            || !scopes.every(scope => typeof scope === 'string' && OAUTH_SCOPE_PATTERN.test(scope))) {
+            errors.push(`oauth auth requires 1 to ${MAX_OAUTH_SCOPES} scopes`);
+        }
+    } else if (auth.scopes !== undefined) {
+        errors.push('only oauth auth carries scopes');
     }
     if (kind === 'none') {
         if (auth.secretRef || auth.name || auth.prefix || auth.in) {
@@ -448,6 +467,10 @@ export function validateManifest(input: unknown): ManifestValidation {
         if ((effect === 'write' || effect === 'destructive') && isRecord(input.transport) && input.transport.access === 'server_broker') {
             errors.push('server_broker cannot carry a write or destructive effect');
         }
+    }
+    if (isRecord(input.auth) && input.auth.kind === 'oauth' && isRecord(input.transport)) {
+        if (input.transport.kind !== 'http') errors.push('oauth auth is only defined for http transports');
+        else if (input.transport.access === 'server_broker') errors.push('server_broker cannot carry an oauth token');
     }
 
     if (
@@ -677,8 +700,13 @@ function canonicalAuth(auth: AuthBinding): AuthBinding {
         ...(auth.in ? { in: auth.in } : {}),
         ...(auth.name ? { name: auth.name } : {}),
         ...(auth.prefix ? { prefix: auth.prefix } : {}),
+        ...(auth.scopes ? { scopes: canonicalScopes(auth.scopes) } : {}),
         ...(auth.secretRef ? { secretRef: auth.secretRef } : {})
     };
+}
+
+export function canonicalScopes(scopes: readonly string[]): string[] {
+    return [...new Set(scopes)].sort();
 }
 
 function canonicalTransport(transport: CapabilityTransport): CapabilityTransport {
