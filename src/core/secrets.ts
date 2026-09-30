@@ -23,6 +23,8 @@ export const SECRET_ENV_VARS = [
     'KEV_API_KEY',
     // TypeSafe System One (JEV), direct: registry search routing
     'TYPESAFE_API_KEY',
+    // Remote speech transcription (mints ephemeral Realtime secrets)
+    'OPENAI_API_KEY',
     // Keyed data providers (proxied through /api/data)
     'NEWSAPI_KEY',
     'FRED_API_KEY',

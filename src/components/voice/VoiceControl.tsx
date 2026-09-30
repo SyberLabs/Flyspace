@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { browserSpeechAdapter } from '@/core/interaction/browserSpeechAdapter';
+import { fallbackSpeechAdapter, openaiRealtimeAdapter } from '@/core/interaction/openaiRealtimeAdapter';
 import { spatialSession } from '@/core/interaction/session';
 import { browserSpeechFeedback, emitFeedback, silenceFeedback, type SpeechFeedbackAdapter } from '@/core/interaction/speechFeedback';
 import { createSpeechInput, type SpeechOutcome } from '@/core/interaction/speechInput';
+import { liveSpeechTimings } from '@/core/interaction/speechMeasurement';
 import type { SpeechAdapter, SpeechCapture } from '@/core/interaction/speechObservation';
 import { useUIStore } from '@/core/stores';
 
@@ -27,6 +29,11 @@ function providerLabel(capture: SpeechCapture): string {
     return name;
 }
 
+/** Remote transcription when the server says it is configured, the browser recognizer otherwise. */
+function defaultSpeechAdapter(): SpeechAdapter {
+    return fallbackSpeechAdapter(openaiRealtimeAdapter(), browserSpeechAdapter());
+}
+
 function outcomeText(outcome: SpeechOutcome): string {
     if (outcome.kind === 'error') return outcome.message;
     if (outcome.kind === 'silence') return "I didn't hear anything.";
@@ -44,8 +51,9 @@ export function VoiceControl({
 }) {
     const [provider, setProvider] = useState<string | null>(null);
     const [input] = useState(() => createSpeechInput({
-        adapter: adapter ?? browserSpeechAdapter(),
+        adapter: adapter ?? defaultSpeechAdapter(),
         authority: spatialSession,
+        recorder: liveSpeechTimings,
         onListening: capture => setProvider(providerLabel(capture))
     }));
     const feedbackRef = useRef<SpeechFeedbackAdapter | null>(feedback === undefined ? browserSpeechFeedback() : feedback);
@@ -64,8 +72,9 @@ export function VoiceControl({
         spokenRef.current = spokenReplies;
     }, [spokenReplies]);
 
-    useEffect(() => () => {
-        input.cancel();
+    useEffect(() => {
+        void input.prepare();
+        return () => input.cancel();
     }, [input]);
 
     function say(text: string) {

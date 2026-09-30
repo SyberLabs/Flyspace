@@ -3,8 +3,10 @@ import { InteractionEngine } from './engine';
 import { MemoryCanvas } from './memoryCanvas';
 import { recognizerAdapter, type RecognitionLike } from './browserSpeechAdapter';
 import { scriptedSpeechAdapter } from './scriptedSpeechAdapter';
+import { openaiRealtimeAdapter } from './openaiRealtimeAdapter';
+import { answerCommit, fakeRealtime } from './realtimeFakes';
 import { createSpeechInput, type SpeechAuthority } from './speechInput';
-import { isSpeechObservationV1, type SpeechAdapter, type SpeechObservationV1 } from './speechObservation';
+import { isSpeechObservationV1, type SpeechAdapter, type SpeechErrorCode, type SpeechObservationV1 } from './speechObservation';
 
 interface ConformanceScript {
     partials: string[];
@@ -16,6 +18,30 @@ interface ConformanceScript {
 interface Driver {
     name: string;
     make(script: ConformanceScript): SpeechAdapter;
+    /** The Omni error a provider-specific mid-capture failure normalizes to. */
+    stopError?: (code: 'permission-denied' | 'network') => SpeechErrorCode;
+}
+
+function realtimeDriver(script: ConformanceScript): SpeechAdapter {
+    const fake = fakeRealtime({
+        sessionStatus: script.failOnStart ? 500 : undefined,
+        onChannel(channel, peer) {
+            const open = channel.open.bind(channel);
+            channel.open = () => {
+                open();
+                let previous = '';
+                for (const partial of script.partials) {
+                    channel.emit({ type: 'conversation.item.input_audio_transcription.delta', item_id: 'item_1', delta: partial.slice(previous.length) });
+                    previous = partial;
+                }
+            };
+            if (script.failOnStop === 'network') channel.onCommit = () => peer.fail();
+            else if (script.failOnStop === 'permission-denied') channel.onCommit = () => channel.emit({ type: 'error', error: { code: 'server_error' } });
+            else if (script.final) answerCommit(channel, 'item_1', script.final);
+            else channel.onCommit = () => channel.emit({ type: 'error', error: { code: 'input_audio_buffer_commit_empty' } });
+        }
+    });
+    return openaiRealtimeAdapter(fake.transport);
 }
 
 function fakeRecognizer(script: ConformanceScript): RecognitionLike {
@@ -53,6 +79,11 @@ const drivers: Driver[] = [
     {
         name: 'browser recognizer adapter',
         make: script => recognizerAdapter(() => fakeRecognizer(script))
+    },
+    {
+        name: 'OpenAI Realtime adapter over a fake peer',
+        make: realtimeDriver,
+        stopError: code => (code === 'network' ? 'disconnected' : 'provider-error')
     }
 ];
 
@@ -126,7 +157,7 @@ describe.each(drivers)('speech adapter conformance: $name', driver => {
         const { canvas, heard, input } = harness(driver.make({ partials: ['create a'], final: 'create a researcher', failOnStop: code }));
         await input.press();
         const outcome = await input.release();
-        expect(outcome).toMatchObject({ kind: 'error', code });
+        expect(outcome).toMatchObject({ kind: 'error', code: driver.stopError?.(code) ?? code });
         expect(heard).toHaveLength(0);
         expect(canvas.blocks).toHaveLength(0);
     });

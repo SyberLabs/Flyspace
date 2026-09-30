@@ -52,6 +52,8 @@ export interface SpeechAdapter {
     readonly id: string;
     /** `synthetic` adapters are scripts and fixtures. Their timings are never measurements. */
     readonly captureKind: 'live' | 'synthetic';
+    /** Optional warm-up, such as a configuration probe. Must not open the microphone. */
+    prepare?(): Promise<void>;
     start(input: SpeechAdapterStartInput): Promise<SpeechCapture>;
 }
 
