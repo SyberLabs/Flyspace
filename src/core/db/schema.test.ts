@@ -95,16 +95,8 @@ describe('002 — run lineage', () => {
     });
 });
 
-describe('003 — hosted identity and idempotency', () => {
-    it('keeps historical rows ownerless and adds stable owner/idempotency columns', () => {
-        expect(flat(hostedSql)).toContain('add column if not exists owner_id text');
-        expect(flat(hostedSql)).toContain('add column if not exists idempotency_key text');
-        expect(flat(hostedSql)).toContain('add column if not exists request_digest text');
-        expect(flat(hostedSql)).not.toContain('update inference_run set owner_id');
-    });
-
-    it('enforces unique owner key pairs and permits uncertain terminal outcomes', () => {
-        expect(flat(hostedSql)).toContain('on inference_run (owner_id, idempotency_key)');
+describe('003 — uncertain outcomes', () => {
+    it('permits uncertain terminal outcomes and lets them carry an error', () => {
         expect(flat(hostedSql)).toContain("'uncertain'");
         expect(flat(hostedSql)).toContain("status in ('failed', 'uncertain') or error is null");
     });

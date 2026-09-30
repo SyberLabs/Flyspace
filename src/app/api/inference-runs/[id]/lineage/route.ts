@@ -13,7 +13,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runLineage, clampDepth, DEFAULT_LINEAGE_DEPTH } from '@/core/services/server/inference.ledger';
 import { isDatabaseConfigured } from '@/core/db/client';
-import { authenticateApiRequest } from '@/core/services/server/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,8 +24,6 @@ export async function GET(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    const auth = await authenticateApiRequest(request);
-    if (auth.response) return auth.response;
     const { id } = await context.params;
     if (!RUN_ID.test(id)) {
         return NextResponse.json({ error: 'Invalid run id' }, { status: 400 });
@@ -46,7 +43,7 @@ export async function GET(
     }
 
     try {
-        const lineage = await runLineage(id, depth, auth.identity.ownerId);
+        const lineage = await runLineage(id, depth);
         // An unknown id and a run with no lineage are different answers.
         if (!lineage.root) {
             return NextResponse.json({ error: `No run ${id}` }, { status: 404 });

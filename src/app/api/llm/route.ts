@@ -5,7 +5,6 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'node:crypto';
 import {
     runComplete,
     runStream,
@@ -18,7 +17,6 @@ import {
 } from '@/core/services/server/llm.adapters';
 import { resolveModel } from '@/core/models.registry';
 import { openRun, MAX_SOURCES, normalizePostgresBigintId, type RunSource, type SourceKind } from '@/core/services/server/inference.ledger';
-import { authenticateApiRequest, hostedAuthRequired } from '@/core/services/server/auth';
 
 export const runtime = 'nodejs';
 
@@ -239,11 +237,6 @@ export async function POST(request: NextRequest) {
         inferenceAbort.signal,
         AbortSignal.timeout(INFERENCE_DEADLINE_MS)
     ]);
-    const auth = await beforeDeadline(authenticateApiRequest(request), inferenceSignal);
-    if (!auth) return new Response(null, { status: request.signal.aborted ? 499 : 504 });
-    if (auth.response) return auth.response;
-    const ownerId = auth.identity.ownerId;
-    const hosted = hostedAuthRequired();
 
     let raw: unknown;
     try {
@@ -253,7 +246,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid JSON or request body exceeds 2 MiB' }, { status: 400 });
     }
 
-    if (process.env.OMNI_E2E === '1' && process.env.OMNI_DEPLOYMENT_MODE === 'local') {
+    if (process.env.OMNI_E2E === '1') {
         const rawObj = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {};
         return e2eDouble(rawObj);
     }
@@ -290,16 +283,6 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    const idempotencyKey = request.headers.get('idempotency-key') ?? undefined;
-    if (hosted && (!idempotencyKey || !/^[A-Za-z0-9._~-]{1,128}$/.test(idempotencyKey))) {
-        return NextResponse.json({ error: 'A valid Idempotency-Key header is required' }, { status: 400 });
-    }
-    if (hosted && !ownerId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-
-    const requestDigest = createHash('sha256').update(JSON.stringify({
-        provider, model, messages, options, stream, sources
-    })).digest('hex');
-
     const req: ServerLLMRequest = {
         provider, model, messages, options,
         signal: inferenceSignal
@@ -317,10 +300,7 @@ export async function POST(request: NextRequest) {
         prompt: messages.findLast(m => m.role === 'user')?.content,
         temperature: options?.temperature,
         maxTokens: options?.maxTokens,
-        sources,
-        ownerId,
-        idempotencyKey: hosted ? idempotencyKey : undefined,
-        requestDigest: hosted ? requestDigest : undefined
+        sources
     });
     const run = await beforeDeadline(openingRun, inferenceSignal);
     if (!run) return new Response(null, { status: request.signal.aborted ? 499 : 504 });
@@ -328,27 +308,6 @@ export async function POST(request: NextRequest) {
     if (inferenceSignal.aborted) {
         if (run.id) await run.uncertain(new Error('Deadline expired before provider dispatch'));
         return new Response(null, { status: request.signal.aborted ? 499 : 504 });
-    }
-
-    if (run.parentRejected) {
-        return NextResponse.json({ error: 'An inference source is unavailable to this user' }, { status: 403 });
-    }
-    if (hosted && !run.id) {
-        return NextResponse.json({ error: 'Durable inference admission is unavailable' }, { status: 503 });
-    }
-    if (run.idempotencyConflict) {
-        return NextResponse.json({ error: 'Idempotency key was already used for a different request' }, { status: 409 });
-    }
-    if (run.replay) {
-        return NextResponse.json(
-            { runId: run.id, status: run.status, replayed: true },
-            { status: 202, headers: {
-                ...runIdHeader(run.id),
-                'X-Omni-Run-Status': run.status!,
-                'Idempotency-Replayed': 'true',
-                'Cache-Control': 'no-store'
-            } }
-        );
     }
 
     try {

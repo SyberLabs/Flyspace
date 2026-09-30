@@ -90,19 +90,6 @@ describe('LLMService.complete', () => {
         expect((vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).signal)
             .toBe(controller.signal);
     });
-
-    it('reuses the caller key for retries of one logical operation', async () => {
-        vi.mocked(globalThis.fetch).mockImplementation(async () => jsonResponse({ content: 'ok' }));
-        const llm = createLLMService(LLM_DEFAULTS.local);
-        const operation = { idempotencyKey: 'stable-operation-key' };
-        await llm.complete([{ role: 'user', content: 'Hi' }], operation);
-        await llm.complete([{ role: 'user', content: 'Hi' }], operation);
-        expect(vi.mocked(globalThis.fetch).mock.calls.map(([, init]) => (init as RequestInit).headers))
-            .toEqual([
-                expect.objectContaining({ 'Idempotency-Key': 'stable-operation-key' }),
-                expect.objectContaining({ 'Idempotency-Key': 'stable-operation-key' })
-            ]);
-    });
 });
 
 describe('LLMService.stream', () => {

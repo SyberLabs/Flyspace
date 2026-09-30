@@ -4,16 +4,10 @@ const mocks = vi.hoisted(() => ({
     runComplete: vi.fn(),
     runStream: vi.fn(),
     openRun: vi.fn(),
-    authenticateApiRequest: vi.fn(),
-    hostedAuthRequired: vi.fn(),
     checkProviderAvailable: vi.fn(),
     isProviderConfigured: vi.fn()
 }));
 
-vi.mock('@/core/services/server/auth', () => ({
-    authenticateApiRequest: mocks.authenticateApiRequest,
-    hostedAuthRequired: mocks.hostedAuthRequired
-}));
 vi.mock('@/core/services/server/llm.adapters', () => ({
     ProviderResponseError: class ProviderResponseError extends Error {
         readonly isDefinitiveRejection: boolean;
@@ -42,7 +36,7 @@ import { POST } from './route';
 
 function runHandle() {
     return {
-        id: '101', replay: false, idempotencyConflict: false,
+        id: '101',
         succeeded: vi.fn(), failed: vi.fn(), canceled: vi.fn(), uncertain: vi.fn(),
         meter: (stream: ReadableStream<Uint8Array>, onCancel?: (reason?: unknown) => void) =>
             new ReadableStream<Uint8Array>({
@@ -59,13 +53,10 @@ function runHandle() {
 afterEach(() => {
     vi.clearAllMocks();
     delete process.env.OMNI_E2E;
-    delete process.env.OMNI_DEPLOYMENT_MODE;
 });
 
 describe('/api/llm total request deadline', () => {
     it('stops a stalled body when the caller disconnects without dispatching a provider', async () => {
-        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: null } });
-        mocks.hostedAuthRequired.mockReturnValue(false);
         mocks.isProviderConfigured.mockReturnValue(true);
         const abort = new AbortController();
         const body = new ReadableStream<Uint8Array>({ start() { /* remains open */ } });
@@ -82,8 +73,6 @@ describe('/api/llm total request deadline', () => {
     });
 
     it('does not dispatch when durable admission misses the total deadline', async () => {
-        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: null } });
-        mocks.hostedAuthRequired.mockReturnValue(false);
         mocks.isProviderConfigured.mockReturnValue(true);
         let admit!: (value: ReturnType<typeof runHandle>) => void;
         mocks.openRun.mockReturnValue(new Promise(resolve => { admit = resolve; }));
@@ -104,8 +93,6 @@ describe('/api/llm total request deadline', () => {
 
     it('marks transport failure uncertain without misreporting it as a timeout', async () => {
         const run = runHandle();
-        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: null } });
-        mocks.hostedAuthRequired.mockReturnValue(false);
         mocks.isProviderConfigured.mockReturnValue(true);
         mocks.openRun.mockResolvedValue(run);
         mocks.runComplete.mockRejectedValue(new TypeError('connection refused'));
@@ -122,8 +109,6 @@ describe('/api/llm total request deadline', () => {
 
     it.each([408, 429, 500, 503])('marks provider HTTP %i as unresolved', async status => {
         const run = runHandle();
-        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: null } });
-        mocks.hostedAuthRequired.mockReturnValue(false);
         mocks.isProviderConfigured.mockReturnValue(true);
         mocks.openRun.mockResolvedValue(run);
         const { ProviderResponseError } = await import('@/core/services/server/llm.adapters');
@@ -139,8 +124,6 @@ describe('/api/llm total request deadline', () => {
 
     it.each([400, 401, 403, 422])('records provider HTTP %i as a definitive failure', async status => {
         const run = runHandle();
-        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: null } });
-        mocks.hostedAuthRequired.mockReturnValue(false);
         mocks.isProviderConfigured.mockReturnValue(true);
         mocks.openRun.mockResolvedValue(run);
         const { ProviderResponseError } = await import('@/core/services/server/llm.adapters');
@@ -152,20 +135,5 @@ describe('/api/llm total request deadline', () => {
         expect(response.status).toBe(502);
         expect(run.failed).toHaveBeenCalledOnce();
         expect(run.uncertain).not.toHaveBeenCalled();
-    });
-
-    it('fails hosted admission closed when the ledger cannot return a durable run', async () => {
-        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: 'issuer:alice' } });
-        mocks.hostedAuthRequired.mockReturnValue(true);
-        mocks.isProviderConfigured.mockReturnValue(true);
-        mocks.openRun.mockResolvedValue({ id: null }); // no database, failed open, or active cooldown
-        const response = await POST(new Request('http://localhost/api/llm', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', 'idempotency-key': 'op-1' },
-            body: JSON.stringify({ provider: 'anthropic', model: 'claude', messages: [{ role: 'user', content: 'hi' }] })
-        }) as never);
-        expect(response.status).toBe(503);
-        expect(mocks.runComplete).not.toHaveBeenCalled();
-        expect(mocks.runStream).not.toHaveBeenCalled();
     });
 });

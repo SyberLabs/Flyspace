@@ -5,7 +5,6 @@
 // ============================================
 
 import 'server-only';
-import { hostedAuthRequired } from '@/core/services/server/auth';
 
 export interface LLMMessage {
     role: 'system' | 'user' | 'assistant';
@@ -45,33 +44,14 @@ export interface ServerLLMRequest {
     model: string;
     messages: LLMMessage[];
     options?: LLMOptions;
-    /** Direct adapter callers only. The HTTP route never forwards a client URL. */
-    baseUrl?: string;
     signal?: AbortSignal;
 }
 
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 1024;
 
-function ollamaBaseUrl(req: ServerLLMRequest): string {
-    const configured = process.env.OLLAMA_BASE_URL?.trim();
-    if (hostedAuthRequired()) {
-        if (!configured) throw new Error('Local provider is disabled in hosted mode');
-        const url = new URL(configured);
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-            throw new Error('Invalid hosted Ollama endpoint');
-        }
-        const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-        if (hostname === 'localhost' || hostname === '::1' || hostname.startsWith('127.') ||
-            hostname.startsWith('169.254.') || hostname.startsWith('fe80:') || hostname === 'metadata.google.internal') {
-            throw new Error('Hosted Ollama endpoint cannot use loopback or metadata destinations');
-        }
-        if (url.username || url.password || url.search || url.hash) {
-            throw new Error('Invalid hosted Ollama endpoint');
-        }
-        return url.toString().replace(/\/$/, '');
-    }
-    return (req.baseUrl || configured || 'http://localhost:11434').replace(/\/$/, '');
+function ollamaBaseUrl(): string {
+    return (process.env.OLLAMA_BASE_URL?.trim() || 'http://localhost:11434').replace(/\/$/, '');
 }
 
 // ============================================
@@ -79,7 +59,7 @@ function ollamaBaseUrl(req: ServerLLMRequest): string {
 // ============================================
 
 async function ollamaComplete(req: ServerLLMRequest): Promise<LLMResponse> {
-    const baseUrl = ollamaBaseUrl(req);
+    const baseUrl = ollamaBaseUrl();
     const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         redirect: 'error',
@@ -109,7 +89,7 @@ async function ollamaComplete(req: ServerLLMRequest): Promise<LLMResponse> {
 }
 
 async function ollamaStream(req: ServerLLMRequest): Promise<ReadableStream<Uint8Array>> {
-    const baseUrl = ollamaBaseUrl(req);
+    const baseUrl = ollamaBaseUrl();
     const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         redirect: 'error',
@@ -238,9 +218,7 @@ async function googleComplete(req: ServerLLMRequest): Promise<LLMResponse> {
 export function isProviderConfigured(provider: ServerLLMProvider): boolean {
     switch (provider) {
         case 'local':
-            if (!hostedAuthRequired()) return true; // reachability is checked separately (see checkProviderAvailable)
-            try { ollamaBaseUrl({ provider, model: '', messages: [] }); return true; }
-            catch { return false; }
+            return true; // reachability is checked separately (see checkProviderAvailable)
         case 'anthropic':
             return !!process.env.ANTHROPIC_API_KEY;
         case 'google':
@@ -260,9 +238,7 @@ export async function checkProviderAvailable(req: ServerLLMRequest): Promise<boo
     if (req.provider !== 'local') {
         return isProviderConfigured(req.provider);
     }
-    let baseUrl: string;
-    try { baseUrl = ollamaBaseUrl(req); }
-    catch { return false; }
+    const baseUrl = ollamaBaseUrl();
     try {
         const response = await fetch(`${baseUrl}/api/tags`, {
             method: 'GET',

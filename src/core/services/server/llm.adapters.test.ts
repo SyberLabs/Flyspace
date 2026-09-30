@@ -1,20 +1,16 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { runStream, runComplete } from './llm.adapters';
 
 describe('Ollama HTTP boundary', () => {
     let sourceServer: Server;
     let redirectTarget: Server;
-    let sourceUrl: string;
     let redirectTargetHits = 0;
     let redirectNext = false;
     let sourceClosed: Promise<void>;
-    const previousMode = process.env.OMNI_DEPLOYMENT_MODE;
     const previousBaseUrl = process.env.OLLAMA_BASE_URL;
 
     beforeAll(async () => {
-        process.env.OMNI_DEPLOYMENT_MODE = 'local';
-        delete process.env.OLLAMA_BASE_URL;
         redirectTarget = createServer((_request, response) => {
             redirectTargetHits++;
             response.end('should not follow');
@@ -39,7 +35,7 @@ describe('Ollama HTTP boundary', () => {
         await new Promise<void>(resolve => sourceServer.listen(0, '127.0.0.1', resolve));
         const sourceAddress = sourceServer.address();
         if (!sourceAddress || typeof sourceAddress === 'string') throw new Error('source server failed to bind');
-        sourceUrl = `http://127.0.0.1:${sourceAddress.port}`;
+        process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${sourceAddress.port}`;
     });
 
     afterAll(async () => {
@@ -47,8 +43,6 @@ describe('Ollama HTTP boundary', () => {
             new Promise<void>((resolve, reject) => sourceServer.close(error => error ? reject(error) : resolve())),
             new Promise<void>((resolve, reject) => redirectTarget.close(error => error ? reject(error) : resolve()))
         ]);
-        if (previousMode === undefined) delete process.env.OMNI_DEPLOYMENT_MODE;
-        else process.env.OMNI_DEPLOYMENT_MODE = previousMode;
         if (previousBaseUrl === undefined) delete process.env.OLLAMA_BASE_URL;
         else process.env.OLLAMA_BASE_URL = previousBaseUrl;
     });
@@ -57,7 +51,7 @@ describe('Ollama HTTP boundary', () => {
         const abort = new AbortController();
         const stream = await runStream({
             provider: 'local', model: 'tinyllama', messages: [{ role: 'user', content: 'hi' }],
-            baseUrl: sourceUrl, signal: abort.signal
+            signal: abort.signal
         });
         const reader = stream.getReader();
         expect(new TextDecoder().decode((await reader.read()).value)).toBe('first');
@@ -69,27 +63,8 @@ describe('Ollama HTTP boundary', () => {
     it('rejects redirects without contacting their destination', async () => {
         redirectNext = true;
         await expect(runComplete({
-            provider: 'local', model: 'tinyllama', messages: [], baseUrl: sourceUrl
+            provider: 'local', model: 'tinyllama', messages: []
         })).rejects.toThrow();
         expect(redirectTargetHits).toBe(0);
-    });
-
-    it('uses only the configured hosted Ollama endpoint, never a request override', async () => {
-        process.env.OMNI_DEPLOYMENT_MODE = 'hosted';
-        process.env.OLLAMA_BASE_URL = 'https://ollama.example.test';
-        const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ message: { content: 'ok' } }), {
-            status: 200, headers: { 'content-type': 'application/json' }
-        }));
-        try {
-            await runComplete({
-                provider: 'local', model: 'tinyllama', messages: [], baseUrl: 'http://127.0.0.1:11434'
-            });
-            expect(fetch.mock.calls[0][0]).toBe('https://ollama.example.test/api/chat');
-            expect(fetch.mock.calls[0][1]).toMatchObject({ redirect: 'error' });
-        } finally {
-            fetch.mockRestore();
-            process.env.OMNI_DEPLOYMENT_MODE = 'local';
-            delete process.env.OLLAMA_BASE_URL;
-        }
     });
 });

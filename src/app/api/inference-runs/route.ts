@@ -20,7 +20,6 @@ import {
     type RunStatus
 } from '@/core/services/server/inference.ledger';
 import { isDatabaseConfigured } from '@/core/db/client';
-import { authenticateApiRequest } from '@/core/services/server/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,8 +28,6 @@ const PROVIDERS = new Set<string>(['local', 'anthropic', 'google']);
 const STATUSES = new Set<string>(['running', 'succeeded', 'failed', 'canceled', 'uncertain']);
 
 export async function GET(request: NextRequest) {
-    const auth = await authenticateApiRequest(request);
-    if (auth.response) return auth.response;
     const params = request.nextUrl.searchParams;
 
     const provider = params.get('provider');
@@ -61,8 +58,7 @@ export async function GET(request: NextRequest) {
         const runs = await recentRuns({
             limit,
             provider: (provider ?? undefined) as RunProvider | undefined,
-            status: (status ?? undefined) as RunStatus | undefined,
-            ownerId: auth.identity.ownerId
+            status: (status ?? undefined) as RunStatus | undefined
         });
         return NextResponse.json(
             { configured: true, limit, runs },

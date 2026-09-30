@@ -84,97 +84,13 @@ live('the schema enforces what the module claims', () => {
         expect(rows[0]).toMatchObject({ status: 'running', finished_at: null, latency_ms: null });
     });
 
-    it('replays a same-owner idempotency key and rejects changed input', async () => {
-        const first = await ledger.openRun({
-            ...BASE, ownerId: 'issuer:alice', idempotencyKey: 'logical-op-1', requestDigest: 'a'.repeat(64)
-        });
-        const replay = await ledger.openRun({
-            ...BASE, ownerId: 'issuer:alice', idempotencyKey: 'logical-op-1', requestDigest: 'a'.repeat(64)
-        });
-        const changed = await ledger.openRun({
-            ...BASE, ownerId: 'issuer:alice', idempotencyKey: 'logical-op-1', requestDigest: 'b'.repeat(64)
-        });
+    it('records an ambiguous outcome as uncertain, with its error', async () => {
+        const run = await ledger.openRun(BASE);
+        await run.uncertain(new Error('upstream connection lost'));
 
-        expect(first.id).not.toBeNull();
-        expect(replay).toMatchObject({ id: first.id, replay: true, status: 'running', idempotencyConflict: false });
-        expect(changed).toMatchObject({ id: first.id, replay: true, idempotencyConflict: true });
-        const { rows } = await pool.query('SELECT count(*)::int AS count FROM inference_run');
-        expect(rows[0].count).toBe(1);
-    });
-
-    it('serializes concurrent requests with the same owner and key to one row', async () => {
-        const input = {
-            ...BASE, ownerId: 'issuer:concurrent', idempotencyKey: 'same-key', requestDigest: 'c'.repeat(64)
-        };
-        const [first, second] = await Promise.all([ledger.openRun(input), ledger.openRun(input)]);
-        expect(first.id).toBe(second.id);
-        expect([first.replay, second.replay].filter(Boolean)).toHaveLength(1);
-        const { rows } = await pool.query('SELECT count(*)::int AS count FROM inference_run');
-        expect(rows[0].count).toBe(1);
-    });
-
-    it('rejects a parent run owned by a different user without leaving a child row', async () => {
-        const parent = await ledger.openRun({ ...BASE, ownerId: 'issuer:bob' });
-        const child = await ledger.openRun({
-            ...BASE,
-            ownerId: 'issuer:alice',
-            sources: [{ id: parent.id!, kind: 'inference', label: 'Other user', parentRunId: parent.id! }]
-        });
-        expect(child.parentRejected).toBe(true);
-        const { rows } = await pool.query('SELECT owner_id FROM inference_run ORDER BY id');
-        expect(rows.map(row => row.owner_id)).toEqual(['issuer:bob']);
-    });
-
-    it('rejects an out-of-range parent id without tripping the ledger cooldown', async () => {
-        const rejected = await ledger.openRun({
-            ...BASE,
-            ownerId: 'issuer:alice',
-            idempotencyKey: 'invalid-parent',
-            requestDigest: 'd'.repeat(64),
-            sources: [{ id: 'bad-parent', kind: 'inference', label: 'Invalid parent', parentRunId: '9999999999999999999' }]
-        });
-        expect(rejected).toMatchObject({ id: null, parentRejected: true });
-
-        const valid = await ledger.openRun({
-            ...BASE, ownerId: 'issuer:bob', idempotencyKey: 'valid-after-invalid', requestDigest: 'e'.repeat(64)
-        });
-        expect(valid.id).not.toBeNull();
-        const { rows } = await pool.query('SELECT owner_id FROM inference_run');
-        expect(rows.map(row => row.owner_id)).toEqual(['issuer:bob']);
-    });
-
-    it('hides a legacy cross-owner ancestor and its source details from an owned lineage', async () => {
-        const foreign = await ledger.openRun({
-            ...BASE, ownerId: 'issuer:bob',
-            sources: [{ id: 'secret-source', kind: 'wire', label: 'Bob private context' }]
-        });
-        const intermediate = await ledger.openRun({ ...BASE, ownerId: 'issuer:alice' });
-        const root = await ledger.openRun({
-            ...BASE, ownerId: 'issuer:alice',
-            sources: [{ id: 'intermediate', kind: 'inference', label: 'Prior turn', parentRunId: intermediate.id! }]
-        });
-        // Model a historical row or out-of-band repair predating owner checks.
-        await pool.query(
-            `INSERT INTO inference_source (run_id, source_id, kind, label, parent_run_id)
-             VALUES ($1, 'foreign-edge', 'inference', 'cross-owner legacy edge', $2)`,
-            [intermediate.id, foreign.id]
-        );
-
-        const lineage = await ledger.runLineage(root.id!, 8, 'issuer:alice');
-        expect(lineage.nodes.map(node => node.run.id)).toEqual([root.id, intermediate.id]);
-        expect(lineage.nodes.flatMap(node => node.run.sources).map(source => source.id))
-            .not.toContain('secret-source');
-        expect(lineage.nodes.flatMap(node => node.run.sources).map(source => source.label))
-            .not.toContain('Bob private context');
-    });
-
-    it('keeps ambiguous hosted outcomes terminal and hidden across owner scopes', async () => {
-        const first = await ledger.openRun({ ...BASE, ownerId: 'issuer:alice' });
-        await first.uncertain(new Error('upstream connection lost'));
-        const own = await ledger.recentRuns({ ownerId: 'issuer:alice' });
-        const other = await ledger.recentRuns({ ownerId: 'issuer:bob' });
-        expect(own.map(row => row.status)).toEqual(['uncertain']);
-        expect(other).toEqual([]);
+        const [row] = await ledger.recentRuns();
+        expect(row.status).toBe('uncertain');
+        expect(row.error).toBe('upstream connection lost');
     });
 
     it('closes a success with a duration and reads it back through recentRuns', async () => {

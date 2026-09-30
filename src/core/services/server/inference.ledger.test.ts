@@ -24,6 +24,7 @@ import {
     promptExcerpt,
     outputExcerpt,
     clampLimit,
+    normalizePostgresBigintId,
     clampDepth,
     runLineage,
     DEFAULT_LINEAGE_DEPTH,
@@ -211,7 +212,7 @@ describe('openRun', () => {
         const insert = stmt(inTransaction, 'INSERT INTO inference_run');
         expect(insert.text).toContain("'running'");
         expect(insert.values).toEqual([
-            'anthropic', 'claude-opus-5', false, 3, 1234, null, null, null, null, null, null
+            'anthropic', 'claude-opus-5', false, 3, 1234, null, null, null
         ]);
     });
 
@@ -625,7 +626,7 @@ describe('recentRuns', () => {
         const seen = readback([RAW_ROW, { ...RAW_ROW, id: '10' }]);
         await recentRuns();
         expect(seen[1].text).toContain('run_id = ANY($1::bigint[])');
-        expect(seen[1].values).toEqual([['9', '10'], null]);
+        expect(seen[1].values).toEqual([['9', '10']]);
     });
 });
 
@@ -641,6 +642,19 @@ describe('clampLimit', () => {
         expect(clampLimit(-7)).toBe(1);
         expect(clampLimit(10_000)).toBe(MAX_RUN_LIMIT);
         expect(clampLimit(7.9)).toBe(7);
+    });
+});
+
+describe('normalizePostgresBigintId', () => {
+    it('keeps a bigint-sized decimal and strips leading zeros', () => {
+        expect(normalizePostgresBigintId('9223372036854775807')).toBe('9223372036854775807');
+        expect(normalizePostgresBigintId('0007')).toBe('7');
+    });
+
+    it('refuses what a bigint cast would reject', () => {
+        expect(normalizePostgresBigintId('9223372036854775808')).toBeUndefined();
+        expect(normalizePostgresBigintId('12345678901234567890')).toBeUndefined();
+        expect(normalizePostgresBigintId('abc')).toBeUndefined();
     });
 });
 
@@ -724,7 +738,7 @@ describe('runLineage', () => {
         await runLineage('9', 4);
 
         expect(seen[0].text).toContain('WITH RECURSIVE');
-        expect(seen[0].values).toEqual(['9', 4, MAX_LINEAGE_NODES, null]);
+        expect(seen[0].values).toEqual(['9', 4, MAX_LINEAGE_NODES]);
     });
 
     it('walks child to parent on parent_run_id', async () => {
@@ -788,7 +802,7 @@ describe('runLineage', () => {
     it('looks sources up for every run the walk returned', async () => {
         const seen = readback([lineageRow('9', 0, null, null), lineageRow('8', 1, '9', 'A')]);
         await runLineage('9');
-        expect(seen[1].values).toEqual([['9', '8'], null]);
+        expect(seen[1].values).toEqual([['9', '8']]);
     });
 
     it('reports a cycle the walk refused to follow', async () => {
