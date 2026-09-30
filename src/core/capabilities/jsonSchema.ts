@@ -1,4 +1,4 @@
-// JSON Schema (the subset OpenAPI and MCP actually share) → ValueType.
+// JSON Schema (the subset OpenAPI uses) → ValueType.
 // Schemas we cannot represent honestly come back as an error so callers
 // can fail the operation instead of pretending the contract is `any`.
 

@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { sha256 } from './hash';
 import { credentialSlot } from './identity';
 import { compileOpenApi } from './openapi';
-import { compileMcpTools } from './mcp';
-import { compileBring } from './bring';
 import { validateManifest } from './manifest';
 import {
     approveCapability,
@@ -15,7 +13,7 @@ import {
     runInstalledCapability,
     uninstallCapability
 } from './registry';
-import { bindMcpTransport, executeCapability, unbindMcpTransport } from './execute';
+import { executeCapability } from './execute';
 import { capabilitySecrets } from './secrets';
 import { blockRegistry } from '../registry/BlockRegistry';
 import { useBlockStore } from '../stores/blockStore';
@@ -149,7 +147,6 @@ function manifests() {
 beforeEach(() => {
     clearCapabilities();
     capabilitySecrets.clear();
-    unbindMcpTransport('board');
     useBlockStore.setState({ blocks: [], activeShellId: 'root' });
     useWireStore.setState({ wires: [] });
 });
@@ -261,25 +258,6 @@ describe('capability compiler', () => {
         const catalogSource = useBlockStore.getState().addBlock(blockRegistry.get('hackernews_feed')!, { x: 0, y: 200 });
         expect(wireService.createWire(catalogSource, personaId)).not.toBe('');
 
-        const count = compileBring({
-            title: 'Count posts',
-            baseUrl: 'https://board.example.test/v1',
-            method: 'POST',
-            path: '/count',
-            inputs: [{
-                name: 'count',
-                in: 'body',
-                required: true,
-                schema: { kind: 'integer' }
-            }],
-            output: { schema: { kind: 'integer' } }
-        });
-        expect(count.errors).toEqual([]);
-        expect(installProposal(count.manifests[0]).ok).toBe(true);
-        const countId = useBlockStore.getState().addBlock(blockRegistry.get(count.manifests[0].id)!, { x: 200, y: 200 });
-        expect(wireService.createWire(instanceId, countId)).toBe('');
-        expect(useWireStore.getState().wireExists(instanceId, countId)).toBe(false);
-
         const listId = byOp('listPosts').id;
         expect(uninstallCapability(listId)).toBe(true);
         expect(blockRegistry.has(listId)).toBe(false);
@@ -353,74 +331,5 @@ describe('capability compiler', () => {
         const rejected = restoreSnapshot(forged);
         expect(rejected.installed).not.toContain(create.id);
         expect(rejected.rejected[0]?.errors.join(' ')).toMatch(/digest/);
-    });
-
-    it('compiles MCP tools and Bring descriptions through the same gate', async () => {
-        const compiled = compileMcpTools([
-            {
-                serverId: 'board',
-                name: 'list_board',
-                description: 'Read the board',
-                annotations: { readOnlyHint: true },
-                inputSchema: {
-                    type: 'object',
-                    properties: { q: { type: 'string' } }
-                },
-                outputSchema: { type: 'array', items: { type: 'string' } }
-            },
-            {
-                serverId: 'board',
-                name: 'wipe_board',
-                annotations: { readOnlyHint: true, destructiveHint: true },
-                outputSchema: { type: 'boolean' }
-            }
-        ]);
-        expect(compiled.errors).toEqual([]);
-        const read = compiled.manifests.find(manifest => manifest.source.operationId === 'list_board');
-        const wipe = compiled.manifests.find(manifest => manifest.source.operationId === 'wipe_board');
-        expect(read).toMatchObject({ effect: 'write', approval: 'pending' });
-        const trusted = compileMcpTools([{
-            serverId: 'board',
-            name: 'list_board',
-            annotations: { readOnlyHint: true },
-            inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
-            outputSchema: { type: 'array', items: { type: 'string' } }
-        }], { trustedAnnotations: true });
-        expect(trusted.manifests[0]).toMatchObject({ effect: 'read', approval: 'auto' });
-        expect(wipe).toMatchObject({ effect: 'destructive', approval: 'pending' });
-        const trustedRead = trusted.manifests[0];
-        installProposal(trustedRead);
-        installProposal(wipe);
-
-        const calls: unknown[] = [];
-        bindMcpTransport('board', {
-            call: async (_server, tool, args) => {
-                calls.push({ tool, args });
-                return ['alpha'];
-            }
-        });
-
-        const wiped = await executeCapability(wipe!.id, {});
-        expect(wiped.error?.code).toBe('EFFECT_NOT_APPROVED');
-        expect(calls).toHaveLength(0);
-
-        const listed = await executeCapability(trustedRead.id, { q: 'alpha' });
-        expect(listed.ok).toBe(true);
-        expect(listed.typed?.value).toEqual(['alpha']);
-        expect(calls).toEqual([{ tool: 'list_board', args: { q: 'alpha' } }]);
-
-        unbindMcpTransport('board');
-        const unbound = await executeCapability(trustedRead.id, {});
-        expect(unbound.error?.code).toBe('TRANSPORT_NOT_BOUND');
-
-        const brought = compileBring({
-            title: 'Ping board',
-            baseUrl: 'https://board.example.test/v1',
-            method: 'GET',
-            path: '/health',
-            output: { schema: { kind: 'object', properties: { ok: { kind: 'boolean' } }, required: ['ok'] } }
-        });
-        expect(brought.manifests[0]).toMatchObject({ effect: 'read', approval: 'auto', source: { kind: 'bring' } });
-        expect(installProposal({ ...brought.manifests[0], token: 'raw-token' }).ok).toBe(false);
     });
 });

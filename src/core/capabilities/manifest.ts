@@ -11,7 +11,7 @@ export const CAPABILITY_MANIFEST_VERSION = 1 as const;
 
 export type CapabilityEffect = 'read' | 'compute' | 'write' | 'destructive';
 export type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
-export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring';
+export type CapabilitySourceKind = 'openapi' | 'bring';
 export type CapabilityInvocation = 'auto' | 'manual';
 export type CapabilityTrigger =
     | { kind: 'manual' }
@@ -20,7 +20,7 @@ export type CapabilityTrigger =
     | { kind: 'interval'; everyMs: number };
 export type HttpMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export type InputLocation = 'path' | 'query' | 'header' | 'body' | 'argument';
-export type EffectSource = 'method' | 'extension' | 'annotation' | 'declared';
+export type EffectSource = 'method' | 'extension' | 'declared';
 
 export interface CapabilitySource {
     kind: CapabilitySourceKind;
@@ -52,11 +52,10 @@ export interface CapabilityOutput {
     presentation: 'items' | 'content' | 'raw';
 }
 
-export type HttpAccess = 'browser_direct' | 'server_broker';
+export type HttpAccess = 'browser_direct';
 
 export type CapabilityTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
-    | { kind: 'mcp'; serverId: string; toolName: string }
     | { kind: 'local'; handler: string };
 
 export interface CapabilityManifest {
@@ -89,8 +88,8 @@ const EFFECTS: CapabilityEffect[] = ['read', 'compute', 'write', 'destructive'];
 const APPROVALS: CapabilityApproval[] = ['auto', 'pending', 'approved', 'denied'];
 const METHODS: HttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const LOCATIONS: InputLocation[] = ['path', 'query', 'header', 'body', 'argument'];
-const EFFECT_SOURCES: EffectSource[] = ['method', 'extension', 'annotation', 'declared'];
-const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring'];
+const EFFECT_SOURCES: EffectSource[] = ['method', 'extension', 'declared'];
+const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'bring'];
 
 const MANIFEST_KEYS = new Set([
     'version', 'id', 'title', 'description', 'source', 'effect', 'effectSource',
@@ -322,21 +321,18 @@ export function validateManifest(input: unknown): ManifestValidation {
     if (EFFECTS.includes(effect)) {
         const triggerError = triggerProblem(effect, trigger);
         if (triggerError) errors.push(triggerError);
-        if ((effect === 'write' || effect === 'destructive') && isRecord(input.transport) && input.transport.access === 'server_broker') {
-            errors.push('server_broker cannot carry a write or destructive effect');
-        }
     }
 
-    if (!isRecord(input.transport) || (input.transport.kind !== 'http' && input.transport.kind !== 'mcp' && input.transport.kind !== 'local')) {
-        errors.push('transport.kind must be http, mcp, or local');
+    if (!isRecord(input.transport) || (input.transport.kind !== 'http' && input.transport.kind !== 'local')) {
+        errors.push('transport.kind must be http or local');
     } else if (input.transport.kind === 'http') {
         if (typeof input.transport.baseUrl !== 'string') errors.push('transport.baseUrl is required');
         else validateHttpUrl(input.transport.baseUrl, errors);
         if (typeof input.transport.method !== 'string' || !METHODS.includes(input.transport.method as HttpMethod)) {
             errors.push('transport.method is invalid');
         }
-        if (input.transport.access !== 'browser_direct' && input.transport.access !== 'server_broker') {
-            errors.push('http transport access must be browser_direct or server_broker');
+        if (input.transport.access !== 'browser_direct') {
+            errors.push('http transport access must be browser_direct');
         }
         if (typeof input.transport.path !== 'string' || !input.transport.path.startsWith('/') || input.transport.path.includes('..')) {
             errors.push('transport.path must be an absolute path without ..');
@@ -348,13 +344,6 @@ export function validateManifest(input: unknown): ManifestValidation {
             && !effectAllowedForMethod(input.transport.method as HttpMethod, effect)
         ) {
             errors.push(`effect ${effect} is not allowed for ${input.transport.method}`);
-        }
-    } else if (input.transport.kind === 'mcp') {
-        if (typeof input.transport.serverId !== 'string' || !/^[A-Za-z0-9_.:-]{1,80}$/.test(input.transport.serverId)) {
-            errors.push('transport.serverId is invalid');
-        }
-        if (typeof input.transport.toolName !== 'string' || !NAME_PATTERN.test(input.transport.toolName)) {
-            errors.push('transport.toolName is invalid');
         }
     } else if (typeof input.transport.handler !== 'string' || !/^[a-z][a-z0-9_.]{0,63}$/.test(input.transport.handler)) {
         errors.push('transport.handler is invalid');
@@ -388,8 +377,8 @@ export function validateManifest(input: unknown): ManifestValidation {
             if (transportKind === 'http' && entry.in === 'argument') {
                 errors.push('http transports cannot take argument inputs');
             }
-            if ((transportKind === 'mcp' || transportKind === 'local') && entry.in !== 'argument') {
-                errors.push(`${String(transportKind)} transports only take argument inputs`);
+            if (transportKind === 'local' && entry.in !== 'argument') {
+                errors.push('local transports only take argument inputs');
             }
             if ((method === 'GET' || method === 'HEAD') && entry.in === 'body') {
                 errors.push(`${String(method)} cannot declare a body`);
@@ -504,15 +493,12 @@ function canonicalAuth(auth: AuthBinding): AuthBinding {
 }
 
 function canonicalTransport(transport: CapabilityTransport): CapabilityTransport {
-    if (transport.kind === 'mcp') {
-        return { kind: 'mcp', serverId: transport.serverId, toolName: transport.toolName };
-    }
     if (transport.kind === 'local') {
         return { kind: 'local', handler: transport.handler };
     }
     return {
         kind: 'http',
-        access: transport.access === 'server_broker' ? 'server_broker' : 'browser_direct',
+        access: 'browser_direct',
         baseUrl: transport.baseUrl,
         method: transport.method,
         path: transport.path

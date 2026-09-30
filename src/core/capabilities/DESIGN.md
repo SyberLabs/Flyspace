@@ -17,12 +17,8 @@ a secret), a transport, input schemas, and an output schema. The digest is
 SHA-256 over the canonical body. Approval is not part of the digest, so
 granting approval does not create a new capability.
 
-Three compilers propose manifests:
-
-- `compileOpenApi` reads an OpenAPI 3.x document.
-- `compileMcpTools` reads MCP tool schemas. Calling them requires a bound
-  `McpTransport`; the compiler itself does not open a connection.
-- `compileBring` reads a structured description. Free text is not a proposal.
+`compileOpenApi` reads an OpenAPI 3.x document and proposes manifests. It is
+the only compiler.
 
 `validateManifest` rebuilds the canonical object and checks the digest.
 `installProposal` is the gate that registers anything. A write or destructive
@@ -36,13 +32,12 @@ store, and it is revalidated first.
 A manifest describes a capability. It does not grant itself authority.
 
 - Credential slots are `origin + scheme + placement`. Two APIs that both name a scheme `ApiKey` do not share a secret, and a proposal cannot point its `secretRef` at another origin's slot.
-- HTTP method is an effect floor. `x-omni-effect` and MCP annotations may raise that floor. They cannot turn POST into auto-running compute. Untrusted MCP `readOnlyHint` is not approval.
+- HTTP method is an effect floor. `x-omni-effect` may raise that floor. It cannot turn POST into auto-running compute.
 - Capability ids are a hash of canonical origin and operation. Speech handlers keep pinned ids. A different origin cannot reuse an existing id.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
 - Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and input replays. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
 - Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
-- HTTP capabilities are `browser_direct` or `server_broker`. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
-- MCP tools compile from schemas and run through a Streamable HTTP client once a server URL is bound.
+- HTTP capabilities are called directly from the browser (`access: browser_direct`, a fixed field because it is inside the digest). Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
 - Speech has a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. A denied microphone is `Permission denied`, not the browser error code.
 
 ## Effects
@@ -50,9 +45,9 @@ A manifest describes a capability. It does not grant itself authority.
 | Effect | Default methods | Runs when |
 | --- | --- | --- |
 | read | GET, HEAD | the user runs it |
-| compute | `x-omni-effect: compute` on a safe method, or an explicit bring/MCP declaration | the user runs it |
+| compute | `x-omni-effect: compute` on a safe method | the user runs it |
 | write | POST, PUT, PATCH | approval is `approved` and the user runs it |
-| destructive | DELETE, or `destructiveHint`, or a tightened GET/HEAD | approval is `approved` and the user runs it |
+| destructive | DELETE, or a tightened GET/HEAD | approval is `approved` and the user runs it |
 
 A method cannot be relabeled into a weaker class. GET and HEAD may be tightened to write or destructive. POST, PUT, and PATCH are at least write. DELETE stays destructive. An observed HTTP error on a write or destructive call is not marked retryable.
 

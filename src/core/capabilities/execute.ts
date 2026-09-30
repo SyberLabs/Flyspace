@@ -23,15 +23,10 @@ import { isRecord, validateValue } from './valueType';
 const MAX_BODY_CHARS = 1_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 
-export interface McpTransport {
-    call(serverId: string, toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
-}
-
 export interface LocalCall {
     signal?: AbortSignal;
 }
 
-const mcpTransports = new Map<string, McpTransport>();
 const localHandlers = new Map<string, (args: Record<string, unknown>, call?: LocalCall) => Promise<unknown>>();
 
 export function bindLocalHandler(
@@ -45,16 +40,7 @@ export function unbindLocalHandler(handler: string): void {
     localHandlers.delete(handler);
 }
 
-export function bindMcpTransport(serverId: string, transport: McpTransport): void {
-    mcpTransports.set(serverId, transport);
-}
-
-export function unbindMcpTransport(serverId: string): void {
-    mcpTransports.delete(serverId);
-}
-
 export interface ExecuteOptions {
-    fetchImpl?: typeof fetch;
     signal?: AbortSignal;
     /** Same key and same input replays. Same key and different input conflicts. */
     idempotencyKey?: string;
@@ -113,10 +99,7 @@ export async function executeCapability(
             input,
             auth.headers,
             auth.query,
-            options.fetchImpl ?? fetch,
             options.signal,
-            idempotencyKey,
-            auth.secret,
             () => {
                 dispatched = true;
                 markExecutionDispatched(runId);
@@ -184,7 +167,7 @@ function validateInput(manifest: CapabilityManifest, input: Record<string, unkno
     return errors;
 }
 
-function applyAuth(manifest: CapabilityManifest): { headers: Record<string, string>; query: Record<string, string>; secret?: string } | { error: CapabilityResult } {
+function applyAuth(manifest: CapabilityManifest): { headers: Record<string, string>; query: Record<string, string> } | { error: CapabilityResult } {
     const headers: Record<string, string> = {};
     const query: Record<string, string> = {};
     const auth = manifest.auth;
@@ -204,7 +187,7 @@ function applyAuth(manifest: CapabilityManifest): { headers: Record<string, stri
         if (auth.in === 'query') query[auth.name] = value;
         else headers[auth.name] = value;
     }
-    return { headers, query, secret };
+    return { headers, query };
 }
 
 type Step = { type: 'value'; value: unknown } | { type: 'halt'; result: CapabilityResult };
@@ -214,17 +197,13 @@ async function dispatch(
     input: Record<string, unknown>,
     authHeaders: Record<string, string>,
     authQuery: Record<string, string>,
-    fetchImpl: typeof fetch,
     signal: AbortSignal | undefined,
-    idempotencyKey: string,
-    secret: string | undefined,
     markDispatched: () => void
 ): Promise<Step> {
     if (manifest.transport.kind === 'http') {
-        return executeHttp(manifest, input, authHeaders, authQuery, fetchImpl, signal, idempotencyKey, secret, markDispatched);
+        return executeHttp(manifest, input, authHeaders, authQuery, signal, markDispatched);
     }
     markDispatched();
-    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, input, signal);
     return executeLocal(manifest, input, signal);
 }
 
@@ -237,10 +216,7 @@ async function executeHttp(
     input: Record<string, unknown>,
     authHeaders: Record<string, string>,
     authQuery: Record<string, string>,
-    fetchImpl: typeof fetch,
     signal: AbortSignal | undefined,
-    idempotencyKey: string,
-    secret: string | undefined,
     markDispatched: () => void
 ): Promise<Step> {
     if (manifest.transport.kind !== 'http') {
@@ -266,10 +242,7 @@ async function executeHttp(
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     markDispatched();
-    if (manifest.transport.access === 'server_broker') {
-        return executeBroker(manifest, input, idempotencyKey, secret, fetchImpl, requestSignal);
-    }
-    const response = await fetchImpl(url.toString(), {
+    const response = await fetch(url.toString(), {
         method: manifest.transport.method,
         headers,
         body,
@@ -347,59 +320,6 @@ async function executeLocal(manifest: CapabilityManifest, input: Record<string, 
         if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
     }
     return { type: 'value', value: await handler(args, { signal }) };
-}
-
-async function executeBroker(
-    manifest: CapabilityManifest,
-    input: Record<string, unknown>,
-    idempotencyKey: string,
-    secret: string | undefined,
-    fetchImpl: typeof fetch,
-    signal: AbortSignal
-): Promise<Step> {
-    const response = await fetchImpl('/api/capability-broker', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-            manifest,
-            input,
-            idempotencyKey,
-            ...(secret ? { secret } : {})
-        }),
-        signal
-    });
-    const payload = await response.json() as {
-        value?: unknown;
-        error?: { code?: string; message?: string };
-        executionStatus?: string;
-    };
-    if (payload.error) {
-        return halt(failure(
-            manifest.id,
-            payload.error.code || 'UPSTREAM_ERROR',
-            payload.error.message || 'Broker request failed',
-            false
-        ));
-    }
-    if (!response.ok) {
-        return halt(failure(manifest.id, 'UPSTREAM_ERROR', `Broker HTTP ${response.status}`, false));
-    }
-    return { type: 'value', value: payload.value };
-}
-
-async function executeMcp(manifest: CapabilityManifest, input: Record<string, unknown>, signal?: AbortSignal): Promise<Step> {
-    if (manifest.transport.kind !== 'mcp') {
-        return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an mcp capability', false));
-    }
-    const transport = mcpTransports.get(manifest.transport.serverId);
-    if (!transport) {
-        return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No MCP transport bound for ${manifest.transport.serverId}`, false));
-    }
-    const args: Record<string, unknown> = {};
-    for (const entry of manifest.inputs) {
-        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
-    }
-    return { type: 'value', value: await transport.call(manifest.transport.serverId, manifest.transport.toolName, args, signal) };
 }
 
 function fillPath(path: string, input: Record<string, unknown>): string {

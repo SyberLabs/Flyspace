@@ -19,7 +19,6 @@ export function canonicalBase(baseUrl: string): string {
 
 export function capabilityIdentityKey(transport: CapabilityTransport): string {
     if (transport.kind === 'local') return `local|${transport.handler}`;
-    if (transport.kind === 'mcp') return `mcp|${transport.serverId}|${transport.toolName}`;
     return `http|${canonicalBase(transport.baseUrl)}|${transport.method}|${transport.path}`;
 }
 
