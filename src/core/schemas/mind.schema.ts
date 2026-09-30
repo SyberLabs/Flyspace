@@ -60,68 +60,6 @@ export const LLM_DEFAULTS: Record<LLMProvider, LLMConfig> = {
 };
 
 // ============================================
-// KNOWLEDGE GRAPH TYPES
-// ============================================
-
-/**
- * Node types in the knowledge graph
- */
-export type KnowledgeNodeType = 'entity' | 'concept' | 'event' | 'insight' | 'prediction';
-
-/**
- * A node in the knowledge graph
- */
-export interface KnowledgeNode {
-    id: string;
-    type: KnowledgeNodeType;
-    label: string;
-    description?: string;
-    properties: Record<string, unknown>;
-    createdAt: number;
-    updatedAt: number;
-    sourceBlockId?: string;  // Block that created this node
-    confidence: number;  // 0-1, how certain we are about this node
-}
-
-/**
- * Relationship types between nodes
- */
-export type RelationType =
-    | 'related_to'
-    | 'causes'
-    | 'correlates_with'
-    | 'contradicts'
-    | 'supports'
-    | 'part_of'
-    | 'precedes'
-    | 'follows'
-    | 'influences'
-    | 'derived_from';
-
-/**
- * An edge/relationship in the knowledge graph
- */
-export interface KnowledgeEdge {
-    id: string;
-    sourceId: string;
-    targetId: string;
-    relation: RelationType;
-    weight: number;  // Relationship strength 0-1
-    bidirectional: boolean;
-    metadata?: Record<string, unknown>;
-    createdAt: number;
-}
-
-/**
- * Full knowledge graph structure
- */
-export interface KnowledgeGraph {
-    nodes: KnowledgeNode[];
-    edges: KnowledgeEdge[];
-    lastUpdated: number;
-}
-
-// ============================================
 // PROGRAMMABLE PERSONAS
 // ============================================
 
@@ -263,13 +201,9 @@ Identify blind spots, hidden risks, and uncomfortable questions others avoid.`,
  */
 export type ContextEntryType =
     | 'observation'      // Raw data from blocks
-    | 'inference'        // AI-generated insights
     | 'directive'        // User instructions
     | 'prediction'       // Forward-looking statements
-    | 'question'         // Unresolved questions
-    | 'memory'           // Long-term memories
-    | 'warning'          // Risk alerts and cautions
-    | 'analysis';        // Full analysis from Mind
+    | 'memory';          // Long-term memories
 
 /**
  * A single entry in a context pool
@@ -315,13 +249,9 @@ export type PruneStrategy = 'fifo' | 'importance' | 'recency' | 'hybrid';
  */
 export interface ContextPool {
     id: string;
-    name: string;
-    description: string;
-    icon?: string;
     entries: ContextEntry[];
     maxEntries: number;
     pruneStrategy: PruneStrategy;
-    isSystem: boolean;  // Built-in vs user-created
     createdAt: number;
     updatedAt: number;
 }
@@ -332,57 +262,33 @@ export interface ContextPool {
 export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updatedAt'>[] = [
     {
         id: 'observations',
-        name: 'Observations',
-        description: 'Shell Mind auto-awareness of all active blocks. Short-term memory tier.',
-        icon: '👁️',
         maxEntries: 100,
-        pruneStrategy: 'recency',
-        isSystem: true
+        pruneStrategy: 'recency'
     },
     {
         id: 'focus',
-        name: 'Focused Blocks',
-        description: 'User attention signal - pinned blocks for deep analysis (max 5). Can be imported by Persona Blocks.',
-        icon: '📍',
         maxEntries: 5,
-        pruneStrategy: 'importance',
-        isSystem: true
+        pruneStrategy: 'importance'
     },
     {
         id: 'inferences',
-        name: 'Inferences',
-        description: 'Shell Mind insights and pattern detections. Short-term memory tier.',
-        icon: '💡',
         maxEntries: 50,
-        pruneStrategy: 'importance',
-        isSystem: true
+        pruneStrategy: 'importance'
     },
     {
         id: 'directives',
-        name: 'Directives',
-        description: 'User instructions and strategic goals. Short-term memory tier.',
-        icon: '🎯',
         maxEntries: 20,
-        pruneStrategy: 'fifo',
-        isSystem: true
+        pruneStrategy: 'fifo'
     },
     {
         id: 'predictions',
-        name: 'Predictions',
-        description: 'Shell Mind forecasts and scenarios. Short-term memory tier.',
-        icon: '🔮',
         maxEntries: 30,
-        pruneStrategy: 'hybrid',
-        isSystem: true
+        pruneStrategy: 'hybrid'
     },
     {
         id: 'memory',
-        name: 'Long-term Memory',
-        description: 'Crystallized insights persisted across sessions. Long-term memory tier.',
-        icon: '🧠',
         maxEntries: 200,
-        pruneStrategy: 'importance',
-        isSystem: true
+        pruneStrategy: 'importance'
     }
 ];
 
@@ -391,21 +297,11 @@ export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updated
 // ============================================
 
 /**
- * Mind connection status
- */
-export type MindStatus = 'offline' | 'initializing' | 'ready' | 'processing' | 'error';
-
-/**
  * Full Mind state structure
  */
 export interface MindState {
-    status: MindStatus;
     llmConfig: LLMConfig;
-    graph: KnowledgeGraph;
-    personas: PersonaConfig[];
-    activePersonaId: string;
     contextPools: ContextPool[];
-    lastError?: string;
 }
 
 /**
@@ -415,25 +311,12 @@ export function createInitialMindState(): MindState {
     const now = Date.now();
 
     return {
-        status: 'offline',
         llmConfig: { ...LLM_DEFAULTS.local },
-        graph: {
-            nodes: [],
-            edges: [],
-            lastUpdated: now
-        },
-        personas: BUILTIN_PERSONAS.map(p => ({
-            ...p,
-            createdAt: now,
-            updatedAt: now
-        })),
-        activePersonaId: 'analyst',
         contextPools: BUILTIN_POOLS.map(p => ({
             ...p,
             entries: [],
             createdAt: now,
             updatedAt: now
-        })),
-        lastError: undefined
+        }))
     };
 }

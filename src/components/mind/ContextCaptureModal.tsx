@@ -9,18 +9,17 @@ interface ContextCaptureModalProps {
 }
 
 export function ContextCaptureModal({ isOpen, onClose, selectedText }: ContextCaptureModalProps) {
-    const pushContext = useMindStore(state => state.pushContext);
-    const activePersona = useMindStore(state => state.getActivePersona());
+    const addToPool = useMindStore(state => state.addToPool);
 
     if (!isOpen) return null;
 
     const handleSave = (type: ContextEntryType, poolId: string) => {
-        pushContext(poolId, {
+        addToPool(poolId, {
             type,
             content: selectedText,
             importance: 1.0,
             metadata: {
-                source: activePersona?.name || 'User Selection',
+                source: 'User Selection',
                 savedAt: Date.now(),
                 isManualCapture: true
             }

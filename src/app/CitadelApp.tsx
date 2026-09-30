@@ -14,13 +14,11 @@ import { Sprout } from 'lucide-react';
 import Link from 'next/link';
 import { ApiDashboardModal } from '@/components/ApiDashboard';
 import { ShellPanel } from '@/components/ShellPanel';
-import { MindPanel } from '@/components/mind';
-import { MindDock } from '@/components/mind/MindDock';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { ContextCaptureModal } from '@/components/mind/ContextCaptureModal';
 import { useBlockStore, useToolStore } from '@/core/stores';
 import { useApiStore } from '@/core/stores/apiStore';
-import { useMindShellSync, useShellNavigation } from '@/core/hooks';
+import { useShellNavigation } from '@/core/hooks';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 
 export default function CitadelApp() {
@@ -28,14 +26,10 @@ export default function CitadelApp() {
     const { activeTool, selection, captureSelection, clearSelection } = useToolStore();
     const { initializeDefaults } = useApiStore();
 
-    const [isMindOpen, setIsMindOpen] = useState(false);
     const [isSkinOpen, setIsSkinOpen] = useState(false);
     const [isApiOpen, setIsApiOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isShellsOpen, setIsShellsOpen] = useState(false);
-
-    // Initialize Mind-Shell synchronization
-    useMindShellSync();
 
     // Initialize shell keyboard navigation (Cmd+0-9)
     useShellNavigation();
@@ -87,9 +81,6 @@ export default function CitadelApp() {
                     <Canvas shellId={activeShellId} onBrowseShells={() => setIsShellsOpen(true)} />
                     <VoiceControl />
 
-                    {/* Mind Dock - Always Visible */}
-                    <MindDock onExpandPanel={() => setIsMindOpen(true)} />
-
                     {/* Garden FAB - Bottom Right */}
                     <Link
                         href="/garden"
@@ -108,9 +99,6 @@ export default function CitadelApp() {
 
             {/* Shell Manager Panel */}
             <ShellPanel isOpen={isShellsOpen} onClose={() => setIsShellsOpen(false)} />
-
-            {/* Mind Panel */}
-            <MindPanel isOpen={isMindOpen} onClose={() => setIsMindOpen(false)} />
 
             {/* Skin Modal */}
             <SkinModal isOpen={isSkinOpen} onClose={() => setIsSkinOpen(false)} />

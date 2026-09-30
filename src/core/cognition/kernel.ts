@@ -29,8 +29,7 @@ export interface TurnOptions {
     /**
      * What fed this turn. Passed through to the server for the inference
      * ledger; it does not change the prompt. Only callers that know their
-     * provenance supply it — the persona path does, the shell-snapshot and
-     * skin paths do not.
+     * provenance supply it — the persona path does, the skin path does not.
      */
     sources?: ContextSource[];
 }

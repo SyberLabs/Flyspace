@@ -25,7 +25,6 @@ import { API_CATALOG } from '@/core/schemas/api.schema';
 import {
     TextBlockView,
     CodeBlockView,
-    ChatBlockView,
     MediaBlockView,
     EmbedBlockView
 } from '@/blocks/workspace';
@@ -480,7 +479,6 @@ export const BlockViews: Record<string, React.ComponentType<{ instanceId: string
     // Workspace Blocks
     'text_note': TextBlockView,
     'code_sandbox': CodeBlockView,
-    'mind_chat': ChatBlockView,
     'media_gallery': MediaBlockView,
     'web_embed': EmbedBlockView,
 

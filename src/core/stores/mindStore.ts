@@ -7,12 +7,9 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import {
     MindState,
-    MindStatus,
     LLMConfig,
     LLMProvider,
     LLM_DEFAULTS,
-    KnowledgeNode,
-    PersonaConfig,
     ContextEntry,
     createInitialMindState
 } from '../schemas/mind.schema';
@@ -25,34 +22,15 @@ import { vaultStorage } from '../vault';
 
 interface MindStore extends MindState {
     // ==================
-    // Status Management
-    // ==================
-    setStatus: (status: MindStatus, error?: string) => void;
-    initialize: () => Promise<void>;
-
-    // ==================
     // LLM Configuration
     // ==================
     setProvider: (provider: LLMProvider) => void;
 
     // ==================
-    // Knowledge Graph
-    // ==================
-    addNode: (node: Omit<KnowledgeNode, 'id' | 'createdAt' | 'updatedAt'>) => string;
-
-    // ==================
-    // Personas
-    // ==================
-    setActivePersona: (personaId: string) => void;
-    getActivePersona: () => PersonaConfig | undefined;
-
-    // ==================
     // Context Pools
     // ==================
-    pushContext: (poolId: string, entry: Omit<ContextEntry, 'id' | 'timestamp'>) => string;
-    addToPool: (poolId: string, entry: Omit<ContextEntry, 'id' | 'timestamp'>) => string; // Alias for pushContext
+    addToPool: (poolId: string, entry: Omit<ContextEntry, 'id' | 'timestamp'>) => string;
     getPoolEntries: (poolId: string) => ContextEntry[];
-    clearPool: (poolId: string) => void;
 
     // ==================
     // Focus Management
@@ -60,15 +38,7 @@ interface MindStore extends MindState {
     pinBlock: (blockId: string, blockType: string, data: unknown) => boolean;
     unpinBlock: (blockId: string) => void;
     isPinned: (blockId: string) => boolean;
-    clearFocus: () => void;
     saveToMemory: (blockId: string, blockType: string, data: unknown) => void;
-    clearEphemeralContext: () => void;
-
-    // ==================
-    // Mind-Shell Sync
-    // ==================
-    extractBlockEntities: (blockId: string, blockType: string, data: unknown) => void;
-    updateAwareness: (blockType: string, summary: string) => void;
 }
 
 // ============================================
@@ -136,37 +106,6 @@ export const useMindStore = create<MindStore>()(
             ...createInitialMindState(),
 
             // ==================
-            // Status Management
-            // ==================
-            setStatus: (status, error) => set({ status, lastError: error }),
-
-            initialize: async () => {
-                set({ status: 'initializing' });
-                try {
-                    // Clear focus pool on init to prevent stale data
-                    set(state => ({
-                        contextPools: state.contextPools.map(pool =>
-                            pool.id === 'focus'
-                                ? { ...pool, entries: [], updatedAt: Date.now() }
-                                : pool
-                        )
-                    }));
-
-                    // In the future, this could:
-                    // - Load embeddings
-                    // - Connect to local LLM
-                    // - Restore graph from IndexedDB
-                    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate init
-                    set({ status: 'ready' });
-                } catch (error) {
-                    set({
-                        status: 'error',
-                        lastError: (error as Error).message
-                    });
-                }
-            },
-
-            // ==================
             // LLM Configuration
             // ==================
             setProvider: (provider) => {
@@ -176,43 +115,9 @@ export const useMindStore = create<MindStore>()(
             },
 
             // ==================
-            // Knowledge Graph
-            // ==================
-            addNode: (node) => {
-                const id = generateId('node');
-                const now = Date.now();
-                const newNode: KnowledgeNode = {
-                    ...node,
-                    id,
-                    createdAt: now,
-                    updatedAt: now
-                };
-
-                set(state => ({
-                    graph: {
-                        ...state.graph,
-                        nodes: [...state.graph.nodes, newNode],
-                        lastUpdated: now
-                    }
-                }));
-
-                return id;
-            },
-
-            // ==================
-            // Personas
-            // ==================
-            setActivePersona: (personaId) => set({ activePersonaId: personaId }),
-
-            getActivePersona: () => {
-                const state = get();
-                return state.personas.find(p => p.id === state.activePersonaId);
-            },
-
-            // ==================
             // Context Pools
             // ==================
-            pushContext: (poolId, entry) => {
+            addToPool: (poolId, entry) => {
                 const id = generateId('ctx');
                 const now = Date.now();
                 const newEntry: ContextEntry = {
@@ -251,40 +156,16 @@ export const useMindStore = create<MindStore>()(
                 return id;
             },
 
-            // Alias for pushContext - used by MindEngine
-            addToPool: (poolId, entry) => get().pushContext(poolId, entry),
-
             getPoolEntries: (poolId) => {
                 const pool = get().contextPools.find(p => p.id === poolId);
                 return pool?.entries || [];
-            },
-
-            clearEphemeralContext: () => {
-                const EPHEMERAL_POOLS = ['observations', 'predictions', 'directives', 'inferences'];
-                set(state => ({
-                    contextPools: state.contextPools.map(pool =>
-                        EPHEMERAL_POOLS.includes(pool.id)
-                            ? { ...pool, entries: [], updatedAt: Date.now() }
-                            : pool
-                    )
-                }));
-            },
-
-            clearPool: (poolId) => {
-                set(state => ({
-                    contextPools: state.contextPools.map(pool =>
-                        pool.id === poolId
-                            ? { ...pool, entries: [], updatedAt: Date.now() }
-                            : pool
-                    )
-                }));
             },
 
             // ==================
             // Focus Management
             // ==================
             pinBlock: (blockId, blockType, data) => {
-                const { contextPools, pushContext, isPinned } = get();
+                const { contextPools, addToPool, isPinned } = get();
 
                 // Check if already pinned
                 if (isPinned(blockId)) {
@@ -300,7 +181,7 @@ export const useMindStore = create<MindStore>()(
 
                 // Create full data entry for focus pool
                 const fullContent = formatBlockDataForFocus(blockType, data);
-                pushContext('focus', {
+                addToPool('focus', {
                     type: 'observation',
                     content: fullContent,
                     importance: 1.0, // High importance for focused blocks
@@ -326,97 +207,26 @@ export const useMindStore = create<MindStore>()(
                 return focusPool?.entries.some(e => e.sourceBlockId === blockId) || false;
             },
 
-            clearFocus: () => {
-                set(state => ({
-                    contextPools: state.contextPools.map(pool =>
-                        pool.id === 'focus'
-                            ? { ...pool, entries: [], updatedAt: Date.now() }
-                            : pool
-                    )
-                }));
-            },
-
             saveToMemory: (blockId, blockType, data) => {
-                const { pushContext } = get();
+                const { addToPool } = get();
                 // Use detailed format for memory
                 const content = formatBlockDataForFocus(blockType, data);
 
-                pushContext('memory', {
+                addToPool('memory', {
                     type: 'memory',
                     content: `[Snapshot] ${content}`,
                     importance: 1.0,
                     sourceBlockId: blockId,
                     metadata: { blockType, savedAt: Date.now() }
                 });
-            },
-
-            // ==================
-            // Mind-Shell Sync
-            // ==================
-            extractBlockEntities: (blockId, blockType, data) => {
-                const { addNode } = get();
-
-                // Extract entities for knowledge graph
-                const entities = extractEntities(blockType, data);
-                for (const entity of entities) {
-                    addNode({
-                        type: 'entity',
-                        label: entity.label,
-                        description: entity.description,
-                        properties: entity.properties,
-                        sourceBlockId: blockId,
-                        confidence: entity.confidence || 0.8
-                    });
-                }
-            },
-
-            updateAwareness: (blockType, summary) => {
-                set(state => {
-                    const poolIndex = state.contextPools.findIndex(p => p.id === 'observations');
-                    if (poolIndex === -1) return {};
-
-                    const pool = state.contextPools[poolIndex];
-                    const existingEntryIndex = pool.entries.findIndex(e =>
-                        e.metadata?.isAwareness === true && e.metadata?.blockType === blockType
-                    );
-
-                    const newEntries = [...pool.entries];
-
-                    if (existingEntryIndex >= 0) {
-                        // Update existing awareness entry
-                        newEntries[existingEntryIndex] = {
-                            ...newEntries[existingEntryIndex],
-                            content: summary,
-                            timestamp: Date.now()
-                        };
-                    } else {
-                        // Create new awareness entry
-                        newEntries.push({
-                            id: crypto.randomUUID(),
-                            type: 'observation',
-                            content: summary,
-                            importance: 0.3, // Lower importance for background awareness
-                            timestamp: Date.now(),
-                            metadata: { isAwareness: true, blockType }
-                        });
-                    }
-
-                    const newPools = [...state.contextPools];
-                    newPools[poolIndex] = { ...pool, entries: newEntries };
-
-                    return { contextPools: newPools };
-                });
             }
         }),
         {
             name: 'omni-mind',
-            // OmniVault (IndexedDB): context pools + graph grow over time (A2).
+            // OmniVault (IndexedDB): context pools grow over time (A2).
             storage: createJSONStorage(() => vaultStorage),
             partialize: (state) => ({
                 llmConfig: state.llmConfig,
-                graph: state.graph,
-                personas: state.personas,
-                activePersonaId: state.activePersonaId,
                 contextPools: state.contextPools
             }),
             // Merge persisted state with fresh state to ensure new built-in pools exist
@@ -428,8 +238,11 @@ export const useMindStore = create<MindStore>()(
                 const freshPools = currentState.contextPools;
                 const persistedPools = persisted.contextPools || [];
 
-                // Add any missing built-in pools
-                const mergedPools = [...persistedPools];
+                // A pin is a snapshot of the block at pin time, so each session
+                // starts with none. Then add any missing built-in pools.
+                const mergedPools = persistedPools.map(pool =>
+                    pool.id === 'focus' ? { ...pool, entries: [] } : pool
+                );
                 for (const freshPool of freshPools) {
                     if (!mergedPools.find(p => p.id === freshPool.id)) {
                         mergedPools.push(freshPool);
@@ -473,77 +286,6 @@ export const useMindStore = create<MindStore>()(
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
-
-/**
- * Summarize block data for context pool
- */
-/**
- * Summarize block data for context pool
- */
-export function summarizeBlockData(blockType: string, data: unknown): string {
-    if (!data) return `[${blockType}] No data available`;
-
-    switch (blockType) {
-        case 'polymarket':
-            const markets = data as Array<{ question: string; outcomes: Array<{ name: string; probability: number }> }>;
-            if (!markets.length) return '[Polymarket] No markets loaded';
-            return `[Polymarket] ${markets.length} markets tracked. Top: "${markets[0]?.question}" - ${markets[0]?.outcomes[0]?.name}: ${(markets[0]?.outcomes[0]?.probability * 100).toFixed(1)}%`;
-
-        case 'newsapi':
-            const articles = data as Array<{ title: string; source: { name: string } }>;
-            if (!articles.length) return '[News] No articles loaded';
-            return `[News] ${articles.length} articles. Latest: "${articles[0]?.title}" (${articles[0]?.source?.name})`;
-
-        default:
-            return `[${blockType}] Data updated`;
-    }
-}
-
-/**
- * Extract entities from block data for knowledge graph
- */
-function extractEntities(
-    blockType: string,
-    data: unknown
-): Array<{ label: string; description?: string; properties: Record<string, unknown>; confidence?: number }> {
-    const entities: Array<{ label: string; description?: string; properties: Record<string, unknown>; confidence?: number }> = [];
-
-    switch (blockType) {
-        case 'polymarket':
-            const markets = data as Array<{ id: string; question: string; category?: string }>;
-            for (const market of markets.slice(0, 5)) {
-                entities.push({
-                    label: market.question.slice(0, 50),
-                    description: market.question,
-                    properties: {
-                        marketId: market.id,
-                        category: market.category,
-                        type: 'prediction_market'
-                    },
-                    confidence: 0.9
-                });
-            }
-            break;
-
-        case 'newsapi':
-            const articles = data as Array<{ title: string; source: { name: string }; url: string }>;
-            for (const article of articles.slice(0, 5)) {
-                entities.push({
-                    label: article.title.slice(0, 50),
-                    description: article.title,
-                    properties: {
-                        source: article.source?.name,
-                        url: article.url,
-                        type: 'news_article'
-                    },
-                    confidence: 0.85
-                });
-            }
-            break;
-    }
-
-    return entities;
-}
 
 /**
  * Format full block data for focus pool (deep analysis)

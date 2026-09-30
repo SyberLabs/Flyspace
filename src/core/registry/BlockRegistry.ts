@@ -393,25 +393,6 @@ blockRegistry.register({
     isUserCreatable: true
 });
 
-// Chat Block
-blockRegistry.register({
-    block_id: 'mind_chat',
-    display_name: 'Mind Chat',
-    category: 'workspace',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
-    semantic_tags: ['chat', 'conversation', 'ai', 'assistant', 'mind'],
-    wiring_logic: 'map_to_active_persona',
-    ports: [
-        createAnyInputPort('in', 'Context Input'),
-        createTextOutputPort('out', 'Conversation')
-    ],
-    icon: 'MessageSquare',
-    description: 'Direct conversation with the Mind',
-    expandMode: 'fullscreen',
-    isUserCreatable: true
-});
-
 // Media Block
 blockRegistry.register({
     block_id: 'media_gallery',
