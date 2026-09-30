@@ -12,6 +12,7 @@ import {
     DragMoveEvent,
     useDraggable,
     PointerSensor,
+    KeyboardSensor,
     useSensor,
     useSensors
 } from '@dnd-kit/core';
@@ -59,7 +60,9 @@ export function Canvas({ onBrowseShells }: CanvasProps) {
             activationConstraint: {
                 distance: 8
             }
-        })
+        }),
+        // Space/Enter on a block's drag handle, then arrows, then Space to drop.
+        useSensor(KeyboardSensor)
     );
 
     // Sidebar drop. Native HTML5 DnD (the sidebar sets dataTransfer), handled
@@ -262,7 +265,7 @@ function DraggableBlock({ id, isDragging, isSelected, onSelect, onClose }: Dragg
         handle: string
     } | null>(null);
 
-    const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform } = useDraggable({
         id,
         disabled: isResizing // Disable drag while resizing
     });
@@ -371,7 +374,6 @@ function DraggableBlock({ id, isDragging, isSelected, onSelect, onClose }: Dragg
             ref={setNodeRef}
             style={style}
             onClick={onSelect}
-            {...attributes}
             className={cn(
                 "group relative",
                 isSelected && "ring-2 ring-[var(--citadel-primary)]",
@@ -382,7 +384,7 @@ function DraggableBlock({ id, isDragging, isSelected, onSelect, onClose }: Dragg
                 block={block}
                 isDragging={isDragging}
                 onClose={onClose}
-                dragListeners={listeners}
+                dragHandle={{ attributes, listeners, setActivatorNodeRef }}
             >
                 <BlockContent block={block} />
             </BlockCard>

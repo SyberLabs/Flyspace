@@ -16,7 +16,7 @@ test('persistence: Crystallize creates a wired Memory block; it and block params
     const country = page.getByPlaceholder('Country (USA or all)');
     await expect(country).toHaveValue('USA');
     await country.fill('GBR');
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await page.getByRole('button', { name: 'Apply' }).click();
     await expect(country).toHaveValue('GBR');
 
     await page.getByTitle('Think').first().click();
