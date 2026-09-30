@@ -44,12 +44,11 @@ measured in production use.
 ## Spoken canvas control
 
 Hold **Talk** or Space and say a command from a fixed grammar ("wire hacker news
-to the analyst", "delete this", "undo"). Speech, pointer, and hand input only
+to the analyst", "delete this", "undo"). Speech and pointer input only
 propose commands; the interaction engine (`src/core/interaction/`) decides. It
 refuses unknown or ambiguous names, previews a delete until you confirm, and
-supports undo. Claim ceiling: tested with typed-in transcripts and synthetic
-hand frames; there is no live microphone or webcam measurement of recognition
-accuracy or latency.
+supports undo. Claim ceiling: tested with typed-in transcripts; there is no live
+microphone measurement of recognition accuracy or latency.
 
 ## Configuration
 

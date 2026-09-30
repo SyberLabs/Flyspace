@@ -12,8 +12,11 @@ historical" banner are a record, not a spec.
   turn silently. If a source informed an answer, the user can point at the wire.
 - **No second product surface.** The agent surface moved to `SyberLabs/omni-agent`
   and the Garden was deleted (2026-09-01). Do not add a parallel app to this repo.
-- Local-first and single-user. Keys are read server-side from `process.env`.
-  A deployed instance goes on a private network (`DEPLOYMENT.md`).
+- Local-first and single-user. LLM and built-in data-provider keys are read
+  server-side from `process.env`. A credential you enter for a compiled API lives
+  in browser memory for the session only (`src/core/capabilities/secrets.ts`), is
+  never persisted, and is attached to the capability's own request. A deployed
+  instance goes on a private network (`DEPLOYMENT.md`).
 
 ## Authority boundaries
 
@@ -26,7 +29,7 @@ historical" banner are a record, not a spec.
   `CapabilityManifest`. `installProposal` registers it, write and destructive
   effects need `approveCapability`, and `executeCapability` is the one runtime.
   Approval is not part of the manifest digest. See `src/core/capabilities/DESIGN.md`.
-- **Spoken, pointer, and hand input only propose commands.** The interaction
+- **Spoken and pointer input only propose commands.** The interaction
   engine (`src/core/interaction/engine.ts`) admits them. Adapters never call the
   canvas stores directly. Unknown or ambiguous input is refused, a delete previews
   until confirmed, and a committed command can be undone.
@@ -92,15 +95,15 @@ Use one word per level and do not promote a claim past the evidence you have.
 | deployed | it runs in a real environment users reach |
 | externally validated | someone outside this repo confirmed it |
 
-Current ceilings: the capability compiler and the spoken and hand input are
-tested with fixtures and synthetic input. No live microphone, webcam, or
-third-party API measurement exists. Do not write "works with any API" or
+Current ceilings: the capability compiler and spoken input are tested
+with fixtures and synthetic input. No live microphone or third-party API
+measurement exists. Do not write "works with any API" or
 "hands-free control" in a doc.
 
 ## Layout
 
 - `src/core/capabilities/` compilers, registry, execution, `DESIGN.md`
-- `src/core/interaction/` command engine, speech grammar, push-to-talk, hand input
+- `src/core/interaction/` command engine, speech grammar, push-to-talk
 - `src/core/stores/` Zustand stores over the vault; `wireStore.ts` admits wires
 - `src/core/services/` persona turns, wire context, LLM client; `server/` holds server-only code
 - `src/core/gateway/` `ApiGateway` and normalizers for the built-in data sources
