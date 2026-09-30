@@ -24,6 +24,25 @@ Three compilers propose manifests:
   `McpTransport`; the compiler itself does not open a connection.
 - `compileBring` reads a structured description. Free text is not a proposal.
 
+## Providers and admission
+
+A `CapabilityProvider` (`provider.ts`) discovers candidates in one external
+ecosystem and materializes a `CapabilityProposalV1`. `providers/openapiProvider.ts`,
+`providers/mcpProvider.ts`, and `providers/bringProvider.ts` wrap the three
+compilers above; they do not parse a second way. A proposal carries an effect
+*hint*, an auth *placement*, a transport, schemas, and provenance. It has no
+id, approval, digest, credential slot, or trust flag, and `admission.ts`
+refuses a proposal that includes one.
+
+`admitProposal` derives what a provider may not claim: the id from the
+transport, the effect from the method floor (an MCP read hint counts only for
+a server on the host's `trustedEffectHints` list), the approval from the
+effect, and the credential slot from the destination. It seals provenance
+(provider, external id, source locator and revision, discovery and admission
+time, schema digest) into the digest, then calls `installProposal`. Admission
+does not place blocks or wires. The OpenAPI install panel still calls
+`compileOpenApi` directly.
+
 `validateManifest` rebuilds the canonical object and checks the digest.
 `installProposal` is the gate that registers anything. A write or destructive
 proposal is stored as `pending` even if it arrived marked `approved`.
