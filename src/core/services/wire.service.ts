@@ -106,8 +106,10 @@ export function extractBlockData(
                 : lastAnswer.content;
         } else if (isRecord(data) && 'poolId' in data && Array.isArray(data.entries)) {
             // Memory block — a Mind pool wired in like any other source.
-            const entries = asMemoryEntries(data.entries);
-            extracted = entries.map(e => `- ${e.content}`).join('\n');
+            extracted = asMemoryEntries(data.entries)
+                .filter(e => e.content.trim() !== '')
+                .map(e => `- ${e.content}`)
+                .join('\n');
         } else if (isRecord(data) && typeof data.content === 'string') {
             // Text block
             extracted = filters.summaryOnly

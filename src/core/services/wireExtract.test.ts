@@ -78,6 +78,7 @@ describe('extractBlockData — empty content carries nothing', () => {
         ['an empty items array', { items: [] }],
         ['an empty direct array', []],
         ['an empty Memory pool', { poolId: 'memory', limit: 10, entries: [] }],
+        ['a Memory pool of blank entries', { poolId: 'memory', limit: 10, entries: [{ content: '' }, { content: '  ' }] }],
         ['an empty markets array', { markets: [] }],
         ['an empty articles array', { articles: [] }],
         ['an empty text block', { content: '' }]
@@ -104,8 +105,8 @@ describe('extractBlockData — empty content carries nothing', () => {
         }
     });
 
-    it('still returns text for non-empty content', () => {
-        seed('ok', { poolId: 'memory', limit: 10, entries: [{ content: 'Kept.' }] });
+    it('still returns text for non-empty content, skipping blank Memory entries', () => {
+        seed('ok', { poolId: 'memory', limit: 10, entries: [{ content: '' }, { content: 'Kept.' }] });
         expect(extractBlockData('ok', DEFAULT_WIRE_FILTERS)).toBe('- Kept.');
     });
 });
