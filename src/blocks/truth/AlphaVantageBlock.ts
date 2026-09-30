@@ -71,5 +71,3 @@ export function useAlphaVantageBlock(instanceId: string, params?: AlphaVantageBl
         error
     };
 }
-
-export default useAlphaVantageBlock;

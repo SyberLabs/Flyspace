@@ -165,5 +165,3 @@ export const blsNormalizer: ApiTypeDefinition<BLSResponse> = {
         return createOmniData('bls', 'market_data', { items, metrics: metrics ?? undefined }, 15 * 60 * 1000);
     }
 };
-
-export default blsNormalizer;

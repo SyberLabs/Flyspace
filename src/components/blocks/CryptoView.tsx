@@ -164,5 +164,3 @@ function CryptoAssetCard({ asset, index }: CryptoAssetCardProps) {
         </motion.a>
     );
 }
-
-export default CryptoView;

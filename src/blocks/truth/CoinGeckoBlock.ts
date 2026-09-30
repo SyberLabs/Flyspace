@@ -124,28 +124,6 @@ export function useCoinGeckoBlock(instanceId: string) {
         lastUpdated: block?.last_updated,
         fromCache,
         refresh,
-        pause: () => { },
-        resume: refresh,
         error
     };
 }
-
-/**
- * Standalone fetch function
- */
-export async function fetchCryptoAssets(): Promise<{
-    assets: CryptoAsset[];
-    error?: string;
-}> {
-    const { apiGateway } = await import('@/core/gateway');
-    const data = await apiGateway.fetch('coingecko');
-
-    if (data.error) {
-        return { assets: [], error: data.error.message };
-    }
-
-    return { assets: omniItemsToCryptoAssets(data.items || []) };
-}
-
-const coinGeckoBlock = { fetchCryptoAssets, useCoinGeckoBlock };
-export default coinGeckoBlock;

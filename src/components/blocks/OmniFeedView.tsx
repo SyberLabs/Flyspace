@@ -135,5 +135,3 @@ export function OmniFeedView({
         </div>
     );
 }
-
-export default OmniFeedView;

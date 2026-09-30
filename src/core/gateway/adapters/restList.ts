@@ -198,10 +198,3 @@ export function createRestListAdapter(
         }
     };
 }
-
-export default createRestListAdapter;
-
-
-
-
-

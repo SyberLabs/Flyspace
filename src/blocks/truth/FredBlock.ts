@@ -74,5 +74,3 @@ export function useFredBlock(instanceId: string, params?: FredBlockParams) {
         error
     };
 }
-
-export default useFredBlock;

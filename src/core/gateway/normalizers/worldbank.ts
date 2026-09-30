@@ -142,5 +142,3 @@ export const worldbankNormalizer: ApiTypeDefinition<WorldBankResponse | { messag
         return createOmniData('worldbank', 'market_data', { items, metrics: metrics ?? undefined }, 60 * 60 * 1000);
     }
 };
-
-export default worldbankNormalizer;

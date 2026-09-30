@@ -103,5 +103,3 @@ export const openmeteoNormalizer: ApiTypeDefinition<OpenMeteoResponse> = {
         return createOmniData('openmeteo', 'weather', { items }, 15 * 60 * 1000);
     }
 };
-
-export default openmeteoNormalizer;

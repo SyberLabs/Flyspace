@@ -67,5 +67,3 @@ export const frankfurterNormalizer: ApiTypeDefinition<FrankfurterResponse> = {
         return createOmniData('frankfurter', 'market_data', { items }, 60 * 60 * 1000);
     }
 };
-
-export default frankfurterNormalizer;

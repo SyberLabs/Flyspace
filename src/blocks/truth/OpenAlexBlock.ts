@@ -62,5 +62,3 @@ export function useOpenAlexBlock(instanceId: string, params?: OpenAlexBlockParam
         error
     };
 }
-
-export default useOpenAlexBlock;

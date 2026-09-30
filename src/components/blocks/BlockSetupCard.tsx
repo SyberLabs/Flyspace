@@ -6,7 +6,7 @@ import { AlertCircle, Settings2 } from 'lucide-react';
 // The server names the env var to set. That is configuration, not a crash.
 const SETUP_HINT = /\b[A-Z][A-Z0-9_]*_KEY\b|\.env\b/;
 
-export function isSetupError(message: string): boolean {
+function isSetupError(message: string): boolean {
     return SETUP_HINT.test(message);
 }
 

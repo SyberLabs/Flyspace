@@ -229,5 +229,3 @@ export const polymarketNormalizer: ApiTypeDefinition<PolymarketRawResponse> = {
         return createOmniData('polymarket', 'prediction_market', { items }, 60000);
     }
 };
-
-export default polymarketNormalizer;
