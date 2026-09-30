@@ -20,20 +20,42 @@ vi.mock('@/core/cognition', () => ({
     runTurn: vi.fn()
 }));
 
-function seedBlock() {
-    const block: BlockInstance = {
-        instance_id: 'b1',
-        schema: { block_id: 'hackernews_feed', display_name: 'Hacker News', category: 'pulse' },
+function block(id: string, name: string, shellId: string): BlockInstance {
+    return {
+        instance_id: id,
+        schema: { block_id: 'hackernews_feed', display_name: name, category: 'pulse' },
         status: 'connected',
         last_updated: Date.now(),
         data: { items: [{ title: 'Story' }] },
         position: { x: 0, y: 0 },
         dimensions: { width: 1, height: 1 },
-        shellId: 'root'
+        shellId
     } as unknown as BlockInstance;
-    useBlockStore.setState({ blocks: [block], activeShellId: 'root' });
+}
+
+function wire(id: string, from: string, to: string, shellId: string): DataWire {
+    return {
+        id,
+        sourceBlockId: from,
+        targetBlockId: to,
+        wireType: 'push',
+        status: 'active',
+        filters: { autoRefresh: true },
+        shellId
+    } as unknown as DataWire;
+}
+
+function seedBlock() {
+    const b = block('b1', 'Hacker News', 'root');
+    useBlockStore.setState({ blocks: [b], activeShellId: 'root' });
     // Think only sees wired or pinned blocks; pinning is the explicit way in.
-    useMindStore.getState().pinBlock('b1', 'hackernews_feed', block.data);
+    useMindStore.getState().pinBlock('b1', 'hackernews_feed', b.data);
+}
+
+/** Everything the model was sent for the nth Think. */
+function sentPrompt(call = 0): string {
+    const messages = vi.mocked(runTurn).mock.calls[call][0];
+    return messages.map(m => m.content).join('\n');
 }
 
 beforeEach(() => {
@@ -115,125 +137,31 @@ describe('MindEngine.think', () => {
 });
 
 // ---- Think's context is what the canvas shows ------------------------------
-
-function scopedBlock(id: string, name: string, shellId: string): BlockInstance {
-    return {
-        instance_id: id,
-        schema: { block_id: 'hackernews_feed', display_name: name, category: 'pulse' },
-        status: 'connected',
-        last_updated: Date.now(),
-        data: { items: [{ title: 'Story' }] },
-        position: { x: 0, y: 0 },
-        dimensions: { width: 1, height: 1 },
-        shellId
-    } as unknown as BlockInstance;
-}
-
-function scopedWire(id: string, from: string, to: string, shellId: string): DataWire {
-    return {
-        id,
-        sourceBlockId: from,
-        targetBlockId: to,
-        wireType: 'push',
-        status: 'active',
-        filters: { autoRefresh: true },
-        shellId
-    } as unknown as DataWire;
-}
-
-/** Everything the model was sent for the nth Think. */
-function sentPrompt(call = 0): string {
-    const messages = vi.mocked(runTurn).mock.calls[call][0];
-    return messages.map(m => m.content).join('\n');
-}
+// Which blocks count (wired, pinned, active shell) is covered against the
+// snapshot itself in shell.snapshot.test.ts; this is the two-turn engine path.
 
 describe('MindEngine.think — context is what the canvas shows', () => {
-    beforeEach(() => {
-        vi.mocked(runTurn).mockResolvedValue({ success: true, content: 'ok', tokensUsed: 1 });
-    });
-
-    it('excludes a wired block in another shell and an unwired block in the active shell', async () => {
-        useBlockStore.setState({
-            blocks: [
-                scopedBlock('src', 'WiredSource', 'root'),
-                scopedBlock('sink', 'WiredSink', 'root'),
-                scopedBlock('loose', 'UnwiredLoose', 'root'),
-                scopedBlock('o-src', 'OtherShellSource', 'other'),
-                scopedBlock('o-sink', 'OtherShellSink', 'other')
-            ],
-            activeShellId: 'root'
-        });
-        useWireStore.setState({
-            wires: [scopedWire('w1', 'src', 'sink', 'root'), scopedWire('w2', 'o-src', 'o-sink', 'other')]
-        });
-
-        const result = await new MindEngine().think();
-        expect(result.success).toBe(true);
-
-        const prompt = sentPrompt();
-        expect(prompt).toContain('WiredSource');
-        expect(prompt).toContain('WiredSink');
-        expect(prompt).not.toContain('UnwiredLoose');
-        expect(prompt).not.toContain('OtherShellSource');
-        expect(prompt).not.toContain('OtherShellSink');
-
-        const obs = useMindStore.getState().contextPools.find(p => p.id === 'observations');
-        expect(obs?.entries.at(-1)?.metadata?.blocksAnalyzed).toBe(2);
-    });
-
-    it('includes an explicitly pinned block in the active shell, but not a pin from another shell', async () => {
-        useBlockStore.setState({
-            blocks: [
-                scopedBlock('pin', 'PinnedHere', 'root'),
-                scopedBlock('o-pin', 'PinnedElsewhere', 'other')
-            ],
-            activeShellId: 'root'
-        });
-        useMindStore.getState().pinBlock('pin', 'hackernews_feed', { items: [] });
-        useMindStore.getState().pinBlock('o-pin', 'hackernews_feed', { items: [] });
-
-        await new MindEngine().think();
-
-        const prompt = sentPrompt();
-        expect(prompt).toContain('PinnedHere');
-        expect(prompt).not.toContain('PinnedElsewhere');
-    });
-
-    it('does not carry background awareness aggregated across shells', async () => {
-        useBlockStore.setState({
-            blocks: [scopedBlock('src', 'WiredSource', 'root'), scopedBlock('sink', 'WiredSink', 'root')],
-            activeShellId: 'root'
-        });
-        useWireStore.setState({ wires: [scopedWire('w1', 'src', 'sink', 'root')] });
-        // useMindShellSync writes this from ALL blocks of a type, any shell.
-        useMindStore.getState().updateAwareness('hackernews_feed', 'CROSS-SHELL AWARENESS SUMMARY');
-
-        await new MindEngine().think();
-
-        expect(sentPrompt()).not.toContain('CROSS-SHELL AWARENESS SUMMARY');
-    });
-
     it('does not carry a shell A answer into the prompt for shell B', async () => {
         useBlockStore.setState({
             blocks: [
-                scopedBlock('a1', 'A-One', 'A'), scopedBlock('a2', 'A-Two', 'A'),
-                scopedBlock('b1', 'B-One', 'B'), scopedBlock('b2', 'B-Two', 'B')
+                block('a1', 'A-One', 'A'), block('a2', 'A-Two', 'A'),
+                block('b1', 'B-One', 'B'), block('b2', 'B-Two', 'B'), block('b3', 'B-Loose', 'B')
             ],
             activeShellId: 'A'
         });
-        useWireStore.setState({
-            wires: [scopedWire('wa', 'a1', 'a2', 'A'), scopedWire('wb', 'b1', 'b2', 'B')]
-        });
+        useWireStore.setState({ wires: [wire('wa', 'a1', 'a2', 'A'), wire('wb', 'b1', 'b2', 'B')] });
         const engine = new MindEngine();
 
         vi.mocked(runTurn).mockResolvedValueOnce({ success: true, content: 'A-ANSWER-SECRET', tokensUsed: 1 });
         expect((await engine.think()).success).toBe(true);
 
         useBlockStore.setState({ activeShellId: 'B' });
+        vi.mocked(runTurn).mockResolvedValueOnce({ success: true, content: 'ok', tokensUsed: 1 });
         expect((await engine.think()).success).toBe(true);
 
         const second = sentPrompt(1);
         expect(second).toContain('B-One');
+        expect(second).not.toContain('B-Loose');
         expect(second).not.toContain('A-One');
         expect(second).not.toContain('A-ANSWER-SECRET');
     });
