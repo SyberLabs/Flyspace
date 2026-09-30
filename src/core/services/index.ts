@@ -10,7 +10,6 @@ export type { ThinkResult } from './mind.engine';
 
 export {
     getPersonaSystemPrompt,
-    buildAnalysisPrompt,
     parseInsightsFromResponse,
     MIND_CONTEXT
 } from './persona.prompts';

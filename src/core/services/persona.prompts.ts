@@ -121,38 +121,6 @@ ${persona.systemPrompt}
 }
 
 // ============================================
-// ANALYSIS PROMPTS
-// ============================================
-
-export function buildAnalysisPrompt(
-    blockData: BlockDataSummary[],
-    question?: string
-): string {
-    const dataSection = blockData.map(block => {
-        return `### ${block.type}: ${block.title}
-${block.summary}
-${block.keyMetrics ? `Key Metrics: ${block.keyMetrics.join(', ')}` : ''}`;
-    }).join('\n\n');
-
-    const basePrompt = `## Current Data Context
-
-${dataSection || 'No data blocks are currently active.'}
-
----
-
-## Your Task
-
-${question || 'Analyze the current data and provide your perspective based on your persona. What patterns, insights, or concerns do you observe?'}
-
-Respond concisely but thoroughly. Be specific about what the data tells you.
-
-**Memory Instructions:**
-If you find information that is critical for long-term retention (not just temporary importance), output it on a separate line starting with "SUGGEST_MEMORY: ".`;
-
-    return basePrompt;
-}
-
-// ============================================
 // TYPES
 // ============================================
 
