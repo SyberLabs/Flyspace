@@ -58,12 +58,6 @@ export interface DataWire {
     /** Current status */
     status: WireStatus;
 
-    /** Last data transfer timestamp */
-    lastTransfer?: number;
-
-    /** Error message if status is 'error' */
-    errorMessage?: string;
-
     /** Shell isolation - ID of the shell this wire belongs to */
     shellId: string;
 
@@ -139,18 +133,6 @@ export interface PersonaChatMessage {
 }
 
 /**
- * Memory entry specific to a persona block
- */
-export interface PersonaMemoryEntry {
-    id: string;
-    content: string;
-    createdAt: number;
-    importance: 'low' | 'medium' | 'high';
-    /** Auto-generated or user-created */
-    source: 'ai' | 'user' | 'crystallized';
-}
-
-/**
  * Data stored in a persona block
  */
 export interface PersonaBlockData {
@@ -162,9 +144,6 @@ export interface PersonaBlockData {
 
     /** Conversation history */
     messages: PersonaChatMessage[];
-
-    /** Per-persona memory pool (working memory) */
-    memory: PersonaMemoryEntry[];
 
     /** Last context update timestamp */
     lastContextUpdate?: number;
@@ -197,7 +176,6 @@ export function createPersonaBlockData(personaType: PersonaType): PersonaBlockDa
     return {
         personaType,
         messages: [],
-        memory: [],
         isCollapsed: false,
         isThinking: false
     };
@@ -224,18 +202,6 @@ export const PERSONA_CONFIGS: Record<PersonaType, {
         avatar: '✨',
         color: 'var(--mind-solar-dawn)',
         description: 'Creative synthesis and inspiration'
-    },
-    sentinel: {
-        name: 'Sentinel',
-        avatar: '👁️',
-        color: 'var(--truth-amber)',
-        description: 'Monitoring and alert systems'
-    },
-    weaver: {
-        name: 'Weaver',
-        avatar: '🕸️',
-        color: 'var(--citadel-accent)',
-        description: 'Personalization and context weaving'
     },
     // Persona block types
     analyst: {

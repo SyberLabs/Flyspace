@@ -21,13 +21,6 @@ import type { ValueType } from './valueType';
 const METHODS: HttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const MAX_OPERATIONS = 100;
 
-export interface CompileOpenApiOptions {
-    baseUrl?: string;
-    /** operationIds to keep. Omit to compile every supported operation. */
-    include?: string[];
-    locator?: string;
-}
-
 export interface CompileIssue {
     operation?: string;
     message: string;
@@ -38,7 +31,7 @@ export interface CompileResult {
     errors: CompileIssue[];
 }
 
-export function compileOpenApi(spec: unknown, options: CompileOpenApiOptions = {}): CompileResult {
+export function compileOpenApi(spec: unknown): CompileResult {
     const errors: CompileIssue[] = [];
     if (!isRecord(spec)) return { manifests: [], errors: [{ message: 'OpenAPI document must be an object' }] };
 
@@ -50,13 +43,12 @@ export function compileOpenApi(spec: unknown, options: CompileOpenApiOptions = {
         return { manifests: [], errors: [{ message: 'OpenAPI document has no paths' }] };
     }
 
-    const base = resolveBaseUrl(spec, options.baseUrl);
+    const base = resolveBaseUrl(spec);
     if ('error' in base) return { manifests: [], errors: [{ message: base.error }] };
 
-    const locator = options.locator
-        ?? (isRecord(spec.info) && typeof spec.info.title === 'string'
-            ? `${spec.info.title}${typeof spec.info.version === 'string' ? `@${spec.info.version}` : ''}`
-            : 'openapi');
+    const locator = isRecord(spec.info) && typeof spec.info.title === 'string'
+        ? `${spec.info.title}${typeof spec.info.version === 'string' ? `@${spec.info.version}` : ''}`
+        : 'openapi';
 
     const manifests: CapabilityManifest[] = [];
     let count = 0;
@@ -73,9 +65,6 @@ export function compileOpenApi(spec: unknown, options: CompileOpenApiOptions = {
             }
             const operationId = typeof operation.operationId === 'string' ? operation.operationId : undefined;
             const label = operationId ?? `${method} ${path}`;
-            if (options.include && !options.include.includes(operationId ?? label) && !options.include.includes(label)) {
-                continue;
-            }
             const compiled = compileOperation({
                 spec,
                 path,
@@ -174,13 +163,12 @@ function chooseEffect(
     return { effect: extension, source: 'extension' };
 }
 
-function resolveBaseUrl(spec: Record<string, unknown>, override?: string): { url: string } | { error: string } {
-    if (override) return { url: stripTrailingSlash(override) };
+function resolveBaseUrl(spec: Record<string, unknown>): { url: string } | { error: string } {
     const servers = Array.isArray(spec.servers) ? spec.servers : [];
     const first = servers.find(isRecord);
     const raw = first && typeof first.url === 'string' ? first.url : '';
-    if (!raw || raw.includes('{')) return { error: 'provide a concrete server URL or baseUrl option' };
-    if (raw.startsWith('/')) return { error: 'relative server URLs need a baseUrl option' };
+    if (!raw || raw.includes('{')) return { error: 'provide a concrete server URL' };
+    if (raw.startsWith('/')) return { error: 'relative server URLs are not supported' };
     return { url: stripTrailingSlash(raw) };
 }
 
@@ -344,9 +332,4 @@ function deref(spec: Record<string, unknown>, value: unknown): unknown {
         current = current[part];
     }
     return current ?? value;
-}
-
-export function slug(value: string): string {
-    const out = value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    return out.slice(0, 60) || 'op';
 }

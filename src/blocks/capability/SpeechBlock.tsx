@@ -2,14 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useBlockStore } from '@/core/stores';
-import {
-    getSpeechEngine,
-    resolveWiredInputs,
-    runInstalledCapability,
-    useCapabilityStore,
-    type SpeechSource,
-    type SpeechSupport
-} from '@/core/capabilities';
+import { getSpeechEngine, type SpeechSource, type SpeechSupport } from '@/core/capabilities/speech';
+import { runInstalledCapability } from '@/core/capabilities/registry';
+import { useCapabilityStore } from '@/core/capabilities/store';
+import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 
 function localityLabel(source: SpeechSource): string {
     if (source === 'on_device') return 'on device';

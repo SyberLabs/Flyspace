@@ -5,7 +5,7 @@
 // the provider. That hop exists so CORS and User-Agent rules cannot empty
 // a block that is sitting on the canvas.
 //
-// Never add a keyed provider here. Those stay on /api/data.
+// Never add a keyed provider here.
 // ============================================
 
 import 'server-only';

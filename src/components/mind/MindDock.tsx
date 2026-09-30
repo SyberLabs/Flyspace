@@ -9,7 +9,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, MessageCircle, Sparkles, ChevronUp, Settings, Zap } from 'lucide-react';
 import { useMindStore } from '@/core/stores';
-import { getMindEngine } from '@/core/services';
+import { getMindEngine } from '@/core/services/mind.engine';
 import { cn } from '@/lib/utils';
 
 interface MindDockProps {

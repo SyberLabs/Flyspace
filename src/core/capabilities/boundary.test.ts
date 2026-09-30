@@ -7,9 +7,10 @@ import {
     ensureSpeechCapabilities,
     installProposal
 } from './registry';
-import { executeCapability, latestExecution } from './execute';
+import { executeCapability } from './execute';
+import { latestExecutionRecord } from './executionLedger';
 import { capabilitySecrets } from './secrets';
-import { openSpeechSession, runSpeechHandler, setSpeechEngine, speechObservations } from './speech';
+import { openSpeechSession, runSpeechHandler, setSpeechEngine } from './speech';
 import { blockRegistry } from '../registry/BlockRegistry';
 import { useBlockStore } from '../stores/blockStore';
 import { useWireStore } from '../stores/wireStore';
@@ -133,8 +134,8 @@ describe('capability production boundaries', () => {
         const result = await executeCapability(pay.id, { body: { amount: 10 } });
         expect(result.error?.code).toBe('EFFECT_UNCERTAIN');
         expect(result.error?.retryable).toBe(false);
-        expect(latestExecution(pay.id)?.status).toBe('uncertain');
-        expect(latestExecution(pay.id)?.dispatchedAt).toBeTypeOf('number');
+        expect(latestExecutionRecord(pay.id)?.status).toBe('uncertain');
+        expect(latestExecutionRecord(pay.id)?.dispatchedAt).toBeTypeOf('number');
     });
 
     it('does not mark an observed write failure as safe to retry', async () => {
@@ -158,7 +159,7 @@ describe('capability production boundaries', () => {
         const result = await executeCapability(pay.id, {});
         expect(result.error?.code).toBe('HTTP_ERROR');
         expect(result.error?.retryable).toBe(false);
-        expect(latestExecution(pay.id)?.status).toBe('failed');
+        expect(latestExecutionRecord(pay.id)?.status).toBe('failed');
     });
 
     it('stops reading once the declared body exceeds the budget', async () => {
@@ -220,7 +221,7 @@ describe('capability production boundaries', () => {
         expect(useWireStore.getState().addWire(sourceId, countId)).toBe('');
     });
 
-    it('cancels a speech session and records a final observation', async () => {
+    it('cancels a speech session', async () => {
         const session = openSpeechSession('listen');
         session.cancel();
         expect(session.signal.aborted).toBe(true);
@@ -232,6 +233,5 @@ describe('capability production boundaries', () => {
         });
         const heard = await runSpeechHandler('speech.listen', {}) as { transcript: string; source: string; sessionId: string };
         expect(heard).toMatchObject({ transcript: 'noted aloud', source: 'on_device' });
-        expect(speechObservations(heard.sessionId).some(item => item.final && item.text === 'noted aloud')).toBe(true);
     });
 });

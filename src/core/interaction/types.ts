@@ -3,50 +3,24 @@
 // Sensor output is evidence. A command is what validation admitted.
 // ============================================
 
-export type InputModality = 'pointer' | 'speech' | 'camera_hand';
+export type InputModality = 'pointer' | 'speech';
 
-export type CoordinateFrame = 'camera_normalized' | 'canvas';
-
-export interface Vec3 {
-    x: number;
-    y: number;
-    z?: number;
-}
+export type CoordinateFrame = 'canvas';
 
 export interface FramedPoint {
     frame: CoordinateFrame;
     x: number;
     y: number;
-    z?: number;
-}
-
-export interface HandLandmark {
-    joint: string;
-    x: number;
-    y: number;
-    z?: number;
-    confidence?: number;
-}
-
-export interface HandObservationFrame {
-    handId: string;
-    handedness?: 'left' | 'right';
-    trackingConfidence: number;
-    landmarks: HandLandmark[];
-    coordinateSpace: 'camera_normalized' | 'hand_relative_world' | 'xr_world';
 }
 
 export type SpatialAction =
     | 'select'
     | 'create'
     | 'move'
-    | 'group'
     | 'connect'
-    | 'compare'
     | 'branch'
     | 'crystallize'
     | 'delete'
-    | 'separate'
     | 'cancel'
     | 'undo'
     | 'open-shell';

@@ -1,14 +1,14 @@
 # Capability compiler
 
 OMNI learns a previously unknown API by compiling it into a
-`CapabilityManifest`, then registering that manifest through the gateway and
-block registry that already exist. No new block file is required.
+`CapabilityManifest`, then registering that manifest as a block type in the
+block registry that already exists. No new block file is required.
 
 ## What stays the same
 
-`API_CATALOG` and its normalizers are untouched. `ApiGateway.fetch` still
-returns `OmniData`. Wires between blocks that do not declare a `ValueType`
-are still accepted. Ports without a schema remain visual hints.
+`API_CATALOG` and its normalizers are untouched. Wires between blocks that do
+not declare a `ValueType` are still accepted. Ports without a schema remain
+visual hints.
 
 ## What a manifest is
 
@@ -40,10 +40,10 @@ A manifest describes a capability. It does not grant itself authority.
 - Capability ids are a hash of canonical origin and operation. Speech handlers keep pinned ids. A different origin cannot reuse an existing id.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
 - Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and input replays. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
-- Triggers are `manual`, `on_create` (once per block), `on_input_change`, `interval`, and `event`. Write and destructive stay manual. Mounting a view is not a trigger.
+- Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
 - HTTP capabilities are `browser_direct` or `server_broker`. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
 - MCP tools compile from schemas and run through a Streamable HTTP client once a server URL is bound.
-- Speech is an observation with a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. Interim results stay on the session until a final transcript. A denied microphone is `Permission denied`, not the browser error code. `Promise<string>` is only the final transcript the block stores.
+- Speech has a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. A denied microphone is `Permission denied`, not the browser error code.
 
 ## Effects
 
@@ -73,19 +73,17 @@ siblings (`typed` and `items`). Wires keep reading `items`.
 
 Installing a manifest:
 
-1. registers an `ApiTypeDefinition` on `apiGateway` under the capability id
-2. registers an `OmniBlockSchema` whose ports carry the real schemas
-3. mirrors the manifest into the vault-backed capability store
+1. registers an `OmniBlockSchema` whose ports carry the real schemas
+2. mirrors the manifest into the vault-backed capability store
 
-`cap_` ids are the only ones `unregisterType` will remove, so a capability
-cannot uninstall Polymarket. Removing a capability drops its gateway entry,
-its block type, and its canvas instances.
+Removing a capability drops its block type and its canvas instances.
 
 Canvas views resolve unknown `cap_*` ids through `getBlockView` to one shared
-`CapabilityBlockView`. Read and compute with `invocation: auto` run on open.
-`invocation: manual`, and every write or destructive effect, wait for an
-explicit control. Invocation is part of the digest because it changes when
-the capability runs. Approval stays outside the digest.
+`CapabilityBlockView`. A block runs through `runInstalledCapability`, not the
+API gateway. `invocation: auto` (an `on_create` trigger) runs once when the
+block is created. `invocation: manual`, and every write or destructive effect,
+wait for an explicit control. Invocation is part of the digest because it
+changes when the capability runs. Approval stays outside the digest.
 
 ## Install session
 

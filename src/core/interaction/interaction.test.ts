@@ -1,14 +1,11 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { evaluateWireAdmission, portsCompatible } from './ports';
 import { InteractionEngine, type CanvasMutator } from './engine';
-import { stepPinch, initialPinch, PINCH_ACTIVATE_DISTANCE, PINCH_RELEASE_DISTANCE, PINCH_STABLE_MS } from './pinch';
 import { resolveReferents } from './referent';
 import { parseSpeech } from './speech';
-import { cameraNormalizedToCanvas, point } from './coordinates';
-import { framesFromLandmarker } from './handLandmarker';
-import { resetSeparation } from './separation';
+import { point } from './coordinates';
 import type { BlockInstance, PortSchema } from '@/core/schemas/block.schema';
-import type { CanvasBlockView, HandObservationFrame } from './types';
+import type { CanvasBlockView } from './types';
 import { useBlockStore } from '@/core/stores';
 import { useWireStore } from '@/core/stores/wireStore';
 
@@ -112,7 +109,6 @@ class MemoryCanvas implements CanvasMutator {
         return { ok: true as const, wireId };
     }
     disconnect(wireId: string) { this.wires = this.wires.filter(wire => wire.id !== wireId); }
-    setGroup() {}
     openShell(target: { id: string; name: string; kind: 'root' | 'template' | 'saved' }) {
         const previousShellId = this.shell;
         this.shell = target.kind === 'root' ? 'root' : target.id;
@@ -120,26 +116,11 @@ class MemoryCanvas implements CanvasMutator {
     }
 }
 
-function hand(distance: number, confidence = 0.9): HandObservationFrame {
-    return {
-        handId: 'camera-0',
-        handedness: 'right',
-        trackingConfidence: confidence,
-        coordinateSpace: 'camera_normalized',
-        landmarks: [
-            { joint: '4', x: 0.4, y: 0.4, z: 0 },
-            { joint: '8', x: 0.4 + distance, y: 0.4, z: 0 },
-            { joint: 'index_tip', x: 0.5, y: 0.5, z: 0 }
-        ]
-    };
-}
-
 describe('spatial command lifecycle', () => {
     let canvas: MemoryCanvas;
     let engine: InteractionEngine;
 
     beforeEach(() => {
-        resetSeparation();
         canvas = new MemoryCanvas();
         canvas.blocks.push(block('news', [jsonOut]));
         canvas.blocks[0].schema.display_name = 'News Feed';
@@ -184,78 +165,9 @@ describe('spatial command lifecycle', () => {
         engine.undo();
         expect(canvas.getInstance('news')?.instance_id).toBe('news');
     });
-
-    it('refuses a typed connect and honors keep-apart', () => {
-        canvas.blocks.push(block('note', [textOut]));
-        canvas.blocks[1].schema.display_name = 'Note';
-        canvas.blocks[1].position = { x: 400, y: 10 };
-        canvas.blocks.push(block('typed', [textIn]));
-        canvas.blocks[2].schema.display_name = 'Typed';
-        engine.select(['news', 'typed']);
-        const refused = engine.speak('connect this to that', 4000);
-        expect(refused.lifecycle).toBe('refused');
-        expect(canvas.wires).toHaveLength(0);
-
-        engine.select(['news', 'note']);
-        expect(engine.speak('keep these apart', 4100).lifecycle).toBe('committed');
-        const again = engine.speak('connect this to that', 4200);
-        expect(again.lifecycle).toBe('refused');
-        expect(again.reason).toBe('kept-separate');
-    });
-
-    it('commits a pinch move and cancels when tracking drops', () => {
-        const start = 10_000;
-        engine.setViewport({ width: 200, height: 100, panX: 0, panY: 0, zoom: 1 });
-        engine.observeHand(hand(PINCH_ACTIVATE_DISTANCE - 0.01), start);
-        engine.observeHand(hand(PINCH_ACTIVATE_DISTANCE - 0.01), start + PINCH_STABLE_MS);
-        expect(engine.snapshot().preview?.lifecycle).toBe('previewing');
-        const lost = engine.observeHand({ ...hand(0.01), trackingConfidence: 0, landmarks: [] }, start + 500);
-        expect(lost?.reason).toBe('tracking-lost');
-        expect(canvas.getInstance('news')?.position).toEqual({ x: 10, y: 10 });
-    });
-
-    it('does not write landmarks or video into the committed trace', () => {
-        const start = 20_000;
-        engine.setViewport({ width: 200, height: 100, panX: 0, panY: 0, zoom: 1 });
-        engine.observeHand(hand(0.02), start);
-        engine.observeHand(hand(0.02), start + PINCH_STABLE_MS);
-        engine.observeHand(hand(PINCH_RELEASE_DISTANCE + 0.01), start + PINCH_STABLE_MS + 40);
-        const encoded = JSON.stringify(engine.snapshot());
-        expect(encoded).not.toContain('landmarks');
-        expect(encoded).not.toContain('video');
-        expect(engine.snapshot().traces.some(trace => trace.command === 'MOVE')).toBe(true);
-    });
 });
 
-describe('pinch hysteresis and deixis', () => {
-    it('does not activate on a single frame under the threshold', () => {
-        const first = stepPinch(initialPinch('h'), {
-            distance: PINCH_ACTIVATE_DISTANCE - 0.01,
-            at: 0,
-            anchor: { x: 1, y: 1 },
-            tracking: true
-        });
-        expect(first.phase).toBe('candidate');
-        const bounced = stepPinch(first, {
-            distance: PINCH_ACTIVATE_DISTANCE + 0.01,
-            at: 30,
-            anchor: { x: 1, y: 1 },
-            tracking: true
-        });
-        expect(bounced.phase).toBe('inactive');
-    });
-
-    it('activates only after the stable window and releases on the wider threshold', () => {
-        let state = initialPinch('h');
-        state = stepPinch(state, { distance: 0.05, at: 0, anchor: { x: 0, y: 0 }, tracking: true });
-        state = stepPinch(state, { distance: 0.05, at: PINCH_STABLE_MS, anchor: { x: 0, y: 0 }, tracking: true });
-        expect(state.phase).toBe('active');
-        state = stepPinch(state, { distance: 0.1, at: PINCH_STABLE_MS + 20, anchor: { x: 0, y: 0 }, tracking: true });
-        expect(state.phase).toBe('active');
-        state = stepPinch(state, { distance: PINCH_RELEASE_DISTANCE, at: PINCH_STABLE_MS + 40, anchor: { x: 0, y: 0 }, tracking: true });
-        expect(state.phase).toBe('end');
-    });
-
+describe('referents and speech', () => {
     it('holds two candidates and resolves one named block', () => {
         const blocks = [
             { id: 'a', shellId: 'root', blockId: 'news', name: 'News', tags: ['news'], x: 0, y: 0, width: 10, height: 10 },
@@ -273,7 +185,6 @@ describe('pinch hysteresis and deixis', () => {
     it('parses the spoken command set and nothing beyond it', () => {
         expect(parseSpeech('Create a researcher.')?.personaBlockId).toBe('persona_researcher');
         expect(parseSpeech('give these to the analyst')?.action).toBe('connect');
-        expect(parseSpeech('compare these')?.action).toBe('compare');
         expect(parseSpeech('wave at the canvas')).toBeNull();
     });
 
@@ -356,22 +267,5 @@ describe('pinch hysteresis and deixis', () => {
         const confirmed = voiced.speak('confirm');
         expect(confirmed.summary).toBe('Deleted News Feed.');
         expect(board.getInstance('news')).toBeUndefined();
-    });
-
-    it('maps camera-normalized points explicitly into canvas space', () => {
-        const canvasPoint = cameraNormalizedToCanvas(point('camera_normalized', 0.5, 1), {
-            width: 200, height: 100, panX: 0, panY: 0, zoom: 1
-        });
-        expect(canvasPoint).toEqual({ frame: 'canvas', x: 100, y: 100 });
-    });
-
-    it('turns landmarker output into observations without retaining an image', () => {
-        const frames = framesFromLandmarker({
-            landmarks: [[{ x: 0.1, y: 0.2, z: 0 }, { x: 0.2, y: 0.2, z: 0 }]],
-            handedness: [[{ categoryName: 'Right', score: 0.8 }]]
-        });
-        expect(frames[0].handedness).toBe('right');
-        expect(frames[0].landmarks[0]).toMatchObject({ joint: 'wrist', x: 0.1, y: 0.2 });
-        expect(JSON.stringify(frames)).not.toContain('data:image');
     });
 });

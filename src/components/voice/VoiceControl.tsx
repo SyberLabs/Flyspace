@@ -3,9 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { browserDictation, browserVoice, createPushToTalk, type DictationSession, type Voice } from '@/core/interaction/pushToTalk';
 import { spatialSession } from '@/core/interaction/session';
-import { createLocalHandLandmarker, framesFromLandmarker, type HandLandmarkerLike } from '@/core/interaction/handLandmarker';
 import { useUIStore } from '@/core/stores';
-import type { HandLandmark } from '@/core/interaction/types';
 
 function usesSpace(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
@@ -30,12 +28,8 @@ export function VoiceControl({
     const voiceRef = useRef(voice);
     const pressRef = useRef<() => void>(() => undefined);
     const releaseRef = useRef<() => Promise<void>>(async () => undefined);
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const stopCamera = useRef<(() => void) | null>(null);
     const [held, setHeld] = useState(false);
     const [reply, setReply] = useState('Hold to talk. Click a block, then speak.');
-    const [sensing, setSensing] = useState(false);
-    const [ghost, setGhost] = useState<HandLandmark[]>([]);
 
     useEffect(() => {
         voiceRef.current = voice;
@@ -43,7 +37,6 @@ export function VoiceControl({
 
     useEffect(() => () => {
         talk.current.cancel();
-        stopCamera.current?.();
     }, []);
 
     function say(text: string) {
@@ -114,53 +107,6 @@ export function VoiceControl({
         };
     }, []);
 
-    async function toggleCamera() {
-        if (sensing) {
-            stopCamera.current?.();
-            stopCamera.current = null;
-            setSensing(false);
-            setGhost([]);
-            return;
-        }
-        const video = videoRef.current;
-        if (!video || !navigator.mediaDevices?.getUserMedia) {
-            say('This browser has no camera. Point and speech still work.');
-            return;
-        }
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
-            video.srcObject = stream;
-            await video.play();
-            let landmarker: HandLandmarkerLike;
-            try {
-                landmarker = await createLocalHandLandmarker();
-            } catch (error) {
-                stream.getTracks().forEach(track => track.stop());
-                say(error instanceof Error ? error.message : 'Hand sensing is unavailable.');
-                return;
-            }
-            let frame = 0;
-            const tick = () => {
-                frame = requestAnimationFrame(tick);
-                const hands = framesFromLandmarker(landmarker.detectForVideo(video, performance.now()));
-                setGhost(hands[0]?.landmarks ?? []);
-                for (const hand of hands) spatialSession.observeHand(hand, performance.now());
-            };
-            frame = requestAnimationFrame(tick);
-            stopCamera.current = () => {
-                cancelAnimationFrame(frame);
-                landmarker.close?.();
-                stream.getTracks().forEach(track => track.stop());
-                video.srcObject = null;
-                setGhost([]);
-            };
-            setSensing(true);
-            say('Camera stays in this browser. Pinch a block to move it.');
-        } catch (error) {
-            say(error instanceof Error ? error.message : 'Camera permission was refused.');
-        }
-    }
-
     return (
         <div className="absolute bottom-6 left-4 z-40 w-64 rounded-2xl border border-[var(--citadel-border)] bg-[var(--citadel-surface)]/95 p-3 shadow-xl backdrop-blur-md">
             <p className="mb-2 min-h-8 text-xs text-[var(--text-secondary)]" role="status">{reply}</p>
@@ -197,22 +143,7 @@ export function VoiceControl({
                 >
                     {held ? 'Listening' : 'Hold to talk'}
                 </button>
-                <button
-                    type="button"
-                    onClick={() => { void toggleCamera(); }}
-                    className="rounded-full border border-[var(--citadel-border)] px-2 py-1 text-xs text-[var(--text-secondary)]"
-                >
-                    {sensing ? 'Stop camera' : 'Camera'}
-                </button>
             </div>
-            <video ref={videoRef} className={sensing ? 'mt-2 h-16 w-full rounded-lg bg-black object-cover' : 'hidden'} muted playsInline />
-            {sensing ? (
-                <svg viewBox="0 0 1 1" className="mt-2 h-12 w-full rounded-lg bg-[var(--citadel-void)]" aria-label="Hand ghost">
-                    {ghost.map(joint => (
-                        <circle key={joint.joint} cx={joint.x} cy={joint.y} r={0.02} fill="var(--ice)" />
-                    ))}
-                </svg>
-            ) : null}
         </div>
     );
 }

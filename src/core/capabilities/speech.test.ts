@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { blockRegistry } from '../registry/BlockRegistry';
-import { apiGateway } from '../gateway/ApiGateway';
 import {
     clearCapabilities,
     ensureSpeechCapabilities,
@@ -52,7 +51,6 @@ describe('speech capabilities', () => {
         expect(blockRegistry.get('cap_speech_speak')?.icon).toBe('Volume2');
         expect(blockRegistry.get('cap_speech_listen')?.icon).toBe('Mic');
         expect(blockRegistry.get('cap_speech_speak')?.ports?.find(port => port.id === 'in')?.schema?.kind).toBe('object');
-        expect(apiGateway.isRegistered('polymarket')).toBe(true);
     });
 
     it('speaks text and returns a typed spoken string', async () => {

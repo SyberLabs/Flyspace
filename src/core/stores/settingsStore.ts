@@ -25,11 +25,8 @@ export const useSettingsStore = create<SettingsState>()(
     persist(
         (set) => ({
             useMockData: true,
-            activeShellId: null,
             gridSnapping: true,
             gridSize: 20,
-            autoWiring: true,
-            showConnections: true,
 
             updateSetting: (key, value) => set({ [key]: value }),
 

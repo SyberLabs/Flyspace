@@ -5,9 +5,8 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { DataWire, WireFilters, WireStatus, DEFAULT_WIRE_FILTERS } from '../schemas/wire.schema';
+import { DataWire, WireFilters, DEFAULT_WIRE_FILTERS } from '../schemas/wire.schema';
 import { evaluateWireAdmission } from '../interaction/ports';
-import { isSeparated } from '../interaction/separation';
 // Direct, not via the barrel. blockStore and wireStore are genuinely mutual —
 // deleting a block clears its wires, and a new wire defaults to the active
 // shell — but every use is a lazy .getState() inside a function body, so the
@@ -38,15 +37,6 @@ interface WireStoreState {
     /** Replace a shell's wires wholesale (shell load/restore) */
     replaceWiresForShell: (shellId: string, wires: DataWire[]) => void;
 
-    /** Update wire filters */
-    updateWireFilters: (wireId: string, filters: Partial<WireFilters>) => void;
-
-    /** Update wire status */
-    updateWireStatus: (wireId: string, status: WireStatus, errorMessage?: string) => void;
-
-    /** Record a data transfer */
-    recordTransfer: (wireId: string) => void;
-
     /** Get wires where block is source */
     getWiresFromBlock: (blockId: string) => DataWire[];
 
@@ -70,10 +60,6 @@ export const useWireStore = create<WireStoreState>()(
             lastAdmissionRefusal: null,
 
             addWire: (sourceBlockId, targetBlockId, filters, shellId) => {
-                if (isSeparated(sourceBlockId, targetBlockId)) {
-                    set({ lastAdmissionRefusal: 'kept-separate' });
-                    return '';
-                }
                 const blocks = useBlockStore.getState();
                 const typed = evaluateWireAdmission(
                     blocks.getBlock(sourceBlockId),
@@ -161,36 +147,6 @@ export const useWireStore = create<WireStoreState>()(
                 }));
             },
 
-            updateWireFilters: (wireId, filters) => {
-                set(state => ({
-                    wires: state.wires.map(w =>
-                        w.id === wireId
-                            ? { ...w, filters: { ...w.filters, ...filters } }
-                            : w
-                    )
-                }));
-            },
-
-            updateWireStatus: (wireId, status, errorMessage) => {
-                set(state => ({
-                    wires: state.wires.map(w =>
-                        w.id === wireId
-                            ? { ...w, status, errorMessage }
-                            : w
-                    )
-                }));
-            },
-
-            recordTransfer: (wireId) => {
-                set(state => ({
-                    wires: state.wires.map(w =>
-                        w.id === wireId
-                            ? { ...w, lastTransfer: Date.now(), status: 'active' }
-                            : w
-                    )
-                }));
-            },
-
             getWiresFromBlock: (blockId) => {
                 return get().wires.filter(w => w.sourceBlockId === blockId);
             },
@@ -243,5 +199,3 @@ export const useWireStore = create<WireStoreState>()(
         }
     )
 );
-
-export default useWireStore;

@@ -8,7 +8,6 @@ export function describeCommand(command: SpatialCommand, nameOf: (id: string) =>
         if (command.reason === 'unrecognized-speech') return "I didn't catch a command.";
         if (command.reason === 'ambiguous-block') return 'Which block do you mean?';
         if (command.reason === 'ambiguous-shell') return 'Which shell do you mean?';
-        if (command.reason === 'kept-separate') return 'Those stay separate.';
         if (command.reason === 'nothing-pending') return 'Nothing is waiting for confirm.';
         if (command.reason === 'missing-shell') return "I can't find that shell.";
         if (command.reason === 'missing-block') return "I can't see that block.";
@@ -42,9 +41,6 @@ export function describeCommand(command: SpatialCommand, nameOf: (id: string) =>
         if (command.action === 'connect') return `Wired ${subject} to ${target}.`;
         if (command.action === 'delete') return `Deleted ${subject}.`;
         if (command.action === 'open-shell') return `Opened ${command.create?.displayName ?? 'that shell'}.`;
-        if (command.action === 'group') return 'Grouped those blocks.';
-        if (command.action === 'separate') return 'Keeping those apart.';
-        if (command.action === 'compare') return 'Added a comparison.';
         return 'Done.';
     }
 

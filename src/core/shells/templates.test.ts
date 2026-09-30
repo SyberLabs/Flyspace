@@ -40,20 +40,6 @@ describe('keyedProvidersForTemplate — what a shell needs before it spawns', ()
     it.each(SHELL_TEMPLATES.map(t => t.id))('%s needs zero keyed providers', (id) => {
         expect(keyedProvidersForTemplate(getShellTemplate(id)!)).toEqual([]);
     });
-
-    it('a template containing a keyed block reports that provider', () => {
-        const investor = getShellTemplate('tmpl_investor')!;
-        const withFred: ShellTemplate = {
-            ...investor,
-            blocks: [
-                ...investor.blocks,
-                { ref: 'fred', blockId: 'fred_series', position: { x: 0, y: 0 } }
-            ]
-        };
-        const keyed = keyedProvidersForTemplate(withFred);
-        expect(keyed.map(p => p.id)).toEqual(['fred']);
-        expect(keyed[0].envVar).toBe('FRED_API_KEY');
-    });
 });
 
 describe('validateTemplate — catches authoring mistakes', () => {
@@ -66,7 +52,7 @@ describe('validateTemplate — catches authoring mistakes', () => {
         aesthetic: 'command',
         blocks: [
             { ref: 'a', blockId: 'persona_analyst', position: { x: 0, y: 0 } },
-            { ref: 'b', blockId: 'newsapi_feed', position: { x: 0, y: 0 } },
+            { ref: 'b', blockId: 'hackernews_feed', position: { x: 0, y: 0 } },
         ],
         connections: [{ sourceRef: 'b', targetRef: 'a' }],
     };
@@ -92,7 +78,7 @@ describe('validateTemplate — catches authoring mistakes', () => {
             ...base,
             blocks: [
                 { ref: 'a', blockId: 'persona_analyst', position: { x: 0, y: 0 } },
-                { ref: 'a', blockId: 'newsapi_feed', position: { x: 0, y: 0 } },
+                { ref: 'a', blockId: 'hackernews_feed', position: { x: 0, y: 0 } },
             ],
             connections: [],
         };

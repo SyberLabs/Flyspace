@@ -15,10 +15,6 @@ export const capabilitySecrets = {
         return slots.get(ref);
     },
 
-    delete(ref: string): void {
-        slots.delete(ref);
-    },
-
     clear(): void {
         slots.clear();
     }

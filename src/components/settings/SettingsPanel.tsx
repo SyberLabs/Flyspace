@@ -19,7 +19,7 @@ import {
     HardDrive
 } from 'lucide-react';
 import { useSettingsStore } from '@/core/stores';
-import { testNewsConnection, testPolymarketConnection } from '@/core/services/api.service';
+import { testPolymarketConnection } from '@/core/services/api.service';
 import { exportVault, importVault, isVaultExport } from '@/core/vault';
 import { getKeylessApis } from '@/core/schemas/api.schema';
 import { cn } from '@/lib/utils';
@@ -32,10 +32,8 @@ interface SettingsPanelProps {
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     const { useMockData, toggleMockData } = useSettingsStore();
 
-    const [testingNews, setTestingNews] = useState(false);
     const [testingPolymarket, setTestingPolymarket] = useState(false);
 
-    const [newsTestResult, setNewsTestResult] = useState<{ success: boolean; message: string } | null>(null);
     const [polymarketTestResult, setPolymarketTestResult] = useState<{ success: boolean; message: string } | null>(null);
     const [dataResult, setDataResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -72,19 +70,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             setDataResult({ success: false, message: 'Import failed — file unreadable.' });
             setTimeout(() => setDataResult(null), 5000);
         }
-    };
-
-    const handleTestNews = async () => {
-        setTestingNews(true);
-        const result = await testNewsConnection();
-        setTestingNews(false);
-
-        setNewsTestResult({
-            success: result.success,
-            message: result.success ? 'Connection successful!' : result.error || 'Connection failed'
-        });
-
-        setTimeout(() => setNewsTestResult(null), 5000);
     };
 
     const handleTestPolymarket = async () => {
@@ -181,63 +166,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                 </div>
                             </div>
 
-                            {/* NewsAPI Configuration — server-side via .env */}
-                            <div className="space-y-3">
-                                <div className="flex items-center gap-2">
-                                    <Key className="w-4 h-4 text-[var(--truth-amber)]" />
-                                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                                        NewsAPI Configuration
-                                    </h3>
-                                </div>
-
-                                <div className="space-y-3 p-4 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
-                                    <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                                        NewsAPI is configured on the server. Set{' '}
-                                        <code className="px-1 py-0.5 rounded bg-[var(--citadel-bg)] text-[var(--text-primary)]">NEWSAPI_KEY</code>{' '}
-                                        in your <code className="px-1 py-0.5 rounded bg-[var(--citadel-bg)] text-[var(--text-primary)]">.env</code> file
-                                        (get a key from{' '}
-                                        <a
-                                            href="https://newsapi.org/"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-[var(--citadel-primary)] hover:underline"
-                                        >
-                                            newsapi.org
-                                        </a>
-                                        ). Keys are never stored in the browser.
-                                    </p>
-
-                                    <button
-                                        onClick={handleTestNews}
-                                        disabled={testingNews}
-                                        className="w-full px-3 py-2 bg-[var(--truth-amber)] hover:bg-[var(--truth-amber)]/80 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <TestTube className="w-4 h-4" />
-                                        {testingNews ? 'Testing...' : 'Test Connection'}
-                                    </button>
-
-                                    {newsTestResult && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: -10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className={cn(
-                                                "flex items-center gap-2 p-3 rounded-lg text-sm",
-                                                newsTestResult.success
-                                                    ? "bg-[var(--truth-green)]/10 text-[var(--truth-green)]"
-                                                    : "bg-[var(--truth-red)]/10 text-[var(--truth-red)]"
-                                            )}
-                                        >
-                                            {newsTestResult.success ? (
-                                                <Check className="w-4 h-4" />
-                                            ) : (
-                                                <AlertCircle className="w-4 h-4" />
-                                            )}
-                                            <span>{newsTestResult.message}</span>
-                                        </motion.div>
-                                    )}
-                                </div>
-                            </div>
-
                             {/* Keyless demo APIs */}
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2">
@@ -249,7 +177,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
                                 <div className="space-y-3 p-4 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
                                     <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                                        These {getKeylessApis().length} connectors are installed by default and work with nothing in{' '}
+                                        These {getKeylessApis().length} connectors work with nothing in{' '}
                                         <code className="px-1 py-0.5 rounded bg-[var(--citadel-bg)] text-[var(--text-primary)]">.env</code>.
                                         Drag them from the Armory, or spawn World Watch / Investor / Researcher.
                                     </p>
@@ -357,9 +285,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             <div className="p-4 bg-[var(--citadel-primary)]/5 border border-[var(--citadel-primary)]/20 rounded-lg">
                                 <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                                     <strong className="text-[var(--citadel-primary)]">Tip:</strong> Twelve demo APIs need no key.
-                                    NewsAPI, FRED, and the other keyed connectors read{' '}
-                                    <code className="px-1 py-0.5 rounded bg-[var(--citadel-bg)] text-[var(--text-primary)]">.env</code>{' '}
-                                    on the server only — never the browser. Toggle &quot;Use Mock Data&quot; to explore without live calls.
+                                    Toggle &quot;Use Mock Data&quot; to explore without live calls.
                                 </p>
                             </div>
                         </div>
@@ -369,5 +295,3 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         </AnimatePresence>
     );
 }
-
-export default SettingsPanel;
