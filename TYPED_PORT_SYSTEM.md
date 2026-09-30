@@ -16,27 +16,25 @@ declared input port of the target take part in admission. `BlockCard` and
 
 ## What is checked
 
-`wireStore.addWire` runs three checks in order. Any refusal returns `''` and
+`wireStore.addWire` runs two checks in order. Any refusal returns `''` and
 leaves the graph unchanged.
 
-1. **Kept separate** (`src/core/interaction/separation.ts`). A pair the user
-   asked to keep apart is refused. This list is in memory only.
-2. **`admitConnection`** (`src/core/capabilities/compatibility.ts`):
+1. **`admitConnection`** (`src/core/capabilities/compatibility.ts`):
    - refuses a self-wire, a missing block, and a wire between two shells;
    - when both ports carry a `schema` and the target is not `any`, the source
      must be assignable to the target (`isAssignable`), otherwise the wire is
      refused with a sentence naming both ports and kinds;
    - returns the projection to record on the wire (below).
-3. **`evaluateWireAdmission`** (`src/core/interaction/ports.ts`), on
+2. **`evaluateWireAdmission`** (`src/core/interaction/ports.ts`), on
    `dataType`: an `any` input accepts every output, an `any` output feeds only an
    `any` input, otherwise the types must be equal. A mismatch is refused unless
-   check 2 already chose a `text` or `join_titles` projection.
+   check 1 already chose a `text` or `join_titles` projection.
 
 ## Untyped blocks
 
 A block with no declared ports is treated as an `any` output and an `any`
 input. As a target it accepts anything. As a source it feeds `any` inputs
-(persona and chat blocks declare `any` inputs, so data-to-persona wires need no
+(persona blocks declare `any` inputs, so data-to-persona wires need no
 conversion). It is refused by a target that declares a typed `text`, `json`, or
 `media` input with no string-sink schema.
 
@@ -64,8 +62,7 @@ read ports or projections.
 
 `addWire` sets `useWireStore.getState().lastAdmissionRefusal`. It is a sentence
 from `admitConnection` (for example `wires stay inside one shell`), a code from
-`evaluateWireAdmission` (`incompatible-type`, `no-output`, `no-input`), or
-`kept-separate`. Spoken and pointer input read it and answer "I can't wire
+`evaluateWireAdmission` (`incompatible-type`, `no-output`, `no-input`). Spoken and pointer input read it and answer "I can't wire
 those." `wireService.createWire` returns `''` on an `admitConnection` refusal
 without setting it.
 
@@ -73,8 +70,7 @@ without setting it.
 
 Shell restore and template instantiation write wires through
 `replaceWiresForShell`, which re-runs `admitConnection` and silently drops any
-wire it refuses. It does not re-run the `dataType` check or the kept-separate
-list. Wires already in persisted storage are not re-validated on load.
+wire it refuses. It does not re-run the `dataType` check. Wires already in persisted storage are not re-validated on load.
 
 ## Tests
 
