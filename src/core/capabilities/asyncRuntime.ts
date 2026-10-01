@@ -20,7 +20,10 @@ export interface AsyncJobRuntime {
     poll(operation: string, externalRunId: string, call: AsyncCall): Promise<AsyncObservation>;
 }
 
-/** Thrown by a runtime when the destination answered and refused the start. */
+/**
+ * Thrown by a runtime when the start was refused: by the destination, or by
+ * the runtime itself before anything was sent. Either way no run exists.
+ */
 export class AsyncStartRejected extends Error {
     constructor(message: string) {
         super(message);

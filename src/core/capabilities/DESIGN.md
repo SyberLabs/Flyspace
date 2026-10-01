@@ -44,8 +44,12 @@ time, schema digest) into the digest, then calls `installProposal`.
 `providers/maxunProvider.ts` is a `web_data` provider: a scrape robot becomes
 `{ markdown: string }`, an extract robot becomes an object of its declared
 text fields, and a robot with no declared fields is reported, not admitted as
-`any`. Its proposals use the async `maxun` runtime (`providers/maxunRuntime.ts`,
-Maxun's REST start and run lookup) with the API key in the `x-api-key` slot.
+`any`. Its proposals use the async `maxun` runtime (`providers/maxunRuntime.ts`)
+with the API key in the `x-api-key` slot. That runtime's start is fenced: Maxun's
+open-source server answers `POST /api/robots/:id/runs` only after the run
+finishes, so no run id could be recorded for a run longer than one request.
+Until an early-acknowledgement start is verified, start sends nothing and
+execution fails `ASYNC_START_REJECTED`. Only the run lookup by id is implemented.
 `providers/maxun.evaluation.ts` records that no live Maxun run was performed.
 `providers/managedProvider.ts` is a `managed_integration` provider: a
 Pipedream- or Composio-style catalog entry becomes an http proposal against the

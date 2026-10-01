@@ -58,50 +58,28 @@ function virtualClock(start = NOW): AsyncClock {
 }
 
 // ---------------------------------------------------------------------------
-// A local stand-in for Maxun's REST run endpoints. It follows the documented
-// shape: POST /api/robots/{id}/runs returns { runId, status }, and
-// GET /api/robots/{id}/runs/{runId} returns { runId, status, data }. It is not
-// Maxun and measures nothing about Maxun.
+// A local stand-in for Maxun's run lookup, GET /api/robots/{id}/runs/{runId},
+// in the shape that handler returns in the open-source server:
+// { statusCode, messageCode, run: { runId, status, data } }. It is not Maxun and
+// measures nothing about Maxun.
 // ---------------------------------------------------------------------------
 
-interface FixtureRun { runId: string; robotId: string; startedAt: number }
-
-function maxunServer(clock: AsyncClock, options: {
-    finishAfterMs?: number;
-    startStatus?: number;
-    pollStatus?: string;
-    data?: Record<string, unknown>;
-} = {}) {
-    const runs = new Map<string, FixtureRun>();
+function maxunRunLookup(run: { runId: string; status: string; data?: Record<string, unknown> }) {
     const seen: Array<{ method: string; url: string; headers: Record<string, string>; redirect?: RequestRedirect }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
         const url = String(input);
         const headers = { ...(init?.headers as Record<string, string>) };
         seen.push({ method: init?.method ?? 'GET', url, headers, redirect: init?.redirect });
-        if (headers['x-api-key'] !== KEY) return json(401, { error: 'Unauthorized' });
-        const start = /^https:\/\/maxun\.fixture\.test\/api\/robots\/([^/]+)\/runs$/.exec(url);
-        if (start && init?.method === 'POST') {
-            if (options.startStatus) return json(options.startStatus, { error: 'nope' });
-            const run = { runId: `mx-run-${runs.size + 1}`, robotId: decodeURIComponent(start[1]), startedAt: clock.now() };
-            runs.set(run.runId, run);
-            return json(200, { runId: run.runId, status: 'running' });
+        if (headers['x-api-key'] !== KEY) return json(401, { ok: false, error: 'Unauthorized' });
+        if (init?.method !== 'GET' || !/^https:\/\/maxun\.fixture\.test\/api\/robots\/[^/]+\/runs\/[^/]+$/.test(url)) {
+            return json(404, { error: 'no route' });
         }
-        const poll = /^https:\/\/maxun\.fixture\.test\/api\/robots\/([^/]+)\/runs\/([^/]+)$/.exec(url);
-        if (poll) {
-            const run = runs.get(decodeURIComponent(poll[2]));
-            if (!run) return json(404, { error: 'not found' });
-            const done = clock.now() - run.startedAt >= (options.finishAfterMs ?? 45_000);
-            if (!done) return json(200, { runId: run.runId, status: 'running' });
-            return json(200, {
-                runId: run.runId,
-                status: options.pollStatus ?? 'success',
-                data: options.data ?? { markdown: '# Plans\nPro $12', html: '<h1>Plans</h1>', textData: {}, listData: [] }
-            });
-        }
-        return json(404, { error: 'no route' });
+        return json(200, { statusCode: 200, messageCode: 'success', run });
     };
-    return { fetchImpl, seen, runs };
+    return { fetchImpl, seen };
 }
+
+const LOOKUP = { headers: { 'x-api-key': KEY }, idempotencyKey: 'lookup-0001' };
 
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -189,102 +167,120 @@ describe('maxun web_data provider', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// The start contract Maxun's open-source server actually implements
+// (getmaxun/maxun server/src/api/record.ts, POST /robots/:id/runs, at
+// e17d5ed33a3c90220fba54c78f449a1f55043cb9 and unchanged at develop
+// bf3187eff7f644bfbcc1c130fb85bad332bbd420): the handler awaits
+// waitForRunCompletion before it answers, so the run id arrives only with the
+// finished run. The SDK route POST /sdk/robots/:id/execute waits the same way.
+// This fixture holds the POST until the run completes or the caller aborts.
+// ---------------------------------------------------------------------------
+
+function blockingMaxunServer() {
+    const seen: Array<{ method: string; url: string }> = [];
+    let markPosted: () => void = () => {};
+    const posted = new Promise<void>(resolve => { markPosted = resolve; });
+    const fetchImpl: typeof fetch = async (input, init) => {
+        const url = String(input);
+        seen.push({ method: init?.method ?? 'GET', url });
+        if (init?.method === 'POST') {
+            markPosted();
+            // The run outlives the request: nothing comes back before the abort.
+            return new Promise<Response>((_resolve, reject) => {
+                const abort = () => reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' }));
+                if (init.signal?.aborted) abort();
+                init.signal?.addEventListener('abort', abort, { once: true });
+            });
+        }
+        return json(404, { statusCode: 404, messageCode: 'not_found' });
+    };
+    return { fetchImpl, seen, posted };
+}
+
+describe('maxun start contract', () => {
+    it('sends no start while the only verified start holds the request until the run finishes', async () => {
+        const clock = virtualClock();
+        const server = blockingMaxunServer();
+        bindAsyncRuntime('maxun', boundRuntime(server.fetchImpl));
+        capabilitySecrets.set(SLOT, KEY);
+        const manifest = await install('rb-pricing');
+        approveCapability(manifest.id);
+
+        // The abort stands in for the 15 s request timeout firing before the run completes.
+        const controller = new AbortController();
+        const pending = executeCapability(manifest.id, {}, { clock, signal: controller.signal, idempotencyKey: 'blocking-start-01' });
+        await Promise.race([server.posted.then(() => controller.abort()), pending]);
+        const result = await pending;
+
+        expect(server.seen.filter(call => call.method === 'POST')).toHaveLength(0);
+        expect(result.ok).toBe(false);
+        expect(result.error?.code).toBe('ASYNC_START_REJECTED');
+        expect(result.error?.message).toMatch(/no verified asynchronous start contract/);
+        const record = executionRecord(result.runId!)!;
+        expect(record.status).toBe('failed');
+        expect(record.externalRunId).toBeUndefined();
+
+        const replay = await executeCapability(manifest.id, {}, { clock, idempotencyKey: 'blocking-start-01' });
+        expect(replay.error?.code).toBe('ASYNC_START_REJECTED');
+        expect(server.seen).toHaveLength(0);
+    });
+});
+
 describe('maxun runtime through the async profile', () => {
-    it('runs a scrape robot past the 15s request timeout and returns a typed value', async () => {
-        const clock = virtualClock();
-        const server = maxunServer(clock, { finishAfterMs: 45_000 });
-        bindAsyncRuntime('maxun', boundRuntime(server.fetchImpl));
-        capabilitySecrets.set(SLOT, KEY);
-        const manifest = await install('rb-pricing');
-        approveCapability(manifest.id);
-
-        const result = await executeCapability(manifest.id, {}, { clock });
-        expect(result.ok, result.error?.message).toBe(true);
-        expect(result.typed?.value).toEqual({ markdown: '# Plans\nPro $12' });
-        expect(clock.now() - NOW).toBeGreaterThan(15_000);
-
-        const posts = server.seen.filter(call => call.method === 'POST');
-        expect(posts).toHaveLength(1);
-        expect(posts[0].url).toBe(`${BASE}/api/robots/rb-pricing/runs`);
-        expect(server.seen.every(call => call.headers['x-api-key'] === KEY && call.redirect === 'error')).toBe(true);
-        expect(executionRecord(result.runId!)).toMatchObject({
-            status: 'succeeded',
-            providerId: 'maxun',
-            externalRunId: 'mx-run-1',
-            executionProfile: 'async_poll'
+    it('reads a scrape run by id and returns only the typed markdown', async () => {
+        const server = maxunRunLookup({
+            runId: 'mx-run-1',
+            status: 'success',
+            data: { markdown: '# Plans', html: '<h1>Plans</h1>', textData: {}, listData: {} }
         });
-        expect(JSON.stringify(executionRecords())).not.toContain(KEY);
+        const runtime = boundRuntime(server.fetchImpl);
+        const observed = await runtime.poll('scrape:rb-pricing', 'mx-run-1', { ...LOOKUP, signal: new AbortController().signal });
+        expect(observed).toEqual({ status: 'succeeded', value: { markdown: '# Plans' } });
+        expect(server.seen).toHaveLength(1);
+        expect(server.seen[0]).toMatchObject({ method: 'GET', url: `${BASE}/api/robots/rb-pricing/runs/mx-run-1`, redirect: 'error' });
+        expect(server.seen[0].headers['x-api-key']).toBe(KEY);
     });
 
-    it('types an extract robot by its declared fields and refuses a result that lacks one', async () => {
-        const clock = virtualClock();
-        capabilitySecrets.set(SLOT, KEY);
-        const manifest = await install('rb-listing');
-        approveCapability(manifest.id);
-
-        bindAsyncRuntime('maxun', boundRuntime(
-            maxunServer(clock, { data: { textData: { title: 'Desk', price: '$120' } } }).fetchImpl
-        ));
-        const ok = await executeCapability(manifest.id, {}, { clock });
-        expect(ok.typed?.value).toEqual({ title: 'Desk', price: '$120' });
-
-        bindAsyncRuntime('maxun', boundRuntime(
-            maxunServer(clock, { data: { textData: { title: 'Desk' } } }).fetchImpl
-        ));
-        const partial = await executeCapability(manifest.id, {}, { clock });
-        expect(partial.error?.code).toBe('TYPED_OUTPUT_MISMATCH');
+    it('reads an extract run as its text captures', async () => {
+        const runtime = boundRuntime(maxunRunLookup({
+            runId: 'mx-run-2',
+            status: 'success',
+            data: { textData: { title: 'Desk', price: '$120' } }
+        }).fetchImpl);
+        const observed = await runtime.poll('extract:rb-listing', 'mx-run-2', { ...LOOKUP, signal: new AbortController().signal });
+        expect(observed).toEqual({ status: 'succeeded', value: { title: 'Desk', price: '$120' } });
     });
 
-    it('fails the next run deterministically after the slot is revoked and keeps the definition', async () => {
+    it('reports a failed robot run, refuses another run id, and never reads an unknown status as success', async () => {
+        const signal = new AbortController().signal;
+        const failed = boundRuntime(maxunRunLookup({ runId: 'mx-run-3', status: 'failed' }).fetchImpl);
+        expect(await failed.poll('scrape:rb-pricing', 'mx-run-3', { ...LOOKUP, signal }))
+            .toEqual({ status: 'failed', message: 'Maxun run failed' });
+
+        const swapped = boundRuntime(maxunRunLookup({ runId: 'mx-run-other', status: 'success', data: { markdown: 'x' } }).fetchImpl);
+        await expect(swapped.poll('scrape:rb-pricing', 'mx-run-3', { ...LOOKUP, signal })).rejects.toThrow(/different run/);
+
+        const unknown = boundRuntime(maxunRunLookup({ runId: 'mx-run-4', status: 'mystery' }).fetchImpl);
+        await expect(unknown.poll('scrape:rb-pricing', 'mx-run-4', { ...LOOKUP, signal })).rejects.toThrow(/not understood/);
+    });
+
+    it('fails deterministically after the slot is revoked and keeps the definition', async () => {
         const clock = virtualClock();
-        const server = maxunServer(clock);
+        const server = blockingMaxunServer();
         bindAsyncRuntime('maxun', boundRuntime(server.fetchImpl));
         capabilitySecrets.set(SLOT, KEY);
         const manifest = await install('rb-pricing');
         approveCapability(manifest.id);
-        expect((await executeCapability(manifest.id, {}, { clock })).ok).toBe(true);
-        const calls = server.seen.length;
 
         capabilitySecrets.revoke(SLOT);
         const first = await executeCapability(manifest.id, {}, { clock });
         const second = await executeCapability(manifest.id, {}, { clock });
         expect(first.error?.code).toBe('AUTH_UNBOUND');
         expect(second.error?.code).toBe('AUTH_UNBOUND');
-        expect(server.seen.length).toBe(calls);
+        expect(server.seen).toHaveLength(0);
         expect(getCapability(manifest.id)?.approval).toBe('approved');
-    });
-
-    it('treats a refused start as failed and an ambiguous one as uncertain', async () => {
-        const clock = virtualClock();
-        capabilitySecrets.set(SLOT, 'wrong-key');
-        bindAsyncRuntime('maxun', boundRuntime(maxunServer(clock).fetchImpl));
-        const manifest = await install('rb-pricing');
-        approveCapability(manifest.id);
-        const refused = await executeCapability(manifest.id, {}, { clock });
-        expect(refused.error?.code).toBe('ASYNC_START_REJECTED');
-        expect(refused.error?.message).toMatch(/401/);
-
-        capabilitySecrets.set(SLOT, KEY);
-        for (const status of [500, 409]) {
-            bindAsyncRuntime('maxun', boundRuntime(maxunServer(clock, { startStatus: status }).fetchImpl));
-            const ambiguous = await executeCapability(manifest.id, {}, { clock });
-            expect(ambiguous.error?.code).toBe('EFFECT_UNCERTAIN');
-        }
-    });
-
-    it('reports a failed robot run and never reads an unknown status as success', async () => {
-        const clock = virtualClock();
-        capabilitySecrets.set(SLOT, KEY);
-        const manifest = await install('rb-pricing');
-        approveCapability(manifest.id);
-
-        bindAsyncRuntime('maxun', boundRuntime(maxunServer(clock, { pollStatus: 'failed' }).fetchImpl));
-        expect((await executeCapability(manifest.id, {}, { clock })).error?.code).toBe('ASYNC_RUN_FAILED');
-
-        bindAsyncRuntime('maxun', boundRuntime(maxunServer(clock, { pollStatus: 'mystery', finishAfterMs: 0 }).fetchImpl));
-        const unknown = await executeCapability(manifest.id, {}, { clock });
-        expect(unknown.ok).toBe(false);
-        expect(unknown.error?.code).toBe('EFFECT_UNCERTAIN');
+        expect(JSON.stringify(executionRecords())).not.toContain(KEY);
     });
 
     it('refuses a non-https or credential-bearing base URL', () => {

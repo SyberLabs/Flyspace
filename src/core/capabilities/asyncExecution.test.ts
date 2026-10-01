@@ -88,9 +88,12 @@ function gatedClock(start = Date.now()): TestClock & { parked: Promise<void>; op
 }
 
 // ---------------------------------------------------------------------------
-// A runtime that speaks Maxun's run shape: POST /api/robots/{id}/runs returns
-// { runId, status }, GET .../runs/{runId} returns the run with `data`. This is
-// a fixture. It measures nothing about Maxun.
+// A runtime whose start acknowledges early with a run id, and whose poll
+// returns the run with `data` in Maxun's field names. It exercises Omni's async
+// lifecycle. It is not Maxun's start contract: Maxun's open-source server
+// answers its run start only when the run finishes, which is why the real
+// `maxun` runtime fences start (providers/maxunRuntime.ts). It measures nothing
+// about Maxun.
 // ---------------------------------------------------------------------------
 
 interface MaxunRun {

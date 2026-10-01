@@ -1,14 +1,25 @@
-// The host binds this runtime under `maxun`. It starts a robot run and reads
-// the run back over Maxun's REST API, because the MCP `run_robot` tool holds
-// one request open until the robot finishes. The endpoint is host
+// The host binds this runtime under `maxun`. The endpoint is host
 // configuration; nothing in a manifest can change it. Each request is one
 // bounded fetch with the caller's signal and no redirects, so the API key is
 // never forwarded to another origin. The pinned cloud origin is the only host
 // accepted without resolved addresses. Any other base has to pass the broker
 // egress check, so a loopback, private, or metadata address never sees the key.
 //
-// The request and response shapes follow Maxun's public docs. They were not
-// checked against a live account in this environment.
+// Start is fenced. The async_poll profile needs a start that answers with a
+// run id before the run finishes, so the id can be recorded and observed.
+// Maxun's open-source server does not offer one: POST /api/robots/:id/runs
+// awaits waitForRunCompletion before it answers (getmaxun/maxun
+// server/src/api/record.ts, at e17d5ed33a3c90220fba54c78f449a1f55043cb9 and
+// unchanged at develop bf3187eff7f644bfbcc1c130fb85bad332bbd420), and
+// POST /api/sdk/robots/:id/execute waits the same way. Against that server a
+// run longer than the 15 s request timeout aborts before its id is known, and
+// a write is then uncertain with nothing to reconcile by. So start sends
+// nothing and refuses, until an early-acknowledgement contract is verified.
+// Maxun Cloud was not measured.
+//
+// Poll reads one run by id: GET /api/robots/:id/runs/:runId, which answers
+// immediately with { statusCode, messageCode, run } in that source. No live
+// account was used to check it.
 
 import { AsyncStartRejected, type AsyncJobRuntime, type AsyncObservation } from '../asyncRuntime';
 import { assessEgress, type ResolvedAddress } from '../egress';
@@ -16,6 +27,9 @@ import { isRecord } from '../valueType';
 import { MAXUN_API_KEY_HEADER, parseMaxunOperation, type MaxunRobotMode } from './maxunProvider';
 
 export const MAXUN_CLOUD_BASE_URL = 'https://app.maxun.dev';
+
+export const MAXUN_START_UNAVAILABLE =
+    'Maxun has no verified asynchronous start contract: its run start answers only when the run finishes. No request was sent.';
 
 const MAX_RESPONSE_CHARS = 1_000_000;
 const RUNNING = new Set(['queued', 'scheduled', 'pending', 'running', 'in_progress']);
@@ -38,24 +52,8 @@ export function createMaxunRuntime(config: MaxunRuntimeConfig = {}): AsyncJobRun
     const fetchImpl = config.fetch ?? fetch;
 
     return {
-        async start(operation, _args, call) {
-            const parsed = operationOf(operation);
-            const response = await fetchImpl(`${base}/api/robots/${encodeURIComponent(parsed.robotId)}/runs`, {
-                method: 'POST',
-                headers: { ...onlyKey(call.headers), Accept: 'application/json' },
-                signal: call.signal,
-                redirect: 'error'
-            });
-            // 408 and 409 do not say the run was not created, so they stay ambiguous.
-            if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 409) {
-                throw new AsyncStartRejected(`Maxun refused the run: HTTP ${response.status}`);
-            }
-            if (!response.ok) throw new Error(`Maxun start failed: HTTP ${response.status}`);
-            const body = await readJson(response);
-            const run = runOf(body);
-            const runId = run?.runId;
-            if (typeof runId !== 'string') throw new Error('Maxun start returned no runId');
-            return { externalRunId: runId };
+        async start() {
+            throw new AsyncStartRejected(MAXUN_START_UNAVAILABLE);
         },
 
         async poll(operation, externalRunId, call): Promise<AsyncObservation> {
