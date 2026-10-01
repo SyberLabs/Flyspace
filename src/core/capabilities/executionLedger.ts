@@ -87,12 +87,18 @@ function isSideEffect(effect: CapabilityEffect): boolean {
     return effect === 'write' || effect === 'destructive';
 }
 
-/** A run that outlived its deadline without a terminal row is closed here. */
-export function reconcileExecutions(now = Date.now()): void {
+/**
+ * A run that outlived its deadline without a terminal row is closed here.
+ * A run this session is still observing is left to its observer, which is
+ * bounded by the same deadline and settles the row itself; closing it
+ * underneath would leave the observer's result and the ledger disagreeing.
+ */
+export function reconcileExecutions(now = Date.now(), observing: ReadonlySet<string> = new Set()): void {
     let changed = false;
     const records = executionRecords().map(record => {
         if (record.status !== 'admitted' && record.status !== 'running') return record;
         if (now <= record.deadlineAt) return record;
+        if (observing.has(record.runId)) return record;
         changed = true;
         if (record.dispatchedAt && isSideEffect(record.effect)) {
             return {
@@ -133,9 +139,11 @@ export function admitExecution(input: {
     now?: number;
     executionProfile?: ExecutionProfileKind;
     providerId?: string;
+    /** Runs this session is polling right now; expiry leaves them to their observer. */
+    observing?: ReadonlySet<string>;
 }): Admission {
     const now = input.now ?? Date.now();
-    reconcileExecutions(now);
+    reconcileExecutions(now, input.observing);
     const inputDigest = sha256(canonicalize(input.input));
     const existing = executionRecords().find(record =>
         record.capabilityId === input.capabilityId && record.idempotencyKey === input.idempotencyKey

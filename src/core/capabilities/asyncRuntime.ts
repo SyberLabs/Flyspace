@@ -98,8 +98,13 @@ export interface PollPlan {
 
 /**
  * Observe an external run until it reports a terminal status, the deadline
- * passes, observation keeps failing, or the caller cancels. Always polls at
- * least once. Never calls start.
+ * passes, observation keeps failing, or the caller cancels. Never calls start.
+ *
+ * The first observation always happens, even past the deadline: that is the
+ * one-shot check recovery makes for a run that outlived its profile. After
+ * it, no sleep and no request extends past the deadline: each sleep is
+ * clamped to the time left, the deadline is checked again after waking, and
+ * each request's timeout is clamped to the time left.
  */
 export async function pollUntilSettled(plan: PollPlan): Promise<PollOutcome> {
     let failures = 0;
@@ -107,15 +112,18 @@ export async function pollUntilSettled(plan: PollPlan): Promise<PollOutcome> {
     for (let first = true; ; first = false) {
         if (plan.signal?.aborted) return { kind: 'canceled' };
         if (!first) {
-            if (plan.clock.now() >= plan.deadlineAt) return { kind: 'deadline' };
+            const left = plan.deadlineAt - plan.clock.now();
+            if (left <= 0) return { kind: 'deadline' };
             try {
-                await plan.clock.sleep(plan.pollIntervalMs, plan.signal);
+                await plan.clock.sleep(Math.min(plan.pollIntervalMs, left), plan.signal);
             } catch {
                 return { kind: 'canceled' };
             }
             if (plan.signal?.aborted) return { kind: 'canceled' };
+            if (plan.clock.now() >= plan.deadlineAt) return { kind: 'deadline' };
         }
-        const timeout = AbortSignal.timeout(plan.requestTimeoutMs);
+        const left = plan.deadlineAt - plan.clock.now();
+        const timeout = AbortSignal.timeout(left > 0 ? Math.min(plan.requestTimeoutMs, left) : plan.requestTimeoutMs);
         const signal = plan.signal ? AbortSignal.any([plan.signal, timeout]) : timeout;
         let observation: AsyncObservation;
         try {

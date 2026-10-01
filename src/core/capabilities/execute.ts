@@ -386,7 +386,8 @@ export async function executeCapability(
         // An async job's budget is its profile, not the per-request timeout.
         deadlineMs: profile ? profile.maxDurationMs + REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS + 5_000,
         ...(profile ? { now: clock.now(), executionProfile: 'async_poll' as const } : {}),
-        ...(manifest.provenance ? { providerId: manifest.provenance.providerId } : {})
+        ...(manifest.provenance ? { providerId: manifest.provenance.providerId } : {}),
+        observing: activeAsyncRuns
     });
     if (admission.kind !== 'admit') return replay(manifest, admission.record, admission.kind);
     if (profile) return executeAsync(manifest, profile, input, auth.headers, admission.record, idempotencyKey, options.signal, clock);

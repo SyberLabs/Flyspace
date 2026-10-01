@@ -16,6 +16,7 @@ import {
 import {
     AsyncStartRejected,
     bindAsyncRuntime,
+    pollUntilSettled,
     unbindAsyncRuntime,
     type AsyncClock,
     type AsyncJobRuntime,
@@ -451,6 +452,57 @@ describe('async_poll execution', () => {
         expect(executionRecord(result.runId!)).toMatchObject({ status: 'uncertain', externalRunId: 'run_1', lastObservedStatus: 'running' });
     });
 
+    it('never sleeps or polls past the profile deadline', async () => {
+        // A valid profile whose interval nearly equals its duration.
+        const clock = virtualClock(NOW);
+        const fixture = maxunFixture(clock, { finishAfterMs: 600_000 });
+        bindAsyncRuntime('maxun', fixture.runtime);
+        const manifest = installApproved({ execution: { kind: 'async_poll', pollIntervalMs: 300_000, maxDurationMs: 301_000 } });
+
+        const key = 'clamped-deadline-001';
+        const result = await executeCapability(manifest.id, {}, { clock, idempotencyKey: key });
+        expect(result.ok).toBe(false);
+        expect(result.error?.code).toBe('EFFECT_UNCERTAIN');
+        expect(clock.slept).toEqual([300_000, 1_000]);
+        expect(clock.now() - NOW).toBe(301_000);
+        expect(fixture.calls.poll).toBe(2);
+        expect(executionRecord(result.runId!)).toMatchObject({ status: 'uncertain', externalRunId: 'run_1' });
+
+        const replay = await executeCapability(manifest.id, {}, { clock, idempotencyKey: key });
+        expect(replay.error?.code).toBe('EFFECT_UNCERTAIN');
+        expect(fixture.calls.start).toBe(1);
+    });
+
+    it('bounds each poll request by the time left in the profile', async () => {
+        const clock = virtualClock(NOW);
+        let polls = 0;
+        const hanging: AsyncJobRuntime = {
+            start: async () => ({ externalRunId: 'run_1' }),
+            // Answers only when its signal aborts, like a destination that never replies.
+            poll: (_operation, _runId, call) => new Promise((_resolve, reject) => {
+                polls += 1;
+                call.signal.addEventListener('abort', () => reject(abortError()), { once: true });
+            })
+        };
+        const started = Date.now();
+        const outcome = await pollUntilSettled({
+            runtime: hanging,
+            operation: 'robot-42',
+            externalRunId: 'run_1',
+            headers: {},
+            idempotencyKey: 'bounded-request-001',
+            pollIntervalMs: 1_000,
+            deadlineAt: NOW + 50,
+            requestTimeoutMs: REQUEST_TIMEOUT_MS,
+            clock,
+            onObserve: () => {}
+        });
+        expect(outcome).toEqual({ kind: 'deadline' });
+        expect(polls).toBe(1);
+        expect(clock.slept).toEqual([50]);
+        expect(Date.now() - started).toBeLessThan(2_000);
+    });
+
     it('fails a trusted read at the deadline instead of calling it uncertain', async () => {
         const clock = virtualClock(NOW);
         bindAsyncRuntime('maxun', maxunFixture(clock, { finishAfterMs: 10 * 60_000 }).runtime);
@@ -633,6 +685,63 @@ describe('restart recovery', () => {
         expect(reports.find(r => r.runId === 'orphan')).toMatchObject({ status: 'running', observed: false });
         expect(fixture.calls.start).toBe(0);
         expect(fixture.calls.poll).toBe(0);
+    });
+
+    it('observes once after expiry and settles the ledger even when another admission runs meanwhile', async () => {
+        const later = NOW + 500_000;
+        const clock = virtualClock(later);
+        let releaseOrphan: () => void = () => {};
+        const orphanAnswer = new Promise<void>(resolve => { releaseOrphan = resolve; });
+        let markPolled: () => void = () => {};
+        const orphanPolled = new Promise<void>(resolve => { markPolled = resolve; });
+        let starts = 0;
+        const runtime: AsyncJobRuntime = {
+            start: async () => { starts += 1; return { externalRunId: `run_new_${starts}` }; },
+            async poll(_operation, runId) {
+                if (runId === 'run_1') {
+                    markPolled();
+                    await orphanAnswer;
+                }
+                return { status: 'succeeded', value: { markdown: `# ${runId}` } };
+            }
+        };
+        bindAsyncRuntime('maxun', runtime);
+        const manifest = installApproved();
+        // A run left open by an earlier process, well past its deadline.
+        useExecutionLedger.setState({
+            records: [{
+                runId: 'orphan',
+                capabilityId: manifest.id,
+                manifestDigest: manifest.digest,
+                effect: manifest.effect,
+                inputDigest: 'a'.repeat(64),
+                idempotencyKey: 'orphan-run-0001',
+                startedAt: NOW,
+                deadlineAt: NOW + 135_000,
+                dispatchedAt: NOW,
+                status: 'running',
+                executionProfile: 'async_poll',
+                retryPolicy: 'no_redispatch',
+                externalRunId: 'run_1'
+            }]
+        });
+
+        const observing = reconcileAsyncExecution('orphan', { clock });
+        await orphanPolled;
+        // Another execution is admitted while the one-shot observation is in flight.
+        const other = await executeCapability(manifest.id, {}, { clock, idempotencyKey: 'concurrent-0001' });
+        expect(other.ok).toBe(true);
+        expect(executionRecord('orphan')?.status).toBe('running');
+
+        releaseOrphan();
+        const report = await observing;
+        expect(report).toMatchObject({ observed: true, status: 'succeeded' });
+        expect(report.result?.ok).toBe(true);
+        expect(executionRecord('orphan')).toMatchObject({
+            status: 'succeeded',
+            receipt: { ok: true, value: { markdown: '# run_1' } }
+        });
+        expect(starts).toBe(1);
     });
 
     it('does not observe a run whose capability was denied or replaced', async () => {
