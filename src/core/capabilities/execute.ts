@@ -10,6 +10,7 @@ import {
     markExecutionDispatched,
     observeExecution,
     recordExternalRun,
+    recordUncertainObservation,
     settleUncertainExecution,
     type ExecutionPhase,
     type ExecutionReceipt,
@@ -219,8 +220,9 @@ function settleAsync(
     }
 
     if (from === 'running') return finish(result, runId, status, at);
-    if ((outcome.kind === 'succeeded' || outcome.kind === 'failed') && status !== 'uncertain') {
-        settleUncertainExecution(runId, status, receiptFor(result), at);
+    if (outcome.kind === 'succeeded' || outcome.kind === 'failed') {
+        if (status === 'uncertain') recordUncertainObservation(runId, receiptFor(result));
+        else settleUncertainExecution(runId, status, receiptFor(result), at);
     }
     result.runId = runId;
     return result;

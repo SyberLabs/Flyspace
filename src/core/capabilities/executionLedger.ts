@@ -223,6 +223,19 @@ export function settleUncertainExecution(
         : record));
 }
 
+/**
+ * The destination reported a terminal status for an uncertain run, and the run
+ * still cannot close (a side effect whose value was rejected). The status stays
+ * uncertain; the receipt records what was observed, so the ledger and a replay
+ * under the same key no longer say the outcome was never seen.
+ */
+export function recordUncertainObservation(runId: string, receipt: ExecutionReceipt): void {
+    const stored = boundReceipt(receipt);
+    update(runId, record => (record.status === 'uncertain' && record.externalRunId
+        ? { ...record, receipt: stored }
+        : record));
+}
+
 export function executionRecord(runId: string): ExecutionRecord | undefined {
     return executionRecords().find(record => record.runId === runId);
 }

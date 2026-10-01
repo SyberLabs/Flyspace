@@ -519,6 +519,41 @@ describe('async_poll execution', () => {
         expect(executionRecord(runId!)?.receipt).toEqual({ ok: true, value: { markdown: '# Pricing\nPro: $12' } });
         expect(fixture.calls.start).toBe(1);
     });
+
+    it('records what reconciliation observed when an uncertain write reports success with a rejected value', async () => {
+        const clock = gatedClock(NOW);
+        const fixture = maxunFixture(clock, { finishAfterMs: 30_000, outcome: 'malformed' });
+        bindAsyncRuntime('maxun', fixture.runtime);
+        const manifest = installApproved();
+        const key = 'reconcile-mismatch-001';
+        const controller = new AbortController();
+        const pending = executeCapability(manifest.id, {}, { clock, signal: controller.signal, idempotencyKey: key });
+        await clock.parked;
+        controller.abort();
+        const { runId } = await pending;
+        clock.open();
+        expect(executionRecord(runId!)?.receipt?.message).toMatch(/Polling was canceled/);
+
+        const report = await reconcileAsyncExecution(runId!, { clock });
+        expect(report.observed).toBe(true);
+        expect(report.result?.error?.code).toBe('TYPED_OUTPUT_MISMATCH');
+
+        // Still uncertain: the destination ran the write and its value was refused.
+        // The stored receipt now says that, instead of "never observed".
+        const record = executionRecord(runId!)!;
+        expect(record.status).toBe('uncertain');
+        expect(record.lastObservedStatus).toBe('succeeded');
+        expect(record.receipt).toMatchObject({ ok: false, code: 'TYPED_OUTPUT_MISMATCH' });
+        expect(record.receipt?.message).toContain('The destination reported success and the value was rejected');
+        expect(record.receipt?.message).not.toMatch(/Polling was canceled/);
+
+        const polls = fixture.calls.poll;
+        const replay = await executeCapability(manifest.id, {}, { clock, idempotencyKey: key });
+        expect(replay.error?.code).toBe('EFFECT_UNCERTAIN');
+        expect(replay.error?.message).toContain('The destination reported success and the value was rejected');
+        expect(fixture.calls.start).toBe(1);
+        expect(fixture.calls.poll).toBe(polls);
+    });
 });
 
 describe('restart recovery', () => {
