@@ -261,6 +261,35 @@ describe('MCP client over the official SDK', () => {
         }
     });
 
+    it('keeps a session open while its call is in flight when a call with another key arrives', async () => {
+        const fixture = await track(modernServer());
+        const transport = client({ url: fixture.url });
+        const closeSpy = vi.spyOn(Client.prototype, 'close');
+        try {
+            const slow = transport.call('board', 'slow', {}, undefined, { headers: { 'x-api-key': 'key-a' } });
+            const slowSettled = slow.then(() => 'resolved', () => 'rejected');
+            // Wait until the slow call has reached the server before switching keys.
+            for (let i = 0; i < 200 && !fixture.seen.some(entry => entry.method === 'tools/call'); i += 1) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+            expect(fixture.seen.some(entry => entry.method === 'tools/call' && entry.apiKey === 'key-a')).toBe(true);
+
+            const other = await transport.call('board', 'list', { limit: 1 }, undefined, { headers: { 'x-api-key': 'key-b' } });
+            expect(other).toEqual({ items: ['alpha'], era: 'modern' });
+            const tools = await transport.listTools(undefined, { headers: { 'x-api-key': 'key-b' } });
+            expect(tools.map(tool => tool.name)).toContain('slow');
+            const closedWhileInFlight = closeSpy.mock.calls.length;
+
+            expect(await slowSettled).toBe('resolved');
+            expect(await slow).toEqual({ done: true });
+            expect(closedWhileInFlight).toBe(0);
+            // The replaced session closes once its last request settles.
+            await vi.waitFor(() => expect(closeSpy).toHaveBeenCalledTimes(1));
+        } finally {
+            closeSpy.mockRestore();
+        }
+    }, 15_000);
+
     it('lists tools with annotations for the provider', async () => {
         const fixture = await track(modernServer());
         const tools = await client({ url: fixture.url, serverId: 'board' }).listTools();

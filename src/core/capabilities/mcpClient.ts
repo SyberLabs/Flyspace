@@ -37,10 +37,17 @@ interface Session {
     key: string;
     client: Client;
     ready: Promise<Client>;
+    /** Requests holding this session that have not settled. */
+    active: number;
+    /** Replaced by a session for another key; it closes when `active` reaches zero. */
+    retired: boolean;
+    closed: boolean;
 }
 
 export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport {
     let session: Session | undefined;
+    /** Replaced sessions that still have requests in flight. */
+    const draining = new Set<Session>();
     // One header key has one in-flight session. Connect used to drop the
     // current session and await close() before storing the next one, so two
     // overlapping calls could each construct a client. The chain is the slot:
@@ -48,7 +55,14 @@ export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport
     // call publishes, instead of opening another.
     let connectChain: Promise<void> = Promise.resolve();
 
-    function connected(context: McpCallContext | undefined, signal: AbortSignal | undefined): Promise<Client> {
+    /**
+     * Take a lease on the session for these headers. The lease is counted
+     * inside the chain, before the next caller can switch keys, so a switch
+     * never closes a session whose request is still pending: SDK close()
+     * rejects every pending response, even when the remote side effect
+     * completes. The caller releases the lease when its request settles.
+     */
+    function lease(context: McpCallContext | undefined, signal: AbortSignal | undefined): Promise<Session> {
         const headers = { ...(config.headers ?? {}), ...(context?.headers ?? {}) };
         const key = sha256(canonicalize(headers));
         const opening = connectChain.then(() => openSession(key, headers, signal));
@@ -56,11 +70,38 @@ export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport
         return opening;
     }
 
-    async function openSession(key: string, headers: Record<string, string>, signal: AbortSignal | undefined): Promise<Client> {
-        if (session && session.key === key) return session.ready;
+    function release(held: Session): void {
+        held.active -= 1;
+        if (held.retired && held.active === 0) void closeSession(held);
+    }
+
+    function closeSession(held: Session): Promise<void> {
+        draining.delete(held);
+        if (held.closed) return Promise.resolve();
+        held.closed = true;
+        return held.client.close().catch(() => undefined);
+    }
+
+    async function openSession(key: string, headers: Record<string, string>, signal: AbortSignal | undefined): Promise<Session> {
+        if (session && session.key === key) {
+            const current = session;
+            current.active += 1;
+            try {
+                await current.ready;
+            } catch (error) {
+                release(current);
+                throw error;
+            }
+            return current;
+        }
         const previous = session;
         session = undefined;
-        if (previous) await previous.client.close().catch(() => undefined);
+        if (previous) {
+            previous.retired = true;
+            // An idle session closes now, as before. A busy one drains first.
+            if (previous.active === 0) await closeSession(previous);
+            else draining.add(previous);
+        }
 
         const client = new Client(
             { name: config.clientName ?? 'omni', version: config.clientVersion ?? '0.1.0' },
@@ -68,46 +109,38 @@ export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport
         );
         const transport = new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers } });
         const ready = client.connect(transport, signal ? { signal } : undefined).then(() => client);
-        const current: Session = { key, client, ready };
+        const current: Session = { key, client, ready, active: 1, retired: false, closed: false };
         session = current;
         ready.catch(() => {
             if (session === current) session = undefined;
         });
-        return ready;
+        try {
+            await ready;
+        } catch (error) {
+            release(current);
+            throw error;
+        }
+        return current;
     }
 
     return {
         async call(_serverId, toolName, args, signal, context) {
-            const client = await connected(context, signal);
-            const result = await client.callTool({ name: toolName, arguments: args }, signal ? { signal } : undefined);
-            return toolValue(result as Record<string, unknown>);
+            const held = await lease(context, signal);
+            try {
+                const result = await held.client.callTool({ name: toolName, arguments: args }, signal ? { signal } : undefined);
+                return toolValue(result as Record<string, unknown>);
+            } finally {
+                release(held);
+            }
         },
 
         async listTools(signal, context) {
-            const client = await connected(context, signal);
-            const tools: McpToolSchema[] = [];
-            let cursor: string | undefined;
-            do {
-                const page = await client.listTools(cursor ? { cursor } : undefined, signal ? { signal } : undefined);
-                for (const tool of page.tools) {
-                    tools.push({
-                        serverId: config.serverId ?? '',
-                        name: tool.name,
-                        ...(tool.description ? { description: tool.description } : {}),
-                        inputSchema: tool.inputSchema,
-                        ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
-                        ...(tool.annotations ? {
-                            annotations: {
-                                ...(tool.annotations.readOnlyHint !== undefined ? { readOnlyHint: tool.annotations.readOnlyHint } : {}),
-                                ...(tool.annotations.destructiveHint !== undefined ? { destructiveHint: tool.annotations.destructiveHint } : {}),
-                                ...(tool.annotations.idempotentHint !== undefined ? { idempotentHint: tool.annotations.idempotentHint } : {})
-                            }
-                        } : {})
-                    });
-                }
-                cursor = page.nextCursor;
-            } while (cursor);
-            return tools;
+            const held = await lease(context, signal);
+            try {
+                return await listAllTools(held.client, signal);
+            } finally {
+                release(held);
+            }
         },
 
         protocolEra() {
@@ -118,12 +151,39 @@ export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport
             const closing = connectChain.then(async () => {
                 const current = session;
                 session = undefined;
-                if (current) await current.client.close().catch(() => undefined);
+                const open = [...draining, ...(current ? [current] : [])];
+                await Promise.all(open.map(closeSession));
             });
             connectChain = closing.then(() => undefined, () => undefined);
             return closing;
         }
     };
+
+    async function listAllTools(client: Client, signal: AbortSignal | undefined): Promise<McpToolSchema[]> {
+        const tools: McpToolSchema[] = [];
+        let cursor: string | undefined;
+        do {
+            const page = await client.listTools(cursor ? { cursor } : undefined, signal ? { signal } : undefined);
+            for (const tool of page.tools) {
+                tools.push({
+                    serverId: config.serverId ?? '',
+                    name: tool.name,
+                    ...(tool.description ? { description: tool.description } : {}),
+                    inputSchema: tool.inputSchema,
+                    ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+                    ...(tool.annotations ? {
+                        annotations: {
+                            ...(tool.annotations.readOnlyHint !== undefined ? { readOnlyHint: tool.annotations.readOnlyHint } : {}),
+                            ...(tool.annotations.destructiveHint !== undefined ? { destructiveHint: tool.annotations.destructiveHint } : {}),
+                            ...(tool.annotations.idempotentHint !== undefined ? { idempotentHint: tool.annotations.idempotentHint } : {})
+                        }
+                    } : {})
+                });
+            }
+            cursor = page.nextCursor;
+        } while (cursor);
+        return tools;
+    }
 }
 
 function toolValue(result: Record<string, unknown>): unknown {
