@@ -18,6 +18,18 @@ function reply(status: number, body: unknown) {
     return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
+/**
+ * The nearest hop's view of the client: the last x-forwarded-for entry. Next
+ * fills that header from the socket when it is absent; a proxy in front
+ * appends the address it saw. Without a proxy a client can choose it, which
+ * is why the broker also enforces a global cap that does not depend on it.
+ */
+function callerKey(request: NextRequest): string {
+    const forwarded = request.headers.get('x-forwarded-for');
+    const last = forwarded?.split(',').map(part => part.trim()).filter(Boolean).pop();
+    return last ? last.slice(0, 64) : 'local';
+}
+
 export async function POST(request: NextRequest) {
     if (process.env.OMNI_PUBLIC_DEMO === '1') {
         return reply(503, { error: 'The capability broker is unavailable in the public preview.' });
@@ -46,7 +58,8 @@ export async function POST(request: NextRequest) {
         ledger: openServerLedger(),
         resolve: async (hostname) => (await lookup(hostname, { all: true })).map(entry => entry.address),
         fetch: pinnedFetch,
-        signal
+        signal,
+        caller: callerKey(request)
     });
     return reply(result.status, result.body);
 }

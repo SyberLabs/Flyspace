@@ -77,4 +77,15 @@ describe('/api/capability-broker request admission', () => {
         const deps = handler.mock.calls[0][1] as { signal?: AbortSignal };
         expect(deps.signal).toBeInstanceOf(AbortSignal);
     });
+
+    it('keys the caller by the nearest forwarded address', async () => {
+        await POST(brokerRequest('{}', {
+            origin: SITE,
+            'content-type': 'application/json',
+            'x-forwarded-for': '192.0.2.1, 198.51.100.9'
+        }));
+        await POST(brokerRequest('{}', { origin: SITE, 'content-type': 'application/json' }));
+        expect((handler.mock.calls[0][1] as { caller?: string }).caller).toBe('198.51.100.9');
+        expect((handler.mock.calls[1][1] as { caller?: string }).caller).toBe('local');
+    });
 });

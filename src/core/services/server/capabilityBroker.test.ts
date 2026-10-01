@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { compileOpenApi } from '@/core/capabilities/openapi';
 import { sealManifest } from '@/core/capabilities/manifest';
-import { handleCapabilityBroker } from './capabilityBroker';
+import { createBrokerRateLimiter, handleCapabilityBroker, type BrokerDeps, type BrokerRateLimiter } from './capabilityBroker';
 import { memoryLedger } from './capability.ledger';
 import type { PinnedRequest } from './pinnedFetch';
 
@@ -31,14 +31,21 @@ function listManifest(access: 'browser_direct' | 'server_broker' = 'server_broke
     });
 }
 
+// Each test gets its own limiter. The budget is per caller, so tests no
+// longer stay apart by using different manifests.
+let limiter: BrokerRateLimiter;
 beforeEach(() => {
-    // The broker's rate window is process-global. Unique manifests keep tests apart.
+    limiter = createBrokerRateLimiter();
 });
+
+function broker(body: unknown, deps: BrokerDeps) {
+    return handleCapabilityBroker(body, { limiter, ...deps });
+}
 
 describe('capability broker', () => {
     it('fetches only after the resolved address is public', async () => {
         const seen: PinnedRequest[] = [];
-        const result = await handleCapabilityBroker({
+        const result = await broker({
             manifest: listManifest(),
             input: {},
             idempotencyKey: 'broker-key-1'
@@ -58,7 +65,7 @@ describe('capability broker', () => {
 
     it('does not open a socket to a private address', async () => {
         let called = false;
-        const result = await handleCapabilityBroker({
+        const result = await broker({
             manifest: listManifest(),
             input: {},
             idempotencyKey: 'broker-key-2'
@@ -87,8 +94,8 @@ describe('capability broker', () => {
             return { status: 200, headers: {}, text: '["ok"]' };
         };
         const body = { manifest: listManifest(), input: {}, idempotencyKey: 'broker-key-3' };
-        await handleCapabilityBroker(body, { ...deps, fetch });
-        const replay = await handleCapabilityBroker(body, { ...deps, fetch });
+        await broker(body, { ...deps, fetch });
+        const replay = await broker(body, { ...deps, fetch });
         expect(calls).toBe(1);
         expect((replay.body as { replayed?: boolean }).replayed).toBe(true);
     });
@@ -113,7 +120,7 @@ describe('capability broker', () => {
             approval: 'auto',
             transport: { ...compiled.transport, access: 'server_broker', method: 'POST' }
         };
-        const result = await handleCapabilityBroker({
+        const result = await broker({
             manifest: forged,
             input: {},
             idempotencyKey: 'broker-key-4'
@@ -136,7 +143,7 @@ describe('capability broker', () => {
     ])('never dials the IPv6 literal %s', async (literal) => {
         let fetched = false;
         let resolved = false;
-        const result = await handleCapabilityBroker({
+        const result = await broker({
             manifest: listManifest('server_broker', `https://${literal}`),
             input: {},
             idempotencyKey: 'broker-key-literal'
@@ -158,7 +165,7 @@ describe('capability broker', () => {
 
     it('returns a generic error instead of the transport error text', async () => {
         const ledger = memoryLedger();
-        const result = await handleCapabilityBroker({
+        const result = await broker({
             manifest: listManifest(),
             input: {},
             idempotencyKey: 'broker-key-generic'
@@ -181,7 +188,7 @@ describe('capability broker', () => {
         const ledger = memoryLedger();
         let received: AbortSignal | undefined;
         const started = Date.now();
-        const result = await handleCapabilityBroker({
+        const result = await broker({
             manifest: listManifest(),
             input: {},
             idempotencyKey: 'broker-key-deadline'
@@ -203,7 +210,7 @@ describe('capability broker', () => {
 
     it('answers 504 when name resolution outlives the deadline', async () => {
         let fetched = false;
-        const result = await handleCapabilityBroker({
+        const result = await broker({
             manifest: listManifest(),
             input: {},
             idempotencyKey: 'broker-key-dns-deadline'
@@ -230,7 +237,7 @@ describe('broker manifest bounds', () => {
         const { digest: _digest, ...draft } = base;
         const wide = sealManifest({ ...draft, inputs });
         let touched = false;
-        const result = await handleCapabilityBroker({ manifest: wide, input: {}, idempotencyKey: 'broker-key-wide' }, {
+        const result = await broker({ manifest: wide, input: {}, idempotencyKey: 'broker-key-wide' }, {
             ledger: memoryLedger(),
             resolve: async () => { touched = true; return ['1.1.1.1']; },
             fetch: async () => { touched = true; return { status: 200, headers: {}, text: '[]' }; }
@@ -255,5 +262,43 @@ describe('memory ledger', () => {
         expect(await ledger.find('run_1')).toBeDefined();
         expect(await ledger.find('run_2')).toBeUndefined();
         expect(await ledger.find('run_3')).toBeDefined();
+    });
+});
+
+describe('broker rate limit', () => {
+    function okDeps(caller: string): BrokerDeps {
+        return {
+            ledger: memoryLedger(),
+            resolve: async () => ['1.1.1.1'],
+            fetch: async () => ({ status: 200, headers: {}, text: '["ok"]' }),
+            caller,
+            now: () => 1_000_000
+        };
+    }
+
+    it('counts every manifest against the same caller: the 31st request is 429', async () => {
+        const statuses: number[] = [];
+        for (let i = 0; i < 31; i++) {
+            const result = await broker({
+                manifest: listManifest('server_broker', `https://board${i}.example.test`),
+                input: {},
+                idempotencyKey: `broker-key-rate-${i}`
+            }, okDeps('198.51.100.7'));
+            statuses.push(result.status);
+        }
+        expect(statuses.slice(0, 30).every(status => status === 200)).toBe(true);
+        expect(statuses[30]).toBe(429);
+    });
+
+    it('gives a different caller its own budget, under a global cap', async () => {
+        const small = createBrokerRateLimiter(2, 3);
+        expect(small.allow('a', 0)).toBe(true);
+        expect(small.allow('a', 0)).toBe(true);
+        expect(small.allow('a', 0)).toBe(false);
+        expect(small.allow('b', 0)).toBe(true);
+        expect(small.allow('c', 0)).toBe(false);
+        // Outside the window every entry is pruned and budgets return.
+        expect(small.allow('c', 60_000)).toBe(true);
+        expect(small.allow('a', 60_000)).toBe(true);
     });
 });

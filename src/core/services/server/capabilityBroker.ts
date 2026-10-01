@@ -15,9 +15,42 @@ const MAX_BODY = 1_000_000;
 /** Total budget for one broker request, from route entry to the last upstream byte. */
 export const BROKER_DEADLINE_MS = 15_000;
 const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 30;
+const MAX_PER_CALLER = 30;
+const MAX_GLOBAL = 120;
 
-const hits = new Map<string, number[]>();
+export interface BrokerRateLimiter {
+    allow(caller: string, now: number): boolean;
+}
+
+/**
+ * A sliding one-minute window per caller, under one global window for the
+ * process. Entries outside the window are pruned on every call, so the map
+ * holds at most the callers admitted in the last minute (no more than the
+ * global cap). Per process: a multi-instance deployment needs a shared store.
+ */
+export function createBrokerRateLimiter(perCaller = MAX_PER_CALLER, global = MAX_GLOBAL): BrokerRateLimiter {
+    const hits = new Map<string, number[]>();
+    let all: number[] = [];
+    return {
+        allow(caller, now) {
+            const live = (at: number) => now - at < WINDOW_MS;
+            all = all.filter(live);
+            for (const [key, times] of hits) {
+                const kept = times.filter(live);
+                if (kept.length === 0) hits.delete(key);
+                else hits.set(key, kept);
+            }
+            const recent = hits.get(caller) ?? [];
+            if (all.length >= global || recent.length >= perCaller) return false;
+            recent.push(now);
+            hits.set(caller, recent);
+            all.push(now);
+            return true;
+        }
+    };
+}
+
+const processLimiter = createBrokerRateLimiter();
 
 export interface BrokerDeps {
     ledger: ServerLedger;
@@ -26,6 +59,9 @@ export interface BrokerDeps {
     now?: () => number;
     /** Aborts on client disconnect or the total deadline. Defaults to the deadline alone. */
     signal?: AbortSignal;
+    /** Who is asking. The client address until the broker authenticates callers. */
+    caller?: string;
+    limiter?: BrokerRateLimiter;
 }
 
 export async function handleCapabilityBroker(
@@ -33,6 +69,11 @@ export async function handleCapabilityBroker(
     deps: BrokerDeps
 ): Promise<{ status: number; body: unknown }> {
     const signal = deps.signal ?? AbortSignal.timeout(BROKER_DEADLINE_MS);
+    // Counted before parsing: the budget belongs to the caller, not to a
+    // manifest the caller chose.
+    if (!(deps.limiter ?? processLimiter).allow(deps.caller ?? 'local', deps.now?.() ?? Date.now())) {
+        return json(429, 'broker rate limit exceeded');
+    }
     const parsed = parseBody(body);
     if ('error' in parsed) return json(400, parsed.error);
     const { manifest, input, idempotencyKey, secret } = parsed;
@@ -45,9 +86,6 @@ export async function handleCapabilityBroker(
     }
     if (manifest.approval !== 'auto') {
         return json(403, 'broker capability is not approved to run');
-    }
-    if (!allow(manifest.id, deps.now?.() ?? Date.now())) {
-        return json(429, 'broker rate limit exceeded');
     }
 
     let url: URL;
@@ -191,17 +229,6 @@ function applyAuth(manifest: CapabilityManifest, secret: string | undefined): Re
         headers[manifest.auth.name] = `${manifest.auth.prefix ?? ''}${secret}`;
     }
     return headers;
-}
-
-function allow(capabilityId: string, now: number): boolean {
-    const recent = (hits.get(capabilityId) ?? []).filter(at => now - at < WINDOW_MS);
-    if (recent.length >= MAX_PER_WINDOW) {
-        hits.set(capabilityId, recent);
-        return false;
-    }
-    recent.push(now);
-    hits.set(capabilityId, recent);
-    return true;
 }
 
 function isIp(host: string): boolean {
