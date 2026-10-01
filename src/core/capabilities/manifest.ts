@@ -155,6 +155,16 @@ const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
 const SECRET_REF_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,64}$/;
 
+/**
+ * Names an object property cannot hold as plain data: __proto__ (an
+ * accessor), prototype, and every name Object.prototype already defines
+ * (constructor, toString, ...), which a lookup would find by inheritance.
+ * An input or credential placement may not use one.
+ */
+export function isReservedName(name: string): boolean {
+    return name === '__proto__' || name === 'prototype' || Object.prototype.hasOwnProperty.call(Object.prototype, name);
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -292,6 +302,8 @@ function validateAuth(auth: unknown, errors: string[]): void {
         if (auth.in !== 'header' && auth.in !== 'query') errors.push('apiKey auth requires in: header or query');
         if (typeof auth.name !== 'string' || !/^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,64}$/.test(auth.name)) {
             errors.push('apiKey auth requires a header or query name');
+        } else if (isReservedName(auth.name)) {
+            errors.push(`apiKey auth name ${auth.name} is reserved`);
         }
     }
     if (auth.prefix !== undefined && (typeof auth.prefix !== 'string' || auth.prefix.length > 32)) {
@@ -559,6 +571,8 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
             }
             if (typeof entry.name !== 'string' || !NAME_PATTERN.test(entry.name)) {
                 errors.push('input name is invalid');
+            } else if (isReservedName(entry.name)) {
+                errors.push(`input name ${entry.name} is reserved`);
             } else if (names.has(entry.name)) {
                 errors.push(`duplicate input ${entry.name}`);
             } else {

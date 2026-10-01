@@ -227,7 +227,7 @@ function buildUrl(manifest: CapabilityManifest, input: Record<string, unknown>):
     if ('error' in target) throw new Error(target.error);
     const url = target.url;
     for (const entry of manifest.inputs) {
-        if (input[entry.name] === undefined || entry.in !== 'query') continue;
+        if (!Object.hasOwn(input, entry.name) || input[entry.name] === undefined || entry.in !== 'query') continue;
         const value = input[entry.name];
         url.searchParams.set(entry.name, typeof value === 'string' ? value : JSON.stringify(value));
     }

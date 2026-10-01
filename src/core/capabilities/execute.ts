@@ -114,8 +114,9 @@ export interface RunPreview {
 
 /**
  * Validate a run and describe it without dispatching anything. The digest
- * binds the manifest, method, URL and arguments; executeCapability accepts
- * a write or destructive run only with the digest of its own preview.
+ * binds the manifest, method, URL, arguments and, for http, the exact
+ * header values and body text; executeCapability accepts a write or
+ * destructive run only with the digest of its own preview.
  */
 export function previewCapabilityRun(
     capabilityId: string,
@@ -128,23 +129,53 @@ export function previewCapabilityRun(
     }
     const inputErrors = validateInput(manifest, input);
     if (inputErrors.length > 0) return { ok: false, result: failure(capabilityId, 'INPUT_INVALID', inputErrors.join('; '), false) };
-    return { ok: true, preview: buildPreview(manifest, input) };
+    const prepared = prepareRun(manifest, input);
+    if ('error' in prepared) return { ok: false, result: failure(capabilityId, 'INPUT_INVALID', prepared.error, false) };
+    return { ok: true, preview: prepared.run.preview };
 }
 
-function buildPreview(manifest: CapabilityManifest, input: Record<string, unknown>): RunPreview {
+/** The exact http request one run sends, before the credential is attached. */
+interface HttpPlan {
+    /** Path and query inputs applied. */
+    url: string;
+    /** Header inputs, as sent. */
+    headers: Record<string, string>;
+    /** The body text, as sent. */
+    body?: string;
+}
+
+/**
+ * One run, prepared once. Its preview digest is computed from these objects,
+ * and dispatch sends these same objects, so what a person confirmed and
+ * what leaves the process cannot differ.
+ */
+interface PreparedRun {
+    args: Record<string, unknown>;
+    http?: HttpPlan;
+    preview: RunPreview;
+}
+
+function prepareRun(manifest: CapabilityManifest, input: Record<string, unknown>): { run: PreparedRun } | { error: string } {
+    const args = argumentsFor(manifest, input);
     const transport = manifest.transport;
     let method: string;
     let url: string;
+    let http: HttpPlan | undefined;
     if (transport.kind === 'http') {
-        method = transport.method;
-        const target = resolveHttpPath(transport.baseUrl, transport.path, input);
-        const resolved = 'url' in target ? target.url : joinUrl(transport.baseUrl, transport.path);
+        const target = resolveHttpPath(transport.baseUrl, transport.path, args);
+        if ('error' in target) return { error: target.error };
+        const headers = Object.create(null) as Record<string, string>;
+        let body: string | undefined;
         for (const entry of manifest.inputs) {
-            if (entry.in === 'query' && input[entry.name] !== undefined) {
-                resolved.searchParams.set(entry.name, stringifyParam(input[entry.name]));
-            }
+            if (!Object.hasOwn(args, entry.name)) continue;
+            const value = args[entry.name];
+            if (entry.in === 'query') target.url.searchParams.set(entry.name, stringifyParam(value));
+            else if (entry.in === 'header') headers[entry.name] = stringifyParam(value);
+            else if (entry.in === 'body') body = JSON.stringify(value);
         }
-        url = resolved.toString();
+        method = transport.method;
+        url = target.url.toString();
+        http = { url, headers, ...(body !== undefined ? { body } : {}) };
     } else if (transport.kind === 'mcp') {
         method = 'CALL';
         url = `mcp:${transport.serverId}/${transport.toolName}`;
@@ -155,23 +186,29 @@ function buildPreview(manifest: CapabilityManifest, input: Record<string, unknow
         method = 'CALL';
         url = `local:${transport.handler}`;
     }
-    const args = argumentsFor(manifest, input);
     const credential = credentialPlacement(manifest);
     const digest = sha256(canonicalize({
         capabilityId: manifest.id,
         manifestDigest: manifest.digest,
         method,
         url,
-        arguments: args
+        arguments: args,
+        ...(http ? { headers: http.headers, body: http.body } : {})
     }));
     return {
-        capabilityId: manifest.id,
-        effect: manifest.effect,
-        method,
-        url,
-        arguments: args,
-        ...(credential ? { credential } : {}),
-        digest
+        run: {
+            args,
+            ...(http ? { http } : {}),
+            preview: {
+                capabilityId: manifest.id,
+                effect: manifest.effect,
+                method,
+                url,
+                arguments: args,
+                ...(credential ? { credential } : {}),
+                digest
+            }
+        }
     };
 }
 
@@ -434,10 +471,15 @@ function bounded(signal: AbortSignal | undefined): AbortSignal {
     return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
+/**
+ * Every declared input the caller supplied as an own property, in an object
+ * with no prototype, so no input name can be swallowed by an accessor or
+ * read through inheritance.
+ */
 function argumentsFor(manifest: CapabilityManifest, input: Record<string, unknown>): Record<string, unknown> {
-    const args: Record<string, unknown> = {};
+    const args = Object.create(null) as Record<string, unknown>;
     for (const entry of manifest.inputs) {
-        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
+        if (Object.hasOwn(input, entry.name) && input[entry.name] !== undefined) args[entry.name] = input[entry.name];
     }
     return args;
 }
@@ -464,8 +506,13 @@ export async function executeCapability(
         return finish(failure(capabilityId, 'INPUT_INVALID', inputErrors.join('; '), false));
     }
 
+    const prepared = prepareRun(manifest, input);
+    if ('error' in prepared) {
+        return finish(failure(capabilityId, 'INPUT_INVALID', prepared.error, false));
+    }
+    const run = prepared.run;
     if ((manifest.effect === 'write' || manifest.effect === 'destructive')
-        && options.confirmedRun !== buildPreview(manifest, input).digest) {
+        && options.confirmedRun !== run.preview.digest) {
         return finish(failure(
             capabilityId,
             'CONFIRMATION_REQUIRED',
@@ -497,7 +544,7 @@ export async function executeCapability(
         observing: activeAsyncRuns
     });
     if (admission.kind !== 'admit') return replay(manifest, admission.record, admission.kind);
-    if (profile) return executeAsync(manifest, profile, input, auth.headers, admission.record, idempotencyKey, options.signal, clock, auth.secret);
+    if (profile) return executeAsync(manifest, profile, run.args, auth.headers, admission.record, idempotencyKey, options.signal, clock, auth.secret);
 
     const runId = admission.record.runId;
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
@@ -509,7 +556,7 @@ export async function executeCapability(
         }
         const step = await dispatch(
             manifest,
-            input,
+            run,
             auth.headers,
             auth.query,
             options.fetchImpl ?? fetch,
@@ -575,7 +622,7 @@ function validateInput(manifest: CapabilityManifest, input: Record<string, unkno
         if (!known.has(key)) errors.push(`unexpected input ${key}`);
     }
     for (const entry of manifest.inputs) {
-        const present = input[entry.name] !== undefined;
+        const present = Object.hasOwn(input, entry.name) && input[entry.name] !== undefined;
         if (!present) {
             if (entry.required) errors.push(`${entry.name} is required`);
             continue;
@@ -616,7 +663,7 @@ type Step = { type: 'value'; value: unknown } | { type: 'halt'; result: Capabili
 
 async function dispatch(
     manifest: CapabilityManifest,
-    input: Record<string, unknown>,
+    run: PreparedRun,
     authHeaders: Record<string, string>,
     authQuery: Record<string, string>,
     fetchImpl: typeof fetch,
@@ -626,11 +673,11 @@ async function dispatch(
     markDispatched: () => void
 ): Promise<Step> {
     if (manifest.transport.kind === 'http') {
-        return executeHttp(manifest, input, authHeaders, authQuery, fetchImpl, signal, idempotencyKey, secret, markDispatched);
+        return executeHttp(manifest, run, authHeaders, authQuery, fetchImpl, signal, idempotencyKey, secret, markDispatched);
     }
     markDispatched();
-    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, input, authHeaders, signal);
-    return executeLocal(manifest, input, signal);
+    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, run.args, authHeaders, signal);
+    return executeLocal(manifest, run.args, signal);
 }
 
 function halt(result: CapabilityResult): Step {
@@ -639,7 +686,7 @@ function halt(result: CapabilityResult): Step {
 
 async function executeHttp(
     manifest: CapabilityManifest,
-    input: Record<string, unknown>,
+    run: PreparedRun,
     authHeaders: Record<string, string>,
     authQuery: Record<string, string>,
     fetchImpl: typeof fetch,
@@ -648,32 +695,30 @@ async function executeHttp(
     secret: string | undefined,
     markDispatched: () => void
 ): Promise<Step> {
-    if (manifest.transport.kind !== 'http') {
+    if (manifest.transport.kind !== 'http' || !run.http) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an http capability', false));
     }
-    const target = resolveHttpPath(manifest.transport.baseUrl, manifest.transport.path, input);
-    if ('error' in target) return halt(failure(manifest.id, 'INPUT_INVALID', target.error, false));
-    const url = target.url;
-    const headers: Record<string, string> = { accept: 'application/json', ...authHeaders };
-    for (const entry of manifest.inputs) {
-        if (input[entry.name] === undefined) continue;
-        if (entry.in === 'query') url.searchParams.set(entry.name, stringifyParam(input[entry.name]));
-        if (entry.in === 'header') headers[entry.name] = stringifyParam(input[entry.name]);
-    }
+    // Sent exactly as prepared (and, for a write, as confirmed); only the
+    // credential is added here.
+    const url = new URL(run.http.url);
+    const headers = Object.assign(
+        Object.create(null) as Record<string, string>,
+        { accept: 'application/json' },
+        authHeaders,
+        run.http.headers
+    );
     for (const [key, value] of Object.entries(authQuery)) url.searchParams.set(key, value);
 
-    let body: string | undefined;
-    const bodyInput = manifest.inputs.find(entry => entry.in === 'body');
-    if (bodyInput && input[bodyInput.name] !== undefined) {
-        body = JSON.stringify(input[bodyInput.name]);
-        if (!headers['content-type'] && !headers['Content-Type']) headers['content-type'] = 'application/json';
+    const body = run.http.body;
+    if (body !== undefined && !headers['content-type'] && !headers['Content-Type']) {
+        headers['content-type'] = 'application/json';
     }
 
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     markDispatched();
     if (manifest.transport.access === 'server_broker') {
-        return executeBroker(manifest, input, idempotencyKey, secret, fetchImpl, requestSignal);
+        return executeBroker(manifest, run.args, idempotencyKey, secret, fetchImpl, requestSignal);
     }
     const response = await fetchImpl(url.toString(), {
         method: manifest.transport.method,
@@ -748,11 +793,7 @@ async function executeLocal(manifest: CapabilityManifest, input: Record<string, 
     if (!handler) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No local handler bound for ${manifest.transport.handler}`, false));
     }
-    const args: Record<string, unknown> = {};
-    for (const entry of manifest.inputs) {
-        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
-    }
-    return { type: 'value', value: await handler(args, { signal }) };
+    return { type: 'value', value: await handler(argumentsFor(manifest, input), { signal }) };
 }
 
 async function executeBroker(
@@ -804,10 +845,7 @@ async function executeMcp(
     if (!transport) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No MCP transport bound for ${manifest.transport.serverId}`, false));
     }
-    const args: Record<string, unknown> = {};
-    for (const entry of manifest.inputs) {
-        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
-    }
+    const args = argumentsFor(manifest, input);
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     return {

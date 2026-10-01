@@ -26,7 +26,8 @@ export function resolveHttpPath(
 ): { url: URL } | { error: string } {
     const refused: string[] = [];
     const filled = template.replace(/\{([^}]+)\}/g, (_match, name: string) => {
-        const value = input[name] === undefined ? '' : stringifyParam(input[name]);
+        const supplied = Object.hasOwn(input, name) ? input[name] : undefined;
+        const value = supplied === undefined ? '' : stringifyParam(supplied);
         if (value === '.' || value === '..') refused.push(name);
         return encodeURIComponent(value);
     });

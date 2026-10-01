@@ -99,7 +99,12 @@ write or destructive run, `previewCapabilityRun` resolves the method, the URL
 (without the credential) and the arguments, and the block shows them.
 `executeCapability` dispatches the run only with the digest of that exact
 preview (`confirmedRun`); different arguments, including a wire that changed
-after the preview, are refused as `CONFIRMATION_REQUIRED`. A path argument
+after the preview, are refused as `CONFIRMATION_REQUIRED`. A run is prepared
+once: its arguments (every declared input supplied, in an object with no
+prototype) and, for http, the exact URL, header values and body text. The
+digest is computed from that prepared run, and dispatch sends the same
+objects. An input or apiKey name may not be `__proto__`, `prototype`, or a
+name `Object.prototype` defines. A path argument
 fills one path segment: `.` and `..` are refused, and the resolved pathname
 must equal the expanded template.
 
