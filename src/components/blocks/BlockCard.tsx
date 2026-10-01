@@ -22,14 +22,25 @@ import { getInputPorts, getOutputPorts } from '@/core/services/port.service';
 import { cn } from '@/lib/utils';
 import { BlockGlyph } from '@/components/blockIcons';
 
-import { type SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
+import { type DraggableAttributes, type DraggableSyntheticListeners } from '@dnd-kit/core';
+
+/**
+ * dnd-kit's drag wiring, applied to the grip only. Spreading `attributes` on
+ * the whole card made the card a role="button" that swallowed the names of
+ * the controls inside it (FINDINGS.md).
+ */
+export interface BlockDragHandle {
+    attributes: DraggableAttributes;
+    listeners: DraggableSyntheticListeners;
+    setActivatorNodeRef: (element: HTMLElement | null) => void;
+}
 
 interface BlockCardProps {
     block: BlockInstance;
     children: ReactNode;
     onClose?: () => void;
     isDragging?: boolean;
-    dragListeners?: SyntheticListenerMap;
+    dragHandle?: BlockDragHandle;
 }
 
 export function BlockCard({
@@ -37,7 +48,7 @@ export function BlockCard({
     children,
     onClose,
     isDragging = false,
-    dragListeners
+    dragHandle
 }: BlockCardProps) {
     const [isHovered, setIsHovered] = useState(false);
 
@@ -108,12 +119,17 @@ export function BlockCard({
             <div className="block-header py-1 px-1.5">
                 <div className="flex items-center gap-1 min-w-0">
                     {/* Drag Handle */}
-                    <div
+                    <button
+                        type="button"
+                        ref={dragHandle?.setActivatorNodeRef}
+                        {...dragHandle?.attributes}
+                        {...dragHandle?.listeners}
+                        aria-label={`Move ${block.schema.display_name}`}
+                        title="Drag to move"
                         className="cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
-                        {...dragListeners}
                     >
-                        <GripVertical className="w-3 h-3" />
-                    </div>
+                        <GripVertical className="w-3 h-3" aria-hidden="true" />
+                    </button>
 
                     {/* Status Dot + Icon */}
                     <div className="relative flex-shrink-0">
