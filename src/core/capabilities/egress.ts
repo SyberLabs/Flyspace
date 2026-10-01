@@ -35,19 +35,65 @@ export function assessEgress(url: URL, addresses: ResolvedAddress[]): EgressDeci
 }
 
 export function classifyAddress(address: string): EgressDecision {
-    const mapped = ipv4FromMapped(address);
-    if (mapped) return classifyAddress(mapped);
-    if (address.includes(':')) return classifyV6(address);
-    return classifyV4(address);
+    if (!address.includes(':')) return classifyV4(address);
+    const hextets = parseIpv6(address);
+    if (!hextets) return { ok: false, reason: 'address is not a public IPv6 address' };
+    const mapped = embeddedMappedIpv4(hextets);
+    if (mapped) return classifyV4(mapped);
+    return classifyV6(hextets);
 }
 
 function isIpLiteral(host: string): boolean {
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
 }
 
-function ipv4FromMapped(address: string): string | null {
-    const match = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(address);
-    return match ? match[1] : null;
+/**
+ * Eight 16-bit groups, or null. Accepts `::` compression, a trailing dotted
+ * IPv4 tail, and a zone suffix (dropped). The URL parser rewrites a dotted
+ * tail to hex, so both spellings must reach the same value.
+ */
+export function parseIpv6(address: string): number[] | null {
+    const text = address.toLowerCase().replace(/^\[|\]$/g, '').replace(/%.*$/, '');
+    if (!/^[0-9a-f:.]+$/.test(text)) return null;
+    const halves = text.split('::');
+    if (halves.length > 2) return null;
+    const parse = (part: string): number[] | null => {
+        if (part === '') return [];
+        const groups: number[] = [];
+        const pieces = part.split(':');
+        for (let i = 0; i < pieces.length; i++) {
+            const piece = pieces[i];
+            if (piece.includes('.')) {
+                if (i !== pieces.length - 1) return null;
+                const v4 = dottedQuad(piece);
+                if (!v4) return null;
+                groups.push((v4[0] << 8) | v4[1], (v4[2] << 8) | v4[3]);
+                continue;
+            }
+            if (!/^[0-9a-f]{1,4}$/.test(piece)) return null;
+            groups.push(Number.parseInt(piece, 16));
+        }
+        return groups;
+    };
+    const head = parse(halves[0]);
+    const tail = halves.length === 2 ? parse(halves[1]) : [];
+    if (!head || !tail) return null;
+    if (halves.length === 1) return head.length === 8 ? head : null;
+    const missing = 8 - head.length - tail.length;
+    if (missing < 1) return null;
+    return [...head, ...new Array<number>(missing).fill(0), ...tail];
+}
+
+function dottedQuad(text: string): number[] | null {
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(text)) return null;
+    const parts = text.split('.').map(Number);
+    return parts.every(part => part <= 255) ? parts : null;
+}
+
+/** `::ffff:a.b.c.d` in any spelling: the socket would reach that IPv4 address. */
+function embeddedMappedIpv4(h: number[]): string | null {
+    if (h[0] || h[1] || h[2] || h[3] || h[4] || h[5] !== 0xffff) return null;
+    return [h[6] >> 8, h[6] & 0xff, h[7] >> 8, h[7] & 0xff].join('.');
 }
 
 function classifyV4(address: string): EgressDecision {
@@ -74,15 +120,18 @@ function classifyV4(address: string): EgressDecision {
         : { ok: true };
 }
 
-function classifyV6(address: string): EgressDecision {
-    const lower = address.toLowerCase();
-    if (lower === '::' || lower === '::1') return { ok: false, reason: 'address is not a public IPv6 address' };
-    const head = lower.split(':')[0];
-    const first = Number.parseInt(head || '0', 16);
-    if (!Number.isFinite(first)) return { ok: false, reason: 'address is not a public IPv6 address' };
-    // fc00::/7 unique local, fe80::/10 link-local, ff00::/8 multicast.
-    if ((first & 0xfe00) === 0xfc00) return { ok: false, reason: 'address is not a public IPv6 address' };
-    if ((first & 0xffc0) === 0xfe80) return { ok: false, reason: 'address is not a public IPv6 address' };
-    if ((first & 0xff00) === 0xff00) return { ok: false, reason: 'address is not a public IPv6 address' };
+/**
+ * Only global unicast (2000::/3) is public. That excludes, among others,
+ * ::/96 (IPv4-compatible), the ::ffff:0:0:0/96 translated form, 64:ff9b::/96
+ * (NAT64), fc00::/7, fe80::/10, fec0::/10 and ff00::/8. Inside 2000::/3,
+ * 2002::/16 (6to4) and 2001::/32 (Teredo) embed an IPv4 address, and
+ * 2001:db8::/32 and 3fff::/20 are documentation.
+ */
+function classifyV6(h: number[]): EgressDecision {
+    const refused = { ok: false as const, reason: 'address is not a public IPv6 address' };
+    if ((h[0] & 0xe000) !== 0x2000) return refused;
+    if (h[0] === 0x2002) return refused;
+    if (h[0] === 0x2001 && (h[1] === 0 || h[1] === 0x0db8)) return refused;
+    if (h[0] === 0x3fff && (h[1] & 0xf000) === 0) return refused;
     return { ok: true };
 }

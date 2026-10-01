@@ -5,11 +5,11 @@ import { handleCapabilityBroker } from './capabilityBroker';
 import { memoryLedger } from './capability.ledger';
 import type { PinnedRequest } from './pinnedFetch';
 
-function listManifest(access: 'browser_direct' | 'server_broker' = 'server_broker') {
+function listManifest(access: 'browser_direct' | 'server_broker' = 'server_broker', baseUrl = 'https://board.example.test') {
     const compiled = compileOpenApi({
         openapi: '3.0.3',
         info: { title: 'Board', version: '1' },
-        servers: [{ url: 'https://board.example.test' }],
+        servers: [{ url: baseUrl }],
         paths: {
             '/items': {
                 get: {
@@ -123,5 +123,57 @@ describe('capability broker', () => {
             fetch: async () => ({ status: 200, headers: {}, text: 'null' })
         });
         expect(result.status).toBe(400);
+    });
+
+    it.each([
+        '[::ffff:127.0.0.1]',
+        '[::ffff:a9fe:a9fe]',
+        '[::ffff:0:7f00:1]',
+        '[::7f00:1]',
+        '[64:ff9b::a9fe:a9fe]',
+        '[2002:7f00:1::]',
+        '[fec0::1]'
+    ])('never dials the IPv6 literal %s', async (literal) => {
+        let fetched = false;
+        let resolved = false;
+        const result = await handleCapabilityBroker({
+            manifest: listManifest('server_broker', `https://${literal}`),
+            input: {},
+            idempotencyKey: 'broker-key-literal'
+        }, {
+            ledger: memoryLedger(),
+            resolve: async () => {
+                resolved = true;
+                return ['1.1.1.1'];
+            },
+            fetch: async () => {
+                fetched = true;
+                return { status: 200, headers: {}, text: '[]' };
+            }
+        });
+        expect([400, 403]).toContain(result.status);
+        expect(fetched).toBe(false);
+        expect(resolved).toBe(false);
+    });
+
+    it('returns a generic error instead of the transport error text', async () => {
+        const ledger = memoryLedger();
+        const result = await handleCapabilityBroker({
+            manifest: listManifest(),
+            input: {},
+            idempotencyKey: 'broker-key-generic'
+        }, {
+            ledger,
+            resolve: async () => ['1.1.1.1'],
+            fetch: async () => {
+                throw new Error('connect ECONNREFUSED 10.0.0.7:6379');
+            }
+        });
+        expect(result.status).toBe(502);
+        const text = JSON.stringify(result.body);
+        expect(text).not.toContain('ECONNREFUSED');
+        expect(text).not.toContain('10.0.0.7');
+        const runId = (result.body as { runId: string }).runId;
+        expect((await ledger.find(runId))?.error).toBe('UPSTREAM_ERROR');
     });
 });

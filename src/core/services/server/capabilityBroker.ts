@@ -7,6 +7,7 @@
 import { assessEgress } from '@/core/capabilities/egress';
 import { canonicalize, sha256 } from '@/core/capabilities/hash';
 import { validateManifest, type CapabilityManifest } from '@/core/capabilities/manifest';
+import { isBlockedDestination } from './egressBlockList';
 import type { PinnedRequest, PinnedResponse } from './pinnedFetch';
 import type { ServerExecution, ServerLedger } from './capability.ledger';
 
@@ -59,6 +60,7 @@ export async function handleCapabilityBroker(
     const addresses = isIp(host) ? [host] : await deps.resolve(host).catch(() => []);
     const egress = assessEgress(url, addresses.map(address => ({ address })));
     if (!egress.ok) return json(403, egress.reason);
+    if (addresses.some(isBlockedDestination)) return json(403, 'broker host is not a public address');
 
     const inputDigest = sha256(canonicalize(input));
     const runId = `run_${sha256(`${manifest.digest}|${idempotencyKey}`).slice(0, 16)}`;
@@ -107,12 +109,15 @@ export async function handleCapabilityBroker(
         const value = response.text.trim() === '' ? null : JSON.parse(response.text) as unknown;
         await deps.ledger.finish(admission.row.runId, 'succeeded');
         return json(200, { runId: admission.row.runId, executionStatus: 'succeeded', value });
-    } catch (error) {
-        const message = scrub(error instanceof Error ? error.message : 'Broker request failed', secret);
-        await deps.ledger.finish(admission.row.runId, 'failed', message);
-        return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'UPSTREAM_ERROR', message } });
+    } catch {
+        // The transport's own error text describes the destination's network
+        // (refused, reset, certificate). None of it goes back to the caller.
+        await deps.ledger.finish(admission.row.runId, 'failed', 'UPSTREAM_ERROR');
+        return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'UPSTREAM_ERROR', message: UPSTREAM_FAILED } });
     }
 }
+
+const UPSTREAM_FAILED = 'The upstream request failed';
 
 function parseBody(body: unknown): {
     manifest: CapabilityManifest;
@@ -175,11 +180,6 @@ function allow(capabilityId: string, now: number): boolean {
     recent.push(now);
     hits.set(capabilityId, recent);
     return true;
-}
-
-function scrub(message: string, secret: string | undefined): string {
-    if (!secret || secret.length < 8) return message;
-    return message.split(secret).join('[redacted]');
 }
 
 function isIp(host: string): boolean {
