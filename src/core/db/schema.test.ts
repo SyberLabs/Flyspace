@@ -20,6 +20,7 @@ const sql = readFileSync(path.join(MIGRATIONS_DIR, '001_inference_ledger.sql'), 
 const lineageSql = readFileSync(path.join(MIGRATIONS_DIR, '002_run_lineage.sql'), 'utf8');
 const hostedSql = readFileSync(path.join(MIGRATIONS_DIR, '003_hosted_ownership_idempotency.sql'), 'utf8');
 const capabilitySql = readFileSync(path.join(MIGRATIONS_DIR, '004_capability_execution.sql'), 'utf8');
+const asyncSql = readFileSync(path.join(MIGRATIONS_DIR, '005_capability_async.sql'), 'utf8');
 
 const flat = (s: string) => s.replace(/\s+/g, ' ').toLowerCase();
 
@@ -43,7 +44,7 @@ describe('migration files', () => {
     });
 
     it('are re-runnable, so a half-applied database can be repaired', () => {
-        for (const text of [sql, lineageSql, hostedSql, capabilitySql]) {
+        for (const text of [sql, lineageSql, hostedSql, capabilitySql, asyncSql]) {
             expect(text).not.toMatch(/CREATE TABLE(?! IF NOT EXISTS)/i);
             expect(text).not.toMatch(/CREATE INDEX(?! IF NOT EXISTS)/i);
             expect(text).not.toMatch(/ADD COLUMN(?! IF NOT EXISTS)/i);
@@ -115,6 +116,26 @@ describe('004 — capability execution', () => {
         expect(flat(capabilitySql)).toContain('create table if not exists capability_execution');
         expect(flat(capabilitySql)).toContain('capability_execution_idempotency_idx');
         expect(flat(capabilitySql)).toContain("status in ('admitted', 'running', 'succeeded', 'failed', 'canceled', 'uncertain')");
+    });
+});
+
+describe('005 — async capability runs', () => {
+    it('adds the async fields without rewriting 004 or reinterpreting old rows', () => {
+        for (const column of ['provider_id text', 'external_run_id text', 'last_observed_status text', 'last_observed_at timestamptz']) {
+            expect(flat(asyncSql)).toContain(`add column if not exists ${column}`);
+        }
+        expect(flat(asyncSql)).toContain("add column if not exists execution_profile text not null default 'sync'");
+        expect(flat(asyncSql)).not.toMatch(/\bupdate capability_execution\b/);
+        expect(flat(asyncSql)).not.toContain('drop constraint');
+    });
+
+    it('guards every added constraint and keeps an external run id async-only', () => {
+        const constraintAdds = (asyncSql.match(/ADD CONSTRAINT/gi) ?? []).length;
+        const guards = (asyncSql.match(/FROM pg_constraint/gi) ?? []).length;
+        expect(constraintAdds).toBeGreaterThan(0);
+        expect(guards).toBe(constraintAdds);
+        expect(flat(asyncSql)).toContain("execution_profile in ('sync', 'async_poll')");
+        expect(flat(asyncSql)).toContain("execution_profile = 'async_poll' and external_run_id");
     });
 });
 

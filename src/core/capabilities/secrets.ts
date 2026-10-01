@@ -15,6 +15,11 @@ export const capabilitySecrets = {
         return slots.get(ref);
     },
 
+    /** Unbind one slot. The capability stays installed; its next run is AUTH_UNBOUND. */
+    revoke(ref: string): boolean {
+        return slots.delete(ref);
+    },
+
     clear(): void {
         slots.clear();
     }

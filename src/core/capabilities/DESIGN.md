@@ -24,6 +24,44 @@ Three compilers propose manifests:
   `McpTransport`; the compiler itself does not open a connection.
 - `compileBring` reads a structured description. Free text is not a proposal.
 
+## Providers and admission
+
+A `CapabilityProvider` (`provider.ts`) discovers candidates in one external
+ecosystem and materializes a `CapabilityProposalV1`. `providers/openapiProvider.ts`,
+`providers/mcpProvider.ts`, and `providers/bringProvider.ts` wrap the three
+compilers above; they do not parse a second way. A proposal carries an effect
+*hint*, an auth *placement*, a transport, schemas, and provenance. It has no
+id, approval, digest, credential slot, or trust flag, and `admission.ts`
+refuses a proposal that includes one.
+
+`admitProposal` derives what a provider may not claim: the id from the
+transport, the effect from the method floor (an MCP read hint counts only for
+a server on the host's `trustedEffectHints` list, and the same holds for an
+async runtime), the approval from the
+effect, and the credential slot from the destination. It seals provenance
+(provider, external id, source locator and revision, discovery and admission
+time, schema digest) into the digest, then calls `installProposal`.
+`providers/maxunProvider.ts` is a `web_data` provider: a scrape robot becomes
+`{ markdown: string }`, an extract robot becomes an object of its declared
+text fields, and a robot with no declared fields is reported, not admitted as
+`any`. Its proposals use the async `maxun` runtime (`providers/maxunRuntime.ts`)
+with the API key in the `x-api-key` slot. That runtime's start is fenced: Maxun's
+open-source server answers `POST /api/robots/:id/runs` only after the run
+finishes, so no run id could be recorded for a run longer than one request.
+Until an early-acknowledgement start is verified, start sends nothing and
+execution fails `ASYNC_START_REJECTED`. Only the run lookup by id is implemented.
+`providers/maxun.evaluation.ts` records that no live Maxun run was performed.
+`providers/managedProvider.ts` is a `managed_integration` provider: a
+Pipedream- or Composio-style catalog entry becomes an http proposal against the
+SaaS API itself, with `oauth` auth. An `oauth` binding carries scopes and a
+slot (one slot per origin and scope set); the token enters the slot through a
+host connect flow that does not exist yet, so until then execution is
+`AUTH_UNBOUND`. `oauth` is http-only and never rides `server_broker`.
+`providers/managed.decision.ts` rejects both vendors as dependencies.
+Admission
+does not place blocks or wires. The OpenAPI install panel still calls
+`compileOpenApi` directly.
+
 `validateManifest` rebuilds the canonical object and checks the digest.
 `installProposal` is the gate that registers anything. A write or destructive
 proposal is stored as `pending` even if it arrived marked `approved`.
@@ -42,7 +80,8 @@ A manifest describes a capability. It does not grant itself authority.
 - Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and input replays. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
 - Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
 - HTTP capabilities are `browser_direct` or `server_broker`. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
-- MCP tools compile from schemas and run through a Streamable HTTP client once a server URL is bound.
+- MCP tools compile from schemas and run through `mcpClient.ts`, a thin adapter over the official TypeScript SDK v2 (`@modelcontextprotocol/client`). The SDK negotiates the protocol era (`auto`: probe 2026-07-28, fall back to the 2025 handshake) and forwards cancellation. An MCP credential slot is keyed by server id; execution resolves it and passes it as per-call headers, so revoking the slot stops the next call. A sync MCP call is bounded by the same 15 s request timeout as HTTP.
+- Long work uses the `async_poll` profile, never a longer request timeout. The transport is `{ kind: 'async', runtimeId, operation }`: the host binds the runtime (`asyncRuntime.ts`) and its endpoint, and a proposal cannot name one. `start` returns an external run id, which the vault ledger records before polling. Each start and each poll is still one request of at most 15 s, and the whole run is bounded by the profile's `maxDurationMs` (at most one hour): no sleep or poll request extends past that deadline, except the single observation recovery makes of a run that already outlived it. A run this session is still polling is not expired underneath it by another admission; it settles its own row. Omni never repeats a start. A write that was started and not observed to finish (deadline, repeated poll failures, or cancel) is `uncertain`. `reconcileAsyncExecution` and `recoverAsyncExecutions` read the ledger after a reload and poll the external run id; an uncertain run closes only when the destination reports a terminal status. Async capabilities run manually only. An untrusted async runtime lands at `write`, like an untrusted MCP server. The server ledger carries the same fields (`db/migrations/005_capability_async.sql`).
 - Speech has a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. A denied microphone is `Permission denied`, not the browser error code.
 
 ## Effects
