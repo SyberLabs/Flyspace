@@ -138,6 +138,8 @@ const MANIFEST_KEYS = new Set([
 
 const RUNTIME_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/;
 const MAX_OAUTH_SCOPES = 20;
+/** Each input schema is already depth-bounded by validateValueType. */
+export const MAX_MANIFEST_INPUTS = 64;
 const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5B\x5D-\x7E]{1,200}$/;
 const OPERATION_PATTERN = /^[A-Za-z0-9_.:-]{1,120}$/;
 
@@ -520,6 +522,8 @@ export function validateManifest(input: unknown): ManifestValidation {
 
     if (!Array.isArray(input.inputs)) {
         errors.push('inputs must be a list');
+    } else if (input.inputs.length > MAX_MANIFEST_INPUTS) {
+        errors.push(`inputs exceeds ${MAX_MANIFEST_INPUTS}`);
     } else if (isRecord(input.transport)) {
         const names = new Set<string>();
         let bodies = 0;

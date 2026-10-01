@@ -12,6 +12,8 @@ import type { PinnedRequest, PinnedResponse } from './pinnedFetch';
 import type { ServerExecution, ServerLedger } from './capability.ledger';
 
 const MAX_BODY = 1_000_000;
+/** Total budget for one broker request, from route entry to the last upstream byte. */
+export const BROKER_DEADLINE_MS = 15_000;
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 30;
 
@@ -22,12 +24,15 @@ export interface BrokerDeps {
     resolve: (hostname: string) => Promise<string[]>;
     fetch: (request: PinnedRequest) => Promise<PinnedResponse>;
     now?: () => number;
+    /** Aborts on client disconnect or the total deadline. Defaults to the deadline alone. */
+    signal?: AbortSignal;
 }
 
 export async function handleCapabilityBroker(
     body: unknown,
     deps: BrokerDeps
 ): Promise<{ status: number; body: unknown }> {
+    const signal = deps.signal ?? AbortSignal.timeout(BROKER_DEADLINE_MS);
     const parsed = parseBody(body);
     if ('error' in parsed) return json(400, parsed.error);
     const { manifest, input, idempotencyKey, secret } = parsed;
@@ -57,7 +62,8 @@ export async function handleCapabilityBroker(
     }
 
     const host = url.hostname.replace(/^\[|\]$/g, '');
-    const addresses = isIp(host) ? [host] : await deps.resolve(host).catch(() => []);
+    const addresses = isIp(host) ? [host] : await untilAborted(deps.resolve(host), signal).catch(() => [] as string[]);
+    if (signal.aborted) return json(504, { error: { code: 'DEADLINE', message: DEADLINE_PASSED } });
     const egress = assessEgress(url, addresses.map(address => ({ address })));
     if (!egress.ok) return json(403, egress.reason);
     if (addresses.some(isBlockedDestination)) return json(403, 'broker host is not a public address');
@@ -90,14 +96,14 @@ export async function handleCapabilityBroker(
     await deps.ledger.markDispatched(admission.row.runId);
     const headers = applyAuth(manifest, secret);
     try {
-        const response = await deps.fetch({
+        const response = await untilAborted(deps.fetch({
             url,
             address: addresses[0],
             method: manifest.transport.method,
             headers,
-            signal: undefined,
+            signal,
             maxBytes: MAX_BODY
-        });
+        }), signal);
         if (response.status >= 300 && response.status < 400) {
             await deps.ledger.finish(admission.row.runId, 'failed', 'Redirects are not followed');
             return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'HTTP_REDIRECT_REFUSED', message: 'Redirects are not followed' } });
@@ -110,6 +116,10 @@ export async function handleCapabilityBroker(
         await deps.ledger.finish(admission.row.runId, 'succeeded');
         return json(200, { runId: admission.row.runId, executionStatus: 'succeeded', value });
     } catch {
+        if (signal.aborted) {
+            await deps.ledger.finish(admission.row.runId, 'failed', 'DEADLINE');
+            return json(504, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'DEADLINE', message: DEADLINE_PASSED } });
+        }
         // The transport's own error text describes the destination's network
         // (refused, reset, certificate). None of it goes back to the caller.
         await deps.ledger.finish(admission.row.runId, 'failed', 'UPSTREAM_ERROR');
@@ -118,6 +128,18 @@ export async function handleCapabilityBroker(
 }
 
 const UPSTREAM_FAILED = 'The upstream request failed';
+const DEADLINE_PASSED = 'The broker request did not finish within its deadline';
+
+/** Settle with the work, or reject when the signal aborts, whichever comes first. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) return Promise.reject(signal.reason);
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        signal.addEventListener('abort', onAbort, { once: true });
+    });
+    return Promise.race([work, aborted]).finally(() => signal.removeEventListener('abort', onAbort));
+}
 
 function parseBody(body: unknown): {
     manifest: CapabilityManifest;

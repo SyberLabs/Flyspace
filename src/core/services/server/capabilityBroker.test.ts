@@ -176,4 +176,84 @@ describe('capability broker', () => {
         const runId = (result.body as { runId: string }).runId;
         expect((await ledger.find(runId))?.error).toBe('UPSTREAM_ERROR');
     });
+
+    it('answers 504 within the deadline when the upstream never responds', async () => {
+        const ledger = memoryLedger();
+        let received: AbortSignal | undefined;
+        const started = Date.now();
+        const result = await handleCapabilityBroker({
+            manifest: listManifest(),
+            input: {},
+            idempotencyKey: 'broker-key-deadline'
+        }, {
+            ledger,
+            resolve: async () => ['1.1.1.1'],
+            fetch: (request) => {
+                received = request.signal;
+                return new Promise(() => undefined);
+            },
+            signal: AbortSignal.timeout(50)
+        });
+        expect(result.status).toBe(504);
+        expect(Date.now() - started).toBeLessThan(2_000);
+        expect(received?.aborted).toBe(true);
+        const runId = (result.body as { runId: string }).runId;
+        expect((await ledger.find(runId))?.error).toBe('DEADLINE');
+    });
+
+    it('answers 504 when name resolution outlives the deadline', async () => {
+        let fetched = false;
+        const result = await handleCapabilityBroker({
+            manifest: listManifest(),
+            input: {},
+            idempotencyKey: 'broker-key-dns-deadline'
+        }, {
+            ledger: memoryLedger(),
+            resolve: () => new Promise(() => undefined),
+            fetch: async () => {
+                fetched = true;
+                return { status: 200, headers: {}, text: '[]' };
+            },
+            signal: AbortSignal.timeout(50)
+        });
+        expect(result.status).toBe(504);
+        expect(fetched).toBe(false);
+    });
+});
+
+describe('broker manifest bounds', () => {
+    it('refuses a manifest with more inputs than the cap before resolving or fetching', async () => {
+        const base = listManifest();
+        const inputs = Array.from({ length: 65 }, (_, i) => ({
+            name: `q${i}`, in: 'query' as const, required: false, schema: { kind: 'string' as const }
+        }));
+        const { digest: _digest, ...draft } = base;
+        const wide = sealManifest({ ...draft, inputs });
+        let touched = false;
+        const result = await handleCapabilityBroker({ manifest: wide, input: {}, idempotencyKey: 'broker-key-wide' }, {
+            ledger: memoryLedger(),
+            resolve: async () => { touched = true; return ['1.1.1.1']; },
+            fetch: async () => { touched = true; return { status: 200, headers: {}, text: '[]' }; }
+        });
+        expect(result.status).toBe(400);
+        expect(JSON.stringify(result.body)).toContain('inputs exceeds 64');
+        expect(touched).toBe(false);
+    });
+});
+
+describe('memory ledger', () => {
+    it('evicts settled rows first once it is full', async () => {
+        const ledger = memoryLedger(2);
+        const row = (n: number) => ({
+            runId: `run_${n}`, capabilityId: 'cap_x', manifestDigest: 'd', effect: 'read',
+            inputDigest: 'i', idempotencyKey: `key-${n}`, status: 'admitted' as const
+        });
+        await ledger.admit(row(1));
+        await ledger.admit(row(2));
+        await ledger.finish('run_2', 'succeeded');
+        await ledger.admit(row(3));
+        expect(await ledger.find('run_1')).toBeDefined();
+        expect(await ledger.find('run_2')).toBeUndefined();
+        expect(await ledger.find('run_3')).toBeDefined();
+    });
 });
