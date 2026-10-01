@@ -43,7 +43,17 @@ export function classifyAddress(address: string): EgressDecision {
     return classifyV6(hextets);
 }
 
-function isIpLiteral(host: string): boolean {
+/** 127.0.0.0/8 or ::1, in any spelling, including an IPv4-mapped one. */
+export function isLoopbackAddress(address: string): boolean {
+    if (!address.includes(':')) return /^127(\.\d{1,3}){3}$/.test(address);
+    const hextets = parseIpv6(address);
+    if (!hextets) return false;
+    const mapped = embeddedMappedIpv4(hextets);
+    if (mapped) return mapped.startsWith('127.');
+    return hextets.slice(0, 7).every(group => group === 0) && hextets[7] === 1;
+}
+
+export function isIpLiteral(host: string): boolean {
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
 }
 

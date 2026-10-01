@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { compileOpenApi } from '@/core/capabilities/openapi';
 import { sealManifest } from '@/core/capabilities/manifest';
+import { canonicalCapabilityId } from '@/core/capabilities/identity';
 import { createBrokerRateLimiter, handleCapabilityBroker, type BrokerDeps, type BrokerRateLimiter } from './capabilityBroker';
 import { memoryLedger } from './capability.ledger';
 import type { PinnedRequest } from './pinnedFetch';
@@ -9,7 +10,7 @@ function listManifest(access: 'browser_direct' | 'server_broker' = 'server_broke
     const compiled = compileOpenApi({
         openapi: '3.0.3',
         info: { title: 'Board', version: '1' },
-        servers: [{ url: baseUrl }],
+        servers: [{ url: 'https://board.example.test' }],
         paths: {
             '/items': {
                 get: {
@@ -25,10 +26,10 @@ function listManifest(access: 'browser_direct' | 'server_broker' = 'server_broke
         }
     }).manifests[0];
     if (compiled.transport.kind !== 'http') throw new Error('expected http');
-    return sealManifest({
-        ...compiled,
-        transport: { ...compiled.transport, access }
-    });
+    // Sealed directly, not compiled, so a base URL the compiler would refuse
+    // still reaches the broker as a client could send it.
+    const transport = { ...compiled.transport, access, baseUrl };
+    return sealManifest({ ...compiled, id: canonicalCapabilityId(transport), transport });
 }
 
 // Each test gets its own limiter. The budget is per caller, so tests no

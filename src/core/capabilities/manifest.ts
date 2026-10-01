@@ -5,6 +5,7 @@
 
 import { canonicalize, sha256 } from './hash';
 import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
+import { classifyAddress, isIpLiteral, isLoopbackAddress } from './egress';
 import { validateValueType, type ValueType } from './valueType';
 
 export const CAPABILITY_MANIFEST_VERSION = 1 as const;
@@ -360,7 +361,9 @@ function validateProvenance(provenance: unknown, errors: string[]): void {
     }
 }
 
-function validateHttpUrl(baseUrl: string, errors: string[]): void {
+const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata.google.com']);
+
+function validateHttpUrl(baseUrl: string, errors: string[], hostCreated: boolean): void {
     let url: URL;
     try {
         url = new URL(baseUrl);
@@ -371,15 +374,27 @@ function validateHttpUrl(baseUrl: string, errors: string[]): void {
     if (url.username || url.password) {
         errors.push('transport.baseUrl must not embed credentials');
     }
-    const host = url.hostname.toLowerCase();
-    if (host === '169.254.169.254' || host === 'metadata.google.internal') {
-        errors.push('transport.baseUrl targets a metadata service');
+    // A query or fragment here is never sent (paths are joined onto the base)
+    // and would only be stored and digested.
+    if (url.search || url.hash) {
+        errors.push('transport.baseUrl must not carry a query or fragment');
     }
-    const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-    if (url.protocol === 'http:' && !loopback) {
-        errors.push('transport.baseUrl must be https, except loopback http');
-    } else if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         errors.push('transport.baseUrl must be http or https');
+        return;
+    }
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    const literal = isIpLiteral(host);
+    const loopback = host === 'localhost' || host.endsWith('.localhost') || (literal && isLoopbackAddress(host));
+    if (METADATA_HOSTS.has(host) || host === '169.254.169.254') {
+        errors.push('transport.baseUrl targets a metadata service');
+    } else if (loopback) {
+        if (!hostCreated) errors.push('transport.baseUrl may target loopback only in a host-created manifest');
+    } else if (literal && !classifyAddress(host).ok) {
+        errors.push('transport.baseUrl targets a non-public address');
+    }
+    if (url.protocol === 'http:' && !loopback) {
+        errors.push('transport.baseUrl must be https, except loopback http in a host-created manifest');
     }
 }
 
@@ -393,7 +408,15 @@ export interface ManifestValidation {
     errors: string[];
 }
 
-export function validateManifest(input: unknown): ManifestValidation {
+export interface ManifestValidationOptions {
+    /**
+     * The host itself built this manifest (not a compiler, provider, model or
+     * stored snapshot). Only then may an http transport target loopback.
+     */
+    hostCreated?: boolean;
+}
+
+export function validateManifest(input: unknown, options: ManifestValidationOptions = {}): ManifestValidation {
     const errors: string[] = [];
     if (!isRecord(input)) return { ok: false, errors: ['manifest must be an object'] };
 
@@ -489,7 +512,7 @@ export function validateManifest(input: unknown): ManifestValidation {
         }
     } else if (input.transport.kind === 'http') {
         if (typeof input.transport.baseUrl !== 'string') errors.push('transport.baseUrl is required');
-        else validateHttpUrl(input.transport.baseUrl, errors);
+        else validateHttpUrl(input.transport.baseUrl, errors, options.hostCreated === true);
         if (typeof input.transport.method !== 'string' || !METHODS.includes(input.transport.method as HttpMethod)) {
             errors.push('transport.method is invalid');
         }

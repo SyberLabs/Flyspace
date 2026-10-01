@@ -39,6 +39,12 @@ export interface AdmissionPolicy {
         asyncRuntimes?: readonly string[];
     };
     nowMs?: number;
+    /**
+     * Host-owned list of origins (scheme://host[:port]) whose read and
+     * compute capabilities run through the server broker. Every other http
+     * capability runs browser_direct, whatever the proposal asked for.
+     */
+    brokerOrigins?: readonly string[];
 }
 
 const PROPOSAL_KEYS = new Set([
@@ -83,6 +89,13 @@ export function manifestFromProposal(proposal: unknown, policy: AdmissionPolicy 
 
     const auth = hostAuth(typed.auth, transport.transport);
     if ('error' in auth) return { ok: false, errors: [auth.error] };
+
+    if (transport.transport.kind === 'http'
+        && (effect.effect === 'read' || effect.effect === 'compute')
+        && auth.auth.kind !== 'oauth'
+        && policy.brokerOrigins?.includes(new URL(transport.transport.baseUrl).origin) === true) {
+        transport.transport = { ...transport.transport, access: 'server_broker' };
+    }
 
     const inputs = typed.inputs.map(canonicalInput);
     const output = canonicalOutput(typed.output);
@@ -137,10 +150,12 @@ export function admitProposal(proposal: unknown, policy: AdmissionPolicy = {}): 
 
 function hostTransport(transport: ProposedTransport): { transport: CapabilityTransport } | { error: string } {
     if (transport.kind === 'http') {
+        // The proposal's access is ignored: where a credential is sent from
+        // is the host's choice (AdmissionPolicy.brokerOrigins).
         return {
             transport: {
                 kind: 'http',
-                access: transport.access,
+                access: 'browser_direct',
                 baseUrl: transport.baseUrl,
                 method: transport.method,
                 path: transport.path
