@@ -7,6 +7,7 @@
 import { assessEgress } from '@/core/capabilities/egress';
 import { canonicalize, sha256 } from '@/core/capabilities/hash';
 import { resolveHttpPath } from '@/core/capabilities/httpTarget';
+import { redact } from '@/core/capabilities/redact';
 import { validateManifest, type CapabilityManifest } from '@/core/capabilities/manifest';
 import { isBlockedDestination } from './egressBlockList';
 import type { PinnedRequest, PinnedResponse } from './pinnedFetch';
@@ -127,7 +128,10 @@ export async function handleCapabilityBroker(
             error: admission.kind === 'conflict'
                 ? { code: 'IDEMPOTENCY_CONFLICT', message: 'Idempotency key was already used for a different input' }
                 : admission.row.error
-                    ? { code: admission.row.status === 'uncertain' ? 'EFFECT_UNCERTAIN' : 'UPSTREAM_ERROR', message: admission.row.error }
+                    ? {
+                        code: admission.row.status === 'uncertain' ? 'EFFECT_UNCERTAIN' : storedCode(admission.row.error),
+                        message: 'The previous run failed'
+                    }
                     : undefined
         });
     }
@@ -144,12 +148,12 @@ export async function handleCapabilityBroker(
             maxBytes: MAX_BODY
         }), signal);
         if (response.status >= 300 && response.status < 400) {
-            await deps.ledger.finish(admission.row.runId, 'failed', 'Redirects are not followed');
-            return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'HTTP_REDIRECT_REFUSED', message: 'Redirects are not followed' } });
+            await deps.ledger.finish(admission.row.runId, 'failed', 'HTTP_REDIRECT_REFUSED');
+            return failed(502, admission.row.runId, 'HTTP_REDIRECT_REFUSED', 'Redirects are not followed', secret);
         }
         if (response.status < 200 || response.status >= 300) {
-            await deps.ledger.finish(admission.row.runId, 'failed', `HTTP ${response.status}`);
-            return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'HTTP_ERROR', message: `HTTP ${response.status}` } });
+            await deps.ledger.finish(admission.row.runId, 'failed', 'HTTP_ERROR');
+            return failed(502, admission.row.runId, 'HTTP_ERROR', `HTTP ${response.status}`, secret);
         }
         const value = response.text.trim() === '' ? null : JSON.parse(response.text) as unknown;
         await deps.ledger.finish(admission.row.runId, 'succeeded');
@@ -157,16 +161,28 @@ export async function handleCapabilityBroker(
     } catch {
         if (signal.aborted) {
             await deps.ledger.finish(admission.row.runId, 'failed', 'DEADLINE');
-            return json(504, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'DEADLINE', message: DEADLINE_PASSED } });
+            return failed(504, admission.row.runId, 'DEADLINE', DEADLINE_PASSED, secret);
         }
         // The transport's own error text describes the destination's network
         // (refused, reset, certificate). None of it goes back to the caller.
         await deps.ledger.finish(admission.row.runId, 'failed', 'UPSTREAM_ERROR');
-        return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'UPSTREAM_ERROR', message: UPSTREAM_FAILED } });
+        return failed(502, admission.row.runId, 'UPSTREAM_ERROR', UPSTREAM_FAILED, secret);
     }
 }
 
 const UPSTREAM_FAILED = 'The upstream request failed';
+
+/**
+ * The ledger's error column holds a code, never upstream text. Rows written
+ * before that rule may hold text; it is not echoed back.
+ */
+function storedCode(error: string): string {
+    return /^[A-Z_]{1,40}$/.test(error) ? error : 'UPSTREAM_ERROR';
+}
+
+function failed(status: number, runId: string, code: string, message: string, secret: string | undefined) {
+    return json(status, { runId, executionStatus: 'failed', error: { code, message: redact(message, secret) } });
+}
 const DEADLINE_PASSED = 'The broker request did not finish within its deadline';
 
 /** Settle with the work, or reject when the signal aborts, whichever comes first. */

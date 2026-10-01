@@ -3,6 +3,7 @@
 
 import { canonicalize, sha256 } from './hash';
 import { joinUrl, resolveHttpPath, stringifyParam } from './httpTarget';
+import { redact } from './redact';
 import {
     admitExecution,
     executionRecord,
@@ -196,7 +197,8 @@ async function executeAsync(
     record: ExecutionRecord,
     idempotencyKey: string,
     signal: AbortSignal | undefined,
-    clock: AsyncClock
+    clock: AsyncClock,
+    secret: string | undefined
 ): Promise<CapabilityResult> {
     const runId = record.runId;
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
@@ -225,16 +227,17 @@ async function executeAsync(
             externalRunId = started?.externalRunId;
         } catch (error) {
             if (error instanceof AsyncStartRejected) {
-                return finish(failure(manifest.id, 'ASYNC_START_REJECTED', error.message, false), runId, 'failed', clock.now());
+                return finish(dispatchedFailure(manifest, 'ASYNC_START_REJECTED', error.message, false, secret), runId, 'failed', clock.now());
             }
             if (sideEffect || signal?.aborted) {
                 return finish(failure(manifest.id, 'EFFECT_UNCERTAIN', UNOBSERVED, false), runId, 'uncertain', clock.now());
             }
-            return finish(failure(
-                manifest.id,
+            return finish(dispatchedFailure(
+                manifest,
                 'UPSTREAM_ERROR',
                 error instanceof Error ? error.message : 'The start request failed',
-                false
+                false,
+                secret
             ), runId, 'failed', clock.now());
         }
         if (typeof externalRunId !== 'string' || !EXTERNAL_RUN_ID_PATTERN.test(externalRunId)) {
@@ -256,7 +259,7 @@ async function executeAsync(
             signal,
             onObserve: (status, at) => observeExecution(runId, status, at)
         });
-        return settleAsync(manifest, runId, outcome, 'running', clock.now());
+        return settleAsync(manifest, runId, outcome, 'running', clock.now(), secret);
     } finally {
         activeAsyncRuns.delete(runId);
     }
@@ -267,7 +270,8 @@ function settleAsync(
     runId: string,
     outcome: PollOutcome,
     from: 'running' | 'uncertain',
-    at: number
+    at: number,
+    secret: string | undefined
 ): CapabilityResult {
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
     let result: CapabilityResult;
@@ -280,15 +284,16 @@ function settleAsync(
                 // The external run id is already recorded, and the destination
                 // said the run succeeded. Rejecting the value must not read as
                 // a clean failure that invites another start under the same key.
-                result = failure(
-                    manifest.id,
+                result = dispatchedFailure(
+                    manifest,
                     'TYPED_OUTPUT_MISMATCH',
                     `The destination reported success and the value was rejected: ${detail}`,
-                    false
+                    false,
+                    secret
                 );
                 status = 'uncertain';
             } else {
-                result = failure(manifest.id, 'TYPED_OUTPUT_MISMATCH', detail, false);
+                result = dispatchedFailure(manifest, 'TYPED_OUTPUT_MISMATCH', detail, false, secret);
                 status = 'failed';
             }
         } else {
@@ -297,7 +302,7 @@ function settleAsync(
             status = 'succeeded';
         }
     } else if (outcome.kind === 'failed') {
-        result = failure(manifest.id, 'ASYNC_RUN_FAILED', outcome.message, false);
+        result = dispatchedFailure(manifest, 'ASYNC_RUN_FAILED', outcome.message, false, secret);
         status = 'failed';
     } else if (outcome.kind === 'canceled') {
         result = failure(manifest.id, 'EFFECT_UNCERTAIN', `Polling was canceled. ${UNOBSERVED}`, false);
@@ -307,7 +312,7 @@ function settleAsync(
         status = 'uncertain';
     } else {
         const code = outcome.kind === 'deadline' ? 'DEADLINE' : 'UNOBSERVABLE';
-        result = failure(manifest.id, code, outcome.kind === 'deadline' ? 'The run did not finish within its profile' : outcome.message, false);
+        result = dispatchedFailure(manifest, code, outcome.kind === 'deadline' ? 'The run did not finish within its profile' : outcome.message, false, secret);
         status = 'failed';
     }
 
@@ -392,7 +397,7 @@ export async function reconcileAsyncExecution(
             signal: options.signal,
             onObserve: (status, at) => observeExecution(runId, status, at)
         });
-        const result = settleAsync(manifest, runId, outcome, record.status, clock.now());
+        const result = settleAsync(manifest, runId, outcome, record.status, clock.now(), auth.secret);
         const after = executionRecord(runId);
         return {
             runId,
@@ -492,7 +497,7 @@ export async function executeCapability(
         observing: activeAsyncRuns
     });
     if (admission.kind !== 'admit') return replay(manifest, admission.record, admission.kind);
-    if (profile) return executeAsync(manifest, profile, input, auth.headers, admission.record, idempotencyKey, options.signal, clock);
+    if (profile) return executeAsync(manifest, profile, input, auth.headers, admission.record, idempotencyKey, options.signal, clock, auth.secret);
 
     const runId = admission.record.runId;
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
@@ -524,11 +529,12 @@ export async function executeCapability(
 
         const schemaErrors = validateValue(manifest.output.schema, value);
         if (schemaErrors.length > 0) {
-            return finish(failure(
-                capabilityId,
+            return finish(dispatchedFailure(
+                manifest,
                 'TYPED_OUTPUT_MISMATCH',
                 schemaErrors.slice(0, 6).join('; '),
-                false
+                false,
+                auth.secret
             ), runId, 'failed');
         }
         const typed: TypedValue = { schema: manifest.output.schema, value };
@@ -551,11 +557,12 @@ export async function executeCapability(
         if (aborted) {
             return finish(failure(capabilityId, 'CANCELED', 'Execution was canceled', false), runId, 'canceled');
         }
-        return finish(failure(
-            capabilityId,
+        return finish(dispatchedFailure(
+            manifest,
             'UPSTREAM_ERROR',
             error instanceof Error ? error.message : 'Unknown execution error',
-            manifest.effect === 'read' || manifest.effect === 'compute'
+            manifest.effect === 'read' || manifest.effect === 'compute',
+            auth.secret
         ), runId, 'failed');
     }
 }
@@ -773,12 +780,10 @@ async function executeBroker(
         executionStatus?: string;
     };
     if (payload.error) {
-        return halt(failure(
-            manifest.id,
-            payload.error.code || 'UPSTREAM_ERROR',
-            payload.error.message || 'Broker request failed',
-            false
-        ));
+        const code = typeof payload.error.code === 'string' && /^[A-Z_]{1,40}$/.test(payload.error.code)
+            ? payload.error.code
+            : 'UPSTREAM_ERROR';
+        return halt(dispatchedFailure(manifest, code, payload.error.message || 'Broker request failed', false, secret));
     }
     if (!response.ok) {
         return halt(failure(manifest.id, 'UPSTREAM_ERROR', `Broker HTTP ${response.status}`, false));
@@ -835,7 +840,7 @@ function replay(manifest: CapabilityManifest, record: ExecutionRecord, kind: 're
         return remembered(failure(
             manifest.id,
             'EFFECT_UNCERTAIN',
-            record.receipt?.message ?? 'The call was dispatched and the outcome was not observed. Do not retry automatically.',
+            redact(record.receipt?.message ?? 'The call was dispatched and the outcome was not observed. Do not retry automatically.', slotSecret(manifest)),
             false
         ), record.runId);
     }
@@ -851,7 +856,7 @@ function replay(manifest: CapabilityManifest, record: ExecutionRecord, kind: 're
     return remembered(failure(
         manifest.id,
         record.receipt?.code ?? 'UPSTREAM_ERROR',
-        record.receipt?.message ?? 'The previous run failed',
+        redact(record.receipt?.message ?? 'The previous run failed', slotSecret(manifest)),
         false
     ), record.runId);
 }
@@ -859,6 +864,27 @@ function replay(manifest: CapabilityManifest, record: ExecutionRecord, kind: 're
 function remembered(result: CapabilityResult, runId: string): CapabilityResult {
     result.runId = runId;
     return result;
+}
+
+function slotSecret(manifest: CapabilityManifest): string | undefined {
+    return manifest.auth.kind !== 'none' && manifest.auth.secretRef
+        ? capabilitySecrets.get(manifest.auth.secretRef)
+        : undefined;
+}
+
+/**
+ * A failure whose message came back from a dispatched call. The credential
+ * is removed in every encoding it could have been sent in, and the message
+ * is capped, before it reaches the result, its presentation or a receipt.
+ */
+function dispatchedFailure(
+    manifest: CapabilityManifest,
+    code: string,
+    message: string,
+    retryable: boolean,
+    secret: string | undefined
+): CapabilityResult {
+    return failure(manifest.id, code, redact(message, secret ?? slotSecret(manifest)), retryable);
 }
 
 function failure(capabilityId: string, code: string, message: string, retryable: boolean): CapabilityResult {
