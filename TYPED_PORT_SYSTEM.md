@@ -16,8 +16,9 @@ declared input port of the target take part in admission. `BlockCard` and
 
 ## What is checked
 
-`wireStore.addWire` runs two checks in order. Any refusal returns `''` and
-leaves the graph unchanged.
+`wireStore.addWire` runs `admitWire` (`src/core/stores/wireStore.ts`), which
+applies two checks in order. Any refusal returns `''` and leaves the graph
+unchanged.
 
 1. **`admitConnection`** (`src/core/capabilities/compatibility.ts`):
    - refuses a self-wire, a missing block, and a wire between two shells;
@@ -68,12 +69,23 @@ without setting it.
 
 ## Restore and templates
 
-Shell restore and template instantiation write wires through
-`replaceWiresForShell`, which re-runs `admitConnection` and silently drops any
-wire it refuses. It does not re-run the `dataType` check. Wires already in persisted storage are not re-validated on load.
+Every load path runs the same `admitWire` as `addWire`:
+
+- shell restore and template instantiation write wires through
+  `replaceWiresForShell`;
+- wires hydrated from the vault are re-admitted by `revalidatePersistedWires`
+  once both the block store and the wire store have hydrated.
+
+A refused wire is dropped from the active canvas and logged with one
+`console.warn` naming the wire and the reason. The saved shell record in
+`shellStore` is not rewritten. The wire store's own vault entry mirrors the
+canvas, so the persist write that follows re-admission removes the refused wire
+there too; the warning is the record of it.
 
 ## Tests
 
 `src/core/interaction/interaction.test.ts` (typed wire admission, refusal in the
-store) and `src/core/capabilities/boundary.test.ts` (`join_titles` projection,
-typed mismatch refused).
+store), `src/core/capabilities/boundary.test.ts` (`join_titles` projection,
+typed mismatch refused), and `src/core/stores/wireAdmission.test.ts` (hydrate
+and shell restore drop an incompatible wire; every built-in template's wires
+pass `admitWire`).

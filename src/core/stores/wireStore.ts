@@ -12,8 +12,68 @@ import { evaluateWireAdmission } from '../interaction/ports';
 // shell — but every use is a lazy .getState() inside a function body, so the
 // cycle never resolves at module-init.
 import { useBlockStore } from './blockStore';
-import { admitConnection } from '../capabilities/compatibility';
+import { admitConnection, type ConnectionAdmission } from '../capabilities/compatibility';
 import { vaultStorage } from '../vault';
+
+/**
+ * The one admission rule for a wire, whatever path it arrives on: the live
+ * canvas (addWire), shell restore and templates (replaceWiresForShell), and
+ * storage hydrate (revalidatePersistedWires). A string sink may project across
+ * declared data types. An identity wire may not.
+ */
+export function admitWire(sourceBlockId: string, targetBlockId: string): ConnectionAdmission {
+    const admission = admitConnection(sourceBlockId, targetBlockId);
+    if (!admission.ok) return admission;
+    const blocks = useBlockStore.getState();
+    const typed = evaluateWireAdmission(
+        blocks.getBlock(sourceBlockId),
+        blocks.getBlock(targetBlockId)
+    );
+    if (!typed.ok && admission.projection.kind === 'identity') {
+        return { ok: false, reason: typed.reason };
+    }
+    return admission;
+}
+
+/**
+ * Re-admit wires that were saved earlier. A refused wire is dropped from the
+ * active canvas with one console.warn naming it and the reason. The shell's
+ * saved copy (shellStore) is not touched.
+ */
+function readmitWires(wires: DataWire[], shellId?: string): DataWire[] {
+    return wires.flatMap(wire => {
+        const admission = admitWire(wire.sourceBlockId, wire.targetBlockId);
+        if (!admission.ok) {
+            console.warn(
+                `[wires] dropped saved wire ${wire.id} (${wire.sourceBlockId} -> ${wire.targetBlockId}): ${admission.reason}`
+            );
+            return [];
+        }
+        return [{
+            ...wire,
+            ...(shellId ? { shellId } : {}),
+            ...(admission.sourcePortId ? { sourcePortId: admission.sourcePortId } : {}),
+            ...(admission.targetPortId ? { targetPortId: admission.targetPortId } : {}),
+            projection: admission.projection
+        }];
+    });
+}
+
+/**
+ * Wires and blocks hydrate from the vault independently. Admission reads
+ * blocks, so wait for the block store before re-admitting.
+ */
+function revalidateWhenBlocksHydrated(): void {
+    const run = () => useWireStore.getState().revalidatePersistedWires();
+    if (useBlockStore.persist.hasHydrated()) {
+        run();
+        return;
+    }
+    const unsubscribe = useBlockStore.persist.onFinishHydration(() => {
+        unsubscribe();
+        run();
+    });
+}
 
 interface WireStoreState {
     /** All wires in the system */
@@ -36,6 +96,9 @@ interface WireStoreState {
 
     /** Replace a shell's wires wholesale (shell load/restore) */
     replaceWiresForShell: (shellId: string, wires: DataWire[]) => void;
+
+    /** Re-admit every wire in the store; refused wires are dropped (storage hydrate) */
+    revalidatePersistedWires: () => void;
 
     /** Get wires where block is source */
     getWiresFromBlock: (blockId: string) => DataWire[];
@@ -60,20 +123,9 @@ export const useWireStore = create<WireStoreState>()(
             lastAdmissionRefusal: null,
 
             addWire: (sourceBlockId, targetBlockId, filters, shellId) => {
-                const blocks = useBlockStore.getState();
-                const typed = evaluateWireAdmission(
-                    blocks.getBlock(sourceBlockId),
-                    blocks.getBlock(targetBlockId)
-                );
-                const admission = admitConnection(sourceBlockId, targetBlockId);
+                const admission = admitWire(sourceBlockId, targetBlockId);
                 if (!admission.ok) {
                     set({ lastAdmissionRefusal: admission.reason });
-                    return '';
-                }
-                // A string sink may project across declared data types. An identity
-                // wire may not.
-                if (!typed.ok && admission.projection.kind === 'identity') {
-                    set({ lastAdmissionRefusal: typed.reason });
                     return '';
                 }
 
@@ -128,23 +180,17 @@ export const useWireStore = create<WireStoreState>()(
             },
 
             replaceWiresForShell: (shellId, wires) => {
-                const admitted = wires.flatMap(wire => {
-                    const admission = admitConnection(wire.sourceBlockId, wire.targetBlockId);
-                    if (!admission.ok) return [];
-                    return [{
-                        ...wire,
-                        shellId,
-                        ...(admission.sourcePortId ? { sourcePortId: admission.sourcePortId } : {}),
-                        ...(admission.targetPortId ? { targetPortId: admission.targetPortId } : {}),
-                        projection: admission.projection
-                    }];
-                });
+                const admitted = readmitWires(wires, shellId);
                 set(state => ({
                     wires: [
                         ...state.wires.filter(w => w.shellId !== shellId),
                         ...admitted
                     ]
                 }));
+            },
+
+            revalidatePersistedWires: () => {
+                set(state => ({ wires: readmitWires(state.wires) }));
             },
 
             getWiresFromBlock: (blockId) => {
@@ -177,6 +223,10 @@ export const useWireStore = create<WireStoreState>()(
             partialize: (state) => ({
                 wires: state.wires
             }),
+            // A wire the live canvas would refuse must not come back on reload.
+            onRehydrateStorage: () => (_state, error) => {
+                if (!error) revalidateWhenBlocksHydrated();
+            },
             migrate: (persistedState: unknown, _version: number) => {
                 const persisted = (persistedState || {}) as { wires?: unknown };
                 const wires = Array.isArray(persisted.wires) ? persisted.wires : [];
