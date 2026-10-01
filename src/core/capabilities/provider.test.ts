@@ -271,6 +271,31 @@ describe('host admission gate', () => {
             .toContain('proposal.provenance.providerId must match proposal.provider.id');
     });
 
+    it('returns errors instead of throwing for a malformed HTTP base URL, before deriving an id or a slot', async () => {
+        const create = await listProposal();
+        const { origin: _origin, ...identity } = create.externalIdentity;
+        expect(create.transport.kind).toBe('http');
+        const http = create.transport as Extract<CapabilityProposalV1['transport'], { kind: 'http' }>;
+        const { baseUrl: _baseUrl, ...withoutBase } = http;
+        const malformed: Array<[string, unknown]> = [
+            ['not-a-url', { ...http, baseUrl: 'not-a-url' }],
+            ['omitted', withoutBase],
+            ['non-string', { ...http, baseUrl: 42 }]
+        ];
+        for (const auth of [{ kind: 'none' }, { kind: 'bearer' }, create.auth]) {
+            for (const [label, transport] of malformed) {
+                const proposal = { ...create, externalIdentity: identity, auth, transport };
+                let built: ReturnType<typeof manifestFromProposal> | undefined;
+                expect(() => { built = manifestFromProposal(proposal, { nowMs: NOW }); }, `${auth.kind} ${label}`).not.toThrow();
+                expect(built!.ok).toBe(false);
+                expect(built!.errors).toContain('proposal.transport.baseUrl must be an absolute URL');
+                let admitted: ReturnType<typeof admitProposal> | undefined;
+                expect(() => { admitted = admitProposal(proposal, { nowMs: NOW }); }).not.toThrow();
+                expect(admitted!.ok).toBe(false);
+            }
+        }
+    });
+
     it('does not place a block or a wire', async () => {
         const proposals = await proposalsOf(openapiProvider, { document: BOARD });
         for (const proposal of proposals) admitProposal(proposal);

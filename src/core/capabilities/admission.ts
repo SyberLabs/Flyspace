@@ -266,8 +266,13 @@ function shapeErrors(input: unknown): string[] {
         errors.push('proposal.transport is required');
     } else if (input.transport.kind === 'http') {
         closed(input.transport, HTTP_TRANSPORT_KEYS, 'proposal.transport', errors);
-        if (isRecord(input.externalIdentity) && typeof input.externalIdentity.origin === 'string') {
-            const origin = originOf(input.transport.baseUrl);
+        // The id and the credential slot are both derived from this URL, and
+        // both parse it. A proposal that cannot be parsed stops here, as an
+        // error, before anything is derived from it.
+        const origin = originOf(input.transport.baseUrl);
+        if (origin === undefined) {
+            errors.push('proposal.transport.baseUrl must be an absolute URL');
+        } else if (isRecord(input.externalIdentity) && typeof input.externalIdentity.origin === 'string') {
             if (origin !== input.externalIdentity.origin) {
                 errors.push('proposal.externalIdentity.origin does not match the transport');
             }
