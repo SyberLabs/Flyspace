@@ -90,8 +90,17 @@ A manifest describes a capability. It does not grant itself authority.
 | --- | --- | --- |
 | read | GET, HEAD | the user runs it |
 | compute | `x-omni-effect: compute` on a safe method, or an explicit bring/MCP declaration | the user runs it |
-| write | POST, PUT, PATCH | approval is `approved` and the user runs it |
-| destructive | DELETE, or `destructiveHint`, or a tightened GET/HEAD | approval is `approved` and the user runs it |
+| write | POST, PUT, PATCH | approval is `approved`, and the user confirms the shown request for this run |
+| destructive | DELETE, or `destructiveHint`, or a tightened GET/HEAD | approval is `approved`, and the user confirms the shown request for this run |
+
+Approval admits a capability; it does not admit its arguments. Before each
+write or destructive run, `previewCapabilityRun` resolves the method, the URL
+(without the credential) and the arguments, and the block shows them.
+`executeCapability` dispatches the run only with the digest of that exact
+preview (`confirmedRun`); different arguments, including a wire that changed
+after the preview, are refused as `CONFIRMATION_REQUIRED`. A path argument
+fills one path segment: `.` and `..` are refused, and the resolved pathname
+must equal the expanded template.
 
 A method cannot be relabeled into a weaker class. GET and HEAD may be tightened to write or destructive. POST, PUT, and PATCH are at least write. DELETE stays destructive. An observed HTTP error on a write or destructive call is not marked retryable.
 

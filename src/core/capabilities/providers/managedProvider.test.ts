@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { admitProposal, manifestFromProposal } from '../admission';
 import { approveCapability, clearCapabilities, getCapability, installProposal } from '../registry';
-import { executeCapability } from '../execute';
+// Write runs need a confirmed preview; these tests exercise the engine after one.
+import { executeConfirmed as executeCapability } from '../../../../test/confirmedExecute';
 import { capabilitySecrets } from '../secrets';
 import { clearExecutionLedger } from '../executionLedger';
 import { credentialSlot } from '../identity';

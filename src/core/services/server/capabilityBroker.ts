@@ -6,6 +6,7 @@
 
 import { assessEgress } from '@/core/capabilities/egress';
 import { canonicalize, sha256 } from '@/core/capabilities/hash';
+import { resolveHttpPath } from '@/core/capabilities/httpTarget';
 import { validateManifest, type CapabilityManifest } from '@/core/capabilities/manifest';
 import { isBlockedDestination } from './egressBlockList';
 import type { PinnedRequest, PinnedResponse } from './pinnedFetch';
@@ -206,12 +207,9 @@ function parseBody(body: unknown): {
 
 function buildUrl(manifest: CapabilityManifest, input: Record<string, unknown>): URL {
     if (manifest.transport.kind !== 'http') throw new Error('not http');
-    const path = manifest.transport.path.replace(/\{([^}]+)\}/g, (_match, name: string) => {
-        const value = input[name];
-        return encodeURIComponent(value === undefined ? '' : String(value));
-    });
-    const base = manifest.transport.baseUrl.endsWith('/') ? manifest.transport.baseUrl : `${manifest.transport.baseUrl}/`;
-    const url = new URL(path.startsWith('/') ? path.slice(1) : path, base);
+    const target = resolveHttpPath(manifest.transport.baseUrl, manifest.transport.path, input);
+    if ('error' in target) throw new Error(target.error);
+    const url = target.url;
     for (const entry of manifest.inputs) {
         if (input[entry.name] === undefined || entry.in !== 'query') continue;
         const value = input[entry.name];

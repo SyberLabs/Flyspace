@@ -248,6 +248,35 @@ describe('broker manifest bounds', () => {
     });
 });
 
+describe('broker path arguments', () => {
+    it('refuses a dot-segment path value and never resolves or fetches', async () => {
+        const compiled = compileOpenApi({
+            openapi: '3.0.3',
+            info: { title: 'Board', version: '1' },
+            servers: [{ url: 'https://board.example.test/v1' }],
+            paths: {
+                '/items/{id}': {
+                    get: {
+                        operationId: 'item',
+                        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                        responses: { '200': { description: 'item', content: { 'application/json': { schema: { type: 'object' } } } } }
+                    }
+                }
+            }
+        }).manifests[0];
+        if (compiled.transport.kind !== 'http') throw new Error('expected http');
+        const manifest = sealManifest({ ...compiled, transport: { ...compiled.transport, access: 'server_broker' } });
+        let touched = false;
+        const result = await broker({ manifest, input: { id: '..' }, idempotencyKey: 'broker-key-dots' }, {
+            ledger: memoryLedger(),
+            resolve: async () => { touched = true; return ['1.1.1.1']; },
+            fetch: async () => { touched = true; return { status: 200, headers: {}, text: '{}' }; }
+        });
+        expect(result.status).toBe(400);
+        expect(touched).toBe(false);
+    });
+});
+
 describe('memory ledger', () => {
     it('evicts settled rows first once it is full', async () => {
         const ledger = memoryLedger(2);

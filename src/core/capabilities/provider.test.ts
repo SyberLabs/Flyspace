@@ -5,7 +5,8 @@ import { compileBring, type BringApiDescription } from './bring';
 import { admitProposal, manifestFromProposal } from './admission';
 import { credentialSlot, transportCredentialSlot } from './identity';
 import { clearCapabilities, ensureSpeechCapabilities, getCapability, installProposal, approveCapability } from './registry';
-import { executeCapability } from './execute';
+// Write runs need a confirmed preview; these tests exercise the engine after one.
+import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
 import { capabilitySecrets } from './secrets';
 import { sealManifest, validateManifest, type CapabilityManifest } from './manifest';
 import type { CapabilityProposalV1, CapabilityProvider } from './provider';

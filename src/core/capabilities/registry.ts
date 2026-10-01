@@ -11,7 +11,7 @@ import { wireService } from '../services/wire.service';
 import { createOmniError } from '../gateway/omnidata.schema';
 import { validateManifest, type CapabilityManifest } from './manifest';
 import { allCapabilities, capabilityIds, claimHydration, deleteCapability, readCapability, writeCapability } from './state';
-import { bindLocalHandler, executeCapability } from './execute';
+import { bindLocalHandler, executeCapability, previewCapabilityRun, type RunPreview } from './execute';
 import { clearExecutionLedger } from './executionLedger';
 import type { CapabilityResult } from './project';
 import { onCapabilityRehydrate, useCapabilityStore } from './store';
@@ -148,32 +148,59 @@ export function clearCapabilities(): void {
     for (const id of capabilityIds()) uninstallCapability(id);
 }
 
-/** Run an installed capability for a canvas instance and store both values. */
-export async function runInstalledCapability(
-    instanceId: string,
-    input?: Record<string, unknown>,
-    options?: { signal?: AbortSignal; idempotencyKey?: string }
-): Promise<CapabilityResult> {
+/** The arguments a run of this block would use: wired values, then block params, then explicit input. */
+function runParams(instanceId: string, input?: Record<string, unknown>):
+    { capabilityId: string; params: Record<string, unknown> } | { error: CapabilityResult } {
     const block = useBlockStore.getState().getBlock(instanceId);
     const capabilityId = block?.schema.capabilityId;
     if (!block || !capabilityId) {
         const error = { code: 'NOT_INSTALLED', message: 'Block is not a capability', retryable: false };
         return {
-            ok: false,
-            capabilityId: capabilityId ?? '',
-            typed: null,
-            presentation: createOmniError(capabilityId ?? 'capability', 'custom', error),
-            error
+            error: {
+                ok: false,
+                capabilityId: capabilityId ?? '',
+                typed: null,
+                presentation: createOmniError(capabilityId ?? 'capability', 'custom', error),
+                error
+            }
         };
     }
-    const params = {
-        ...resolveWiredInputs(instanceId),
-        ...(isPlain(block.params) ? block.params : {}),
-        ...(input ?? {})
+    return {
+        capabilityId,
+        params: {
+            ...resolveWiredInputs(instanceId),
+            ...(isPlain(block.params) ? block.params : {}),
+            ...(input ?? {})
+        }
     };
+}
+
+/**
+ * Describe the request a run of this block would send, without sending it.
+ * A write or destructive run needs the returned digest as `confirmedRun`.
+ */
+export function previewInstalledRun(
+    instanceId: string,
+    input?: Record<string, unknown>
+): { ok: true; preview: RunPreview } | { ok: false; result: CapabilityResult } {
+    const resolved = runParams(instanceId, input);
+    if ('error' in resolved) return { ok: false, result: resolved.error };
+    return previewCapabilityRun(resolved.capabilityId, resolved.params);
+}
+
+/** Run an installed capability for a canvas instance and store both values. */
+export async function runInstalledCapability(
+    instanceId: string,
+    input?: Record<string, unknown>,
+    options?: { signal?: AbortSignal; idempotencyKey?: string; confirmedRun?: string }
+): Promise<CapabilityResult> {
+    const resolved = runParams(instanceId, input);
+    if ('error' in resolved) return resolved.error;
+    const { capabilityId, params } = resolved;
     const result = await executeCapability(capabilityId, params, {
         signal: options?.signal,
-        idempotencyKey: options?.idempotencyKey
+        idempotencyKey: options?.idempotencyKey,
+        confirmedRun: options?.confirmedRun
     });
     const items = result.presentation.items ?? [];
     useBlockStore.getState().updateData(instanceId, {

@@ -1,7 +1,8 @@
 // Installed manifests only. Proposals are not executable.
 // Side effects stop here until approveCapability has moved them to `approved`.
 
-import { sha256 } from './hash';
+import { canonicalize, sha256 } from './hash';
+import { joinUrl, resolveHttpPath, stringifyParam } from './httpTarget';
 import {
     admitExecution,
     executionRecord,
@@ -87,6 +88,97 @@ export interface ExecuteOptions {
     idempotencyKey?: string;
     /** Time source for async_poll waits. Tests inject one instead of sleeping. */
     clock?: AsyncClock;
+    /**
+     * Write and destructive runs only: the digest of the RunPreview a person
+     * confirmed. A run whose request differs from that preview is refused.
+     */
+    confirmedRun?: string;
+}
+
+export { joinUrl };
+
+/** What a write or destructive run will send, shown to a person before it is sent. */
+export interface RunPreview {
+    capabilityId: string;
+    effect: CapabilityManifest['effect'];
+    /** HTTP method, or CALL / START for a tool or job transport. */
+    method: string;
+    /** The resolved request URL without any credential, or the tool or job it targets. */
+    url: string;
+    arguments: Record<string, unknown>;
+    /** Where the credential travels, never its value. */
+    credential?: string;
+    digest: string;
+}
+
+/**
+ * Validate a run and describe it without dispatching anything. The digest
+ * binds the manifest, method, URL and arguments; executeCapability accepts
+ * a write or destructive run only with the digest of its own preview.
+ */
+export function previewCapabilityRun(
+    capabilityId: string,
+    input: Record<string, unknown> = {}
+): { ok: true; preview: RunPreview } | { ok: false; result: CapabilityResult } {
+    const manifest = readCapability(capabilityId);
+    if (!manifest) return { ok: false, result: failure(capabilityId, 'NOT_INSTALLED', 'Capability is not installed', false) };
+    if (manifest.approval === 'denied' || manifest.approval === 'pending') {
+        return { ok: false, result: failure(capabilityId, 'EFFECT_NOT_APPROVED', `${manifest.effect} capability is ${manifest.approval}; execution is refused`, false) };
+    }
+    const inputErrors = validateInput(manifest, input);
+    if (inputErrors.length > 0) return { ok: false, result: failure(capabilityId, 'INPUT_INVALID', inputErrors.join('; '), false) };
+    return { ok: true, preview: buildPreview(manifest, input) };
+}
+
+function buildPreview(manifest: CapabilityManifest, input: Record<string, unknown>): RunPreview {
+    const transport = manifest.transport;
+    let method: string;
+    let url: string;
+    if (transport.kind === 'http') {
+        method = transport.method;
+        const target = resolveHttpPath(transport.baseUrl, transport.path, input);
+        const resolved = 'url' in target ? target.url : joinUrl(transport.baseUrl, transport.path);
+        for (const entry of manifest.inputs) {
+            if (entry.in === 'query' && input[entry.name] !== undefined) {
+                resolved.searchParams.set(entry.name, stringifyParam(input[entry.name]));
+            }
+        }
+        url = resolved.toString();
+    } else if (transport.kind === 'mcp') {
+        method = 'CALL';
+        url = `mcp:${transport.serverId}/${transport.toolName}`;
+    } else if (transport.kind === 'async') {
+        method = 'START';
+        url = `async:${transport.runtimeId}/${transport.operation}`;
+    } else {
+        method = 'CALL';
+        url = `local:${transport.handler}`;
+    }
+    const args = argumentsFor(manifest, input);
+    const credential = credentialPlacement(manifest);
+    const digest = sha256(canonicalize({
+        capabilityId: manifest.id,
+        manifestDigest: manifest.digest,
+        method,
+        url,
+        arguments: args
+    }));
+    return {
+        capabilityId: manifest.id,
+        effect: manifest.effect,
+        method,
+        url,
+        arguments: args,
+        ...(credential ? { credential } : {}),
+        digest
+    };
+}
+
+function credentialPlacement(manifest: CapabilityManifest): string | undefined {
+    const auth = manifest.auth;
+    if (auth.kind === 'none') return undefined;
+    if (auth.kind === 'apiKey') return auth.in === 'query' ? `query parameter ${auth.name}` : `header ${auth.name}`;
+    return 'Authorization header';
 }
 
 type AsyncProfile = Extract<CapabilityExecutionProfile, { kind: 'async_poll' }>;
@@ -367,6 +459,16 @@ export async function executeCapability(
         return finish(failure(capabilityId, 'INPUT_INVALID', inputErrors.join('; '), false));
     }
 
+    if ((manifest.effect === 'write' || manifest.effect === 'destructive')
+        && options.confirmedRun !== buildPreview(manifest, input).digest) {
+        return finish(failure(
+            capabilityId,
+            'CONFIRMATION_REQUIRED',
+            `This ${manifest.effect} run was not confirmed as shown; review the request and confirm it`,
+            false
+        ));
+    }
+
     const auth = applyAuth(manifest);
     if ('error' in auth) return finish(auth.error, undefined);
 
@@ -473,6 +575,10 @@ function validateInput(manifest: CapabilityManifest, input: Record<string, unkno
         }
         errors.push(...validateValue(entry.schema, input[entry.name], entry.name));
     }
+    if (errors.length === 0 && manifest.transport.kind === 'http') {
+        const target = resolveHttpPath(manifest.transport.baseUrl, manifest.transport.path, input);
+        if ('error' in target) errors.push(target.error);
+    }
     return errors;
 }
 
@@ -538,8 +644,9 @@ async function executeHttp(
     if (manifest.transport.kind !== 'http') {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an http capability', false));
     }
-    const path = fillPath(manifest.transport.path, input);
-    const url = joinUrl(manifest.transport.baseUrl, path);
+    const target = resolveHttpPath(manifest.transport.baseUrl, manifest.transport.path, input);
+    if ('error' in target) return halt(failure(manifest.id, 'INPUT_INVALID', target.error, false));
+    const url = target.url;
     const headers: Record<string, string> = { accept: 'application/json', ...authHeaders };
     for (const entry of manifest.inputs) {
         if (input[entry.name] === undefined) continue;
@@ -708,25 +815,6 @@ async function executeMcp(
             { headers: { ...authHeaders } }
         )
     };
-}
-
-function fillPath(path: string, input: Record<string, unknown>): string {
-    return path.replace(/\{([^}]+)\}/g, (_match, name: string) => {
-        const value = input[name];
-        return encodeURIComponent(stringifyParam(value));
-    });
-}
-
-function stringifyParam(value: unknown): string {
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    return JSON.stringify(value);
-}
-
-export function joinUrl(baseUrl: string, path: string): URL {
-    const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-    const relative = path.startsWith('/') ? path.slice(1) : path;
-    return new URL(relative, base);
 }
 
 function encodeBase64(value: string): string {
