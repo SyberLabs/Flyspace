@@ -81,7 +81,9 @@ describe('extractBlockData — empty content carries nothing', () => {
         ['a Memory pool of blank entries', { poolId: 'memory', limit: 10, entries: [{ content: '' }, { content: '  ' }] }],
         ['an empty markets array', { markets: [] }],
         ['an empty articles array', { articles: [] }],
-        ['an empty text block', { content: '' }]
+        ['an empty text block', { content: '' }],
+        ['an empty object', {}],
+        ['an object of only nullish or blank values', { a: null, b: undefined, c: '  ', d: [], e: { f: null } }]
     ];
 
     it.each(empties)('returns null for %s (no placeholder to cite)', (_label, data) => {
@@ -103,6 +105,13 @@ describe('extractBlockData — empty content carries nothing', () => {
         for (const summaryOnly of [true, false]) {
             expect(extractBlockData('old', { ...DEFAULT_WIRE_FILTERS, timeWindow: 'day', summaryOnly })).toBeNull();
         }
+    });
+
+    it('still returns JSON for an object that carries a value (0 and false are data)', () => {
+        seed('obj', { a: null, count: 0, ok: false });
+        const out = extractBlockData('obj', DEFAULT_WIRE_FILTERS)!;
+        expect(out).toContain('"count": 0');
+        expect(out).toContain('"ok": false');
     });
 
     it('still returns text for non-empty content, skipping blank Memory entries', () => {

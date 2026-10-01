@@ -144,8 +144,10 @@ export function extractBlockData(
                 if (data.length > 20) extracted += `\n… ${data.length - 20} more items`;
             }
         } else {
-            // Generic fallback
-            extracted = JSON.stringify(data, null, 2).slice(0, 2000);
+            // Generic fallback. An object with nothing in it (`{}`, or only
+            // null/blank values) would serialize to non-empty text and be
+            // cited as grounding, so it extracts to nothing.
+            extracted = carriesNothing(data) ? '' : JSON.stringify(data, null, 2).slice(0, 2000);
         }
 
         // Apply field filtering if specified
@@ -163,6 +165,15 @@ export function extractBlockData(
         console.error('Error extracting block data:', error);
         return null;
     }
+}
+
+/** True when a value holds no data: nullish, blank strings, or containers of only those. */
+function carriesNothing(value: unknown): boolean {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string') return value.trim() === '';
+    if (Array.isArray(value)) return value.every(carriesNothing);
+    if (isRecord(value)) return Object.values(value).every(carriesNothing);
+    return false;
 }
 
 /**
