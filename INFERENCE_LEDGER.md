@@ -210,10 +210,12 @@ characters.
   same parent once per path inside the CTE before the outer `LIMIT` applies —
   fine for a canvas, where fan-out is the number of persona blocks on screen,
   and worth revisiting if that stops being true.
-- **Nothing in the UI reads it yet.** The data is queryable over HTTP; a panel
-  on the canvas that shows a persona its own run history — or renders the
-  lineage tree behind a source chip — is the obvious next step, and
-  deliberately not part of this change.
+- **The UI reads lineage only.** A persona answer that carries a run id shows a
+  **Lineage** toggle (`src/blocks/persona/RunLineage.tsx`) that renders
+  `GET /api/inference-runs/:id/lineage` as a tree: each upstream run, the chip
+  it was cited under, and its sources. With no ledger, a public demo, a failed
+  query, or a hosted deployment with no browser sign-in it says so instead of
+  drawing anything. No panel lists a persona's run history yet.
 - **The E2E double writes nothing.** With `OMNI_E2E=1` the route answers before
   the ledger, so the golden-path e2e does not exercise it. The integration job
   covers the real path instead.

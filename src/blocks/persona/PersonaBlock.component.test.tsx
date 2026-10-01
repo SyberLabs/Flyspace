@@ -217,6 +217,24 @@ describe('PersonaBlockView — answer rendering', () => {
         expect(container.querySelector('img')).toBeNull();
     });
 
+    it('offers lineage only on an answer the ledger recorded', async () => {
+        mockStream(['Recorded.'], { success: true, content: 'Recorded.', sourceIds: [], sources: [], runId: '42' });
+        render(<PersonaBlockView instanceId={PERSONA_ID} />);
+        fireEvent.click(screen.getByTitle('Think'));
+
+        await screen.findByText('Recorded.');
+        expect(screen.getByRole('button', { name: 'Lineage' })).toBeTruthy();
+    });
+
+    it('offers no lineage when no run was recorded', async () => {
+        mockStream(['Unrecorded.'], { success: true, content: 'Unrecorded.', sourceIds: [], sources: [] });
+        render(<PersonaBlockView instanceId={PERSONA_ID} />);
+        fireEvent.click(screen.getByTitle('Think'));
+
+        await screen.findByText('Unrecorded.');
+        expect(screen.queryByRole('button', { name: 'Lineage' })).toBeNull();
+    });
+
     it("leaves the user's own message as literal text", async () => {
         mockStream(['ok'], { success: true, content: 'ok', sourceIds: [], sources: [] });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
