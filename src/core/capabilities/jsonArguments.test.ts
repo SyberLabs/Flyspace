@@ -340,4 +340,21 @@ describe('the run ledger keys on the dispatched arguments', () => {
             fixture.cleanup();
         }
     });
+
+    it('arguments that serialize differently conflict even when a canonical form would match', async () => {
+        const fixture = mcpFixture();
+        try {
+            const run = async (payload: Record<string, unknown>) => {
+                const preview = previewCapabilityRun(fixture.id, { payload });
+                if (!preview.ok) throw new Error(preview.result.error?.message);
+                return executeCapability(fixture.id, { payload }, { confirmedRun: preview.preview.digest, idempotencyKey: 'same-key-0002' });
+            };
+            expect((await run({ a: 1, b: 2 })).ok).toBe(true);
+            expect((await run({ b: 2, a: 1 })).error?.code).toBe('IDEMPOTENCY_CONFLICT');
+            expect((await run({ a: 1, b: 2 })).ok).toBe(true);
+            expect(fixture.received).toHaveLength(1);
+        } finally {
+            fixture.cleanup();
+        }
+    });
 });

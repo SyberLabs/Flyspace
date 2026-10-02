@@ -539,9 +539,10 @@ export async function executeCapability(
         capabilityId,
         manifestDigest: manifest.digest,
         effect: manifest.effect,
-        // The arguments that will be sent, so a different request under the
-        // same key conflicts instead of replaying.
-        input: run.args,
+        // The digest of the exact request that will be sent (never the
+        // credential), so any different request under the same key conflicts
+        // instead of replaying.
+        input: run.preview.digest,
         idempotencyKey,
         // An async job's budget is its profile, not the per-request timeout.
         deadlineMs: profile ? profile.maxDurationMs + REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS + 5_000,
