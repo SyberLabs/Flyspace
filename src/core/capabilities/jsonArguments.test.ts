@@ -225,6 +225,10 @@ const NON_JSON: Array<[string, () => unknown]> = [
     ['a class instance', () => ({ p: new Point(1) })],
     ['an object with toJSON', () => ({ o: { toJSON: () => 'other' } })],
     ['a sparse array', () => ({ list: sparse() })],
+    ['an array with a -1 key', () => ({ list: Object.assign([1], { '-1': undefined }) })],
+    ['an array with a 0.5 key', () => ({ list: Object.assign([1], { '0.5': 2 }) })],
+    ['an array with a NaN key', () => ({ list: Object.assign([1], { NaN: 2 }) })],
+    ['an array with a -0 key', () => ({ list: Object.assign([1], { '-0': 2 }) })],
     ['an accessor property', () => ({ get live() { return 1; } })],
     ['a non-enumerable property', () => Object.defineProperty({ shown: 1 }, 'unseen', { value: 2, enumerable: false })],
     ['a self reference', () => { const o: Record<string, unknown> = {}; o.self = o; return o; }]

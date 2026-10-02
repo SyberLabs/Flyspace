@@ -52,7 +52,10 @@ function copyArray(list: unknown[], path: string, depth: number, ancestors: Set<
     const length = list.length;
     for (const key of Reflect.ownKeys(list)) {
         if (key === 'length') continue;
-        if (typeof key !== 'string' || String(Number(key)) !== key || Number(key) >= length) {
+        // Only a canonical index 0..length-1 is an element; '-1', '0.5' and
+        // 'NaN' are properties JSON would drop.
+        const index = typeof key === 'string' ? Number(key) : Number.NaN;
+        if (!Number.isInteger(index) || index < 0 || index >= length || String(index) !== key) {
             return { error: `${path} has a property that is not an element` };
         }
     }
