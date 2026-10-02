@@ -89,6 +89,9 @@ export function validateValueType(schema: unknown, path = 'schema', depth = 0): 
             errors.push(`${path}.enum must be a non-empty list of primitives`);
         } else if (schema.enum.some(entry => !isPrimitive(entry) || !kindMatchesEnum(kind as ValueKind, entry))) {
             errors.push(`${path}.enum values must match kind ${kind}`);
+        } else if (schema.enum.some(entry => typeof entry === 'number' && (!Number.isFinite(entry) || Object.is(entry, -0)))) {
+            // The digest writes these as null and 0, so they would hash as another enum.
+            errors.push(`${path}.enum numbers must be finite and not -0`);
         }
     }
 

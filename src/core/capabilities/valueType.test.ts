@@ -30,3 +30,21 @@ describe('schema and value lookups read own properties only', () => {
         expect(isAssignable({ kind: 'object', properties: {}, required: ['constructor'] }, requires)).toBe(false);
     });
 });
+
+describe('enum values hash as what they are', () => {
+    // The manifest digest writes NaN and Infinity as null and -0 as 0, so an
+    // enum holding one would share a digest with a different enum.
+    it.each([
+        ['NaN', { kind: 'any', enum: [Number.NaN] }],
+        ['Infinity', { kind: 'any', enum: [Number.POSITIVE_INFINITY] }],
+        ['-Infinity', { kind: 'any', enum: [Number.NEGATIVE_INFINITY] }],
+        ['-0', { kind: 'number', enum: [-0] }],
+        ['-0 under any', { kind: 'any', enum: [1, -0] }]
+    ])('refuses %s in an enum', (_label, schema) => {
+        expect(validateValueType(schema).length).toBeGreaterThan(0);
+    });
+
+    it('keeps finite numbers and null', () => {
+        expect(validateValueType({ kind: 'any', enum: [0, 1.5, null, 'x'] })).toEqual([]);
+    });
+});
