@@ -103,7 +103,15 @@ after the preview, are refused as `CONFIRMATION_REQUIRED`. A run is prepared
 once: its arguments (every declared input supplied, in an object with no
 prototype) and, for http, the exact URL, header values and body text. The
 digest is computed from that prepared run, and dispatch sends the same
-objects. An input or apiKey name may not be `__proto__`, `prototype`, or a
+objects. Each argument is copied once into the JSON domain and frozen:
+strings, finite numbers, booleans, null, dense arrays and plain objects, with
+-0 written as 0. Inside a value, `undefined`, `NaN`, `±Infinity`, a BigInt, a
+function, a symbol (as a value or a key), a non-plain object (a `Date`, `Map`,
+`Set`, class instance, or anything with `toJSON`), a sparse array, an accessor
+and a `__proto__` key are `INPUT_INVALID` before any preview exists. The
+digest hashes the exact JSON text of that copy, and the MCP tool, the async
+runtime and the local handler each receive that same object. An input
+left `undefined` at the top level is not supplied. An input or apiKey name may not be `__proto__`, `prototype`, or a
 name `Object.prototype` defines. A path argument
 fills one path segment: `.` and `..` are refused, and the resolved pathname
 must equal the expanded template.
