@@ -129,6 +129,10 @@ export async function handleCapabilityBroker(
     } catch {
         return json(400, 'broker URL could not be built');
     }
+    // The URL is everything the caller's input changes in the request this
+    // broker sends, so the run is keyed on it, taken before the credential
+    // is added: the ledger holds nothing derived from the secret.
+    const inputDigest = sha256(canonicalize({ method: manifest.transport.method, url: url.toString() }));
 
     if (manifest.auth.kind === 'apiKey' && manifest.auth.in === 'query' && manifest.auth.name && secret) {
         url.searchParams.set(manifest.auth.name, `${manifest.auth.prefix ?? ''}${secret}`);
@@ -141,7 +145,6 @@ export async function handleCapabilityBroker(
     if (!egress.ok) return json(403, egress.reason);
     if (addresses.some(isBlockedDestination)) return json(403, 'broker host is not a public address');
 
-    const inputDigest = sha256(canonicalize(input));
     const runId = `run_${sha256(`${manifest.digest}|${idempotencyKey}`).slice(0, 16)}`;
     const row: ServerExecution = {
         runId,

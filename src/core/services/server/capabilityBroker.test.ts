@@ -278,6 +278,66 @@ describe('broker path arguments', () => {
     });
 });
 
+describe('broker idempotency', () => {
+    function searchManifest() {
+        const compiled = compileOpenApi({
+            openapi: '3.0.3',
+            info: { title: 'Board', version: '1' },
+            servers: [{ url: 'https://board.example.test/v1' }],
+            components: { securitySchemes: { Key: { type: 'apiKey', in: 'query', name: 'key' } } },
+            security: [{ Key: [] }],
+            paths: {
+                '/search': {
+                    get: {
+                        operationId: 'search',
+                        parameters: [{ name: 'q', in: 'query', required: false, schema: { type: 'string' } }],
+                        responses: { '200': { description: 'hits', content: { 'application/json': { schema: { type: 'object' } } } } }
+                    }
+                }
+            }
+        }).manifests[0];
+        if (compiled.transport.kind !== 'http') throw new Error('expected http');
+        return sealManifest({ ...compiled, transport: { ...compiled.transport, access: 'server_broker' } });
+    }
+
+    function deps(urls: string[]): BrokerDeps {
+        return {
+            ledger: memoryLedger(),
+            resolve: async () => ['1.1.1.1'],
+            fetch: async (request) => {
+                urls.push(request.url.toString());
+                return { status: 200, headers: {}, text: '{}' };
+            }
+        };
+    }
+
+    it('keys a run on the request it sends: a different query under the same key conflicts', async () => {
+        const urls: string[] = [];
+        const shared = deps(urls);
+        const manifest = searchManifest();
+        const first = await broker({ manifest, input: { q: { a: 1, b: 2 } }, idempotencyKey: 'broker-key-order' }, shared);
+        expect(first.status).toBe(200);
+        // Same members, different order: a different query string would be sent.
+        const second = await broker({ manifest, input: { q: { b: 2, a: 1 } }, idempotencyKey: 'broker-key-order' }, shared);
+        expect(second.status).toBe(409);
+        expect(urls).toHaveLength(1);
+    });
+
+    it('the run key carries nothing derived from the credential', async () => {
+        const urls: string[] = [];
+        const ledger = memoryLedger();
+        const shared = { ...deps(urls), ledger };
+        const manifest = searchManifest();
+        const body = { manifest, input: { q: 'x' }, idempotencyKey: 'broker-key-cred' };
+        expect((await broker({ ...body, secret: 'fixture-key-one' }, shared)).status).toBe(200);
+        // The same request with another credential replays rather than conflicting.
+        const again = await broker({ ...body, secret: 'fixture-key-two' }, shared);
+        expect(again.status).toBe(200);
+        expect((again.body as { replayed?: boolean }).replayed).toBe(true);
+        expect(urls).toHaveLength(1);
+    });
+});
+
 describe('memory ledger', () => {
     it('evicts settled rows first once it is full', async () => {
         const ledger = memoryLedger(2);
