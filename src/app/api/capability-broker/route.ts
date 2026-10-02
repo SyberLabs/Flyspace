@@ -4,7 +4,7 @@
 
 import { lookup } from 'node:dns/promises';
 import { NextRequest, NextResponse } from 'next/server';
-import { BROKER_DEADLINE_MS, handleCapabilityBroker } from '@/core/services/server/capabilityBroker';
+import { admitBrokerCaller, BROKER_DEADLINE_MS, handleCapabilityBroker } from '@/core/services/server/capabilityBroker';
 import { openServerLedger } from '@/core/services/server/capability.ledger';
 import { pinnedFetch } from '@/core/services/server/pinnedFetch';
 import { readBoundedJson, RequestBodyTooLarge } from '@/core/services/server/boundedJson';
@@ -44,6 +44,13 @@ export async function POST(request: NextRequest) {
         return reply(415, { error: 'Content-Type must be application/json.' });
     }
 
+    // The caller and global budgets are checked before any body byte is read,
+    // so an over-budget caller costs no read and no parse. Like the refusals
+    // above, a 429 leaves the body unread for the server to discard.
+    const caller = callerKey(request);
+    const admission = admitBrokerCaller(caller);
+    if (!admission) return reply(429, { error: 'broker rate limit exceeded' });
+
     // One deadline from route entry: body read, DNS, and the upstream call.
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(BROKER_DEADLINE_MS)]);
     let body: unknown;
@@ -59,7 +66,8 @@ export async function POST(request: NextRequest) {
         resolve: async (hostname) => (await lookup(hostname, { all: true })).map(entry => entry.address),
         fetch: pinnedFetch,
         signal,
-        caller: callerKey(request)
+        caller,
+        admission
     });
     return reply(result.status, result.body);
 }
