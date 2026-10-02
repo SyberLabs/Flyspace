@@ -169,6 +169,12 @@ function resolveBaseUrl(spec: Record<string, unknown>): { url: string } | { erro
     const raw = first && typeof first.url === 'string' ? first.url : '';
     if (!raw || raw.includes('{')) return { error: 'provide a concrete server URL' };
     if (raw.startsWith('/')) return { error: 'relative server URLs are not supported' };
+    try {
+        const parsed = new URL(raw);
+        if (parsed.search || parsed.hash) return { error: 'server URLs cannot carry a query or fragment' };
+    } catch {
+        return { error: 'provide a concrete server URL' };
+    }
     return { url: stripTrailingSlash(raw) };
 }
 

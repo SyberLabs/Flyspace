@@ -24,7 +24,9 @@ import * as z from 'zod/v4';
 import { createMcpHttpTransport, type McpSdkTransport } from './mcpClient';
 import { mcpProvider } from './providers/mcpProvider';
 import { admitProposal } from './admission';
-import { bindMcpTransport, executeCapability, unbindMcpTransport } from './execute';
+import { bindMcpTransport, unbindMcpTransport } from './execute';
+// Write runs need a confirmed preview; these tests exercise the engine after one.
+import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
 import { approveCapability, clearCapabilities } from './registry';
 import { capabilitySecrets } from './secrets';
 import { transportCredentialSlot } from './identity';

@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { compileOpenApi } from './openapi';
 import { sealManifest } from './manifest';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
-import { executeCapability } from './execute';
+// Write runs need a confirmed preview; these tests exercise the engine after one.
+import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
 import { claimCreateTrigger, executionRecords } from './executionLedger';
 
 const SPEC = {

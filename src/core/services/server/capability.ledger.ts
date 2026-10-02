@@ -42,8 +42,23 @@ export interface ServerLedger {
     find(runId: string): Promise<ServerExecution | undefined>;
 }
 
-export function memoryLedger(): ServerLedger {
+/** The no-database ledger keeps this many rows; settled rows are evicted first, oldest first. */
+export const MEMORY_LEDGER_MAX_ROWS = 1_000;
+
+export function memoryLedger(maxRows = MEMORY_LEDGER_MAX_ROWS): ServerLedger {
     const rows = new Map<string, ServerExecution>();
+    const evict = () => {
+        while (rows.size >= maxRows) {
+            let victim: string | undefined;
+            for (const [entryKey, row] of rows) {
+                if (row.status !== 'admitted' && row.status !== 'running') {
+                    victim = entryKey;
+                    break;
+                }
+            }
+            rows.delete(victim ?? rows.keys().next().value!);
+        }
+    };
     const key = (row: Pick<ServerExecution, 'capabilityId' | 'idempotencyKey'>) =>
         `${row.capabilityId}\n${row.idempotencyKey}`;
     const byRun = (runId: string) => [...rows.values()].find(row => row.runId === runId);
@@ -53,6 +68,7 @@ export function memoryLedger(): ServerLedger {
             const existing = rows.get(key(row));
             if (existing) return { kind: kindFor(existing, row.inputDigest), row: { ...existing } };
             const stored: ServerExecution = { ...row, executionProfile: row.executionProfile ?? 'sync' };
+            evict();
             rows.set(key(row), stored);
             return { kind: 'new', row: { ...stored } };
         },

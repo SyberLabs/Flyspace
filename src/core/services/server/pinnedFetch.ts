@@ -25,6 +25,15 @@ export async function pinnedFetch(request: PinnedRequest): Promise<PinnedRespons
     const transport = request.url.protocol === 'https:' ? https : http;
     const hostHeader = request.url.host;
     return new Promise((resolve, reject) => {
+        let settled = false;
+        let response: http.IncomingMessage | undefined;
+        const finish = (outcome: () => void) => {
+            if (settled) return;
+            settled = true;
+            request.signal?.removeEventListener('abort', abort);
+            outcome();
+        };
+        const fail = (error: unknown) => finish(() => reject(error));
         const req = transport.request({
             host: request.address,
             servername: request.url.hostname,
@@ -32,13 +41,15 @@ export async function pinnedFetch(request: PinnedRequest): Promise<PinnedRespons
             method: request.method,
             path: `${request.url.pathname}${request.url.search}`,
             headers: { ...request.headers, host: hostHeader },
+            // Idle timeout per socket. The caller's signal carries the total deadline.
             timeout: 15_000
         }, (res) => {
+            response = res;
             const declared = Number(res.headers['content-length'] ?? '');
             if (Number.isFinite(declared) && declared > request.maxBytes) {
                 res.resume();
                 req.destroy();
-                reject(new Error('Response exceeded 1MB'));
+                fail(new Error('Response exceeded 1MB'));
                 return;
             }
             const chunks: Buffer[] = [];
@@ -47,7 +58,7 @@ export async function pinnedFetch(request: PinnedRequest): Promise<PinnedRespons
                 seen += chunk.length;
                 if (seen > request.maxBytes) {
                     res.destroy();
-                    reject(new Error('Response exceeded 1MB'));
+                    fail(new Error('Response exceeded 1MB'));
                     return;
                 }
                 chunks.push(chunk);
@@ -58,24 +69,28 @@ export async function pinnedFetch(request: PinnedRequest): Promise<PinnedRespons
                     if (typeof value === 'string') headers[key] = value;
                     else if (Array.isArray(value)) headers[key] = value.join(', ');
                 }
-                resolve({
+                finish(() => resolve({
                     status: res.statusCode ?? 0,
                     headers,
                     text: Buffer.concat(chunks).toString('utf8')
-                });
+                }));
             });
-            res.on('error', reject);
+            res.on('error', fail);
+            res.on('aborted', () => fail(new Error('Response was aborted')));
         });
-        const abort = () => {
-            req.destroy(new DOMException('The operation was aborted', 'AbortError'));
-        };
+        function abort() {
+            const reason = new DOMException('The operation was aborted', 'AbortError');
+            response?.destroy();
+            req.destroy(reason);
+            fail(reason);
+        }
+        req.on('error', fail);
+        req.on('timeout', () => req.destroy(new Error('Broker request timed out')));
         if (request.signal?.aborted) {
             abort();
             return;
         }
         request.signal?.addEventListener('abort', abort, { once: true });
-        req.on('error', reject);
-        req.on('timeout', () => req.destroy(new Error('Broker request timed out')));
         if (request.body !== undefined) req.write(request.body);
         req.end();
     });

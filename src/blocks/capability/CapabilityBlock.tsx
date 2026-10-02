@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBlockStore, useWireStore } from '@/core/stores';
-import { runInstalledCapability } from '@/core/capabilities/registry';
+import { previewInstalledRun, runInstalledCapability } from '@/core/capabilities/registry';
+import type { RunPreview } from '@/core/capabilities/execute';
 import { useCapabilityStore } from '@/core/capabilities/store';
 import { claimCreateTrigger, latestExecutionRecord, useExecutionLedger } from '@/core/capabilities/executionLedger';
 import { canonicalize, sha256 } from '@/core/capabilities/hash';
@@ -28,7 +29,9 @@ function readTypedKind(data: unknown): string | null {
 /**
  * One view for every runtime capability.
  * Mounting the view is not an execution request. The user runs it.
- * Write and destructive also wait until approval.
+ * Write and destructive also wait until approval, and every write or
+ * destructive run shows its method, resolved URL and arguments first: it is
+ * sent only after the person confirms that exact request.
  */
 export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const block = useBlockStore(state => state.getBlock(instanceId));
@@ -40,18 +43,39 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const seenInput = useRef<string | undefined>(undefined);
     const wires = useWireStore(state => state.wires);
     const blocks = useBlockStore(state => state.blocks);
+    const [pendingRun, setPendingRun] = useState<RunPreview | null>(null);
+    const [previewError, setPreviewError] = useState<string | null>(null);
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
     const trigger = manifest?.trigger ?? { kind: 'manual' as const };
 
-    const run = (idempotencyKey?: string) => {
+    const run = (idempotencyKey?: string, confirmedRun?: string) => {
         if (!manifest || running) return;
-        if (sideEffect && manifest.approval !== 'approved') return;
+        if (sideEffect && (manifest.approval !== 'approved' || !confirmedRun)) return;
         const key = idempotencyKey ?? attemptKey.current ?? `click_${sha256(`${instanceId}|${Date.now()}|${Math.random()}`).slice(0, 24)}`;
         attemptKey.current = key;
-        void runInstalledCapability(instanceId, undefined, { idempotencyKey: key }).then(result => {
+        void runInstalledCapability(instanceId, undefined, { idempotencyKey: key, confirmedRun }).then(result => {
             if (result.error?.code !== 'EFFECT_UNCERTAIN') attemptKey.current = null;
         });
+    };
+
+    /** A read runs now. A write or destructive run shows what it will send and waits. */
+    const requestRun = () => {
+        setPreviewError(null);
+        if (!sideEffect) {
+            run();
+            return;
+        }
+        const preview = previewInstalledRun(instanceId);
+        if (preview.ok) setPendingRun(preview.preview);
+        else setPreviewError(preview.result.error?.message ?? 'This run cannot be prepared');
+    };
+
+    const confirmRun = () => {
+        if (!pendingRun) return;
+        const digest = pendingRun.digest;
+        setPendingRun(null);
+        run(undefined, digest);
     };
     const runRef = useRef(run);
     useEffect(() => {
@@ -113,14 +137,49 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                     ))}
                 </ul>
             )}
-            <button
-                type="button"
-                onClick={() => run()}
-                disabled={!manifest || running || blocked}
-                className="rounded border border-[var(--citadel-border)] px-2 py-1 text-xs disabled:opacity-50"
-            >
-                {running ? 'Running…' : blocked ? 'Needs approval' : 'Run'}
-            </button>
+            {previewError ? (
+                <p className="text-xs text-[var(--truth-red)]">{previewError}</p>
+            ) : null}
+            {pendingRun ? (
+                <div role="group" aria-label="Confirm request" className="space-y-1 rounded border border-[var(--citadel-border)] p-2 text-xs">
+                    <p>Send this {pendingRun.effect} request?</p>
+                    <p className="break-all font-mono">
+                        <span data-testid="confirm-method">{pendingRun.method}</span>{' '}
+                        <span data-testid="confirm-url">{pendingRun.url}</span>
+                    </p>
+                    {pendingRun.credential ? (
+                        <p className="text-[var(--text-muted)]">Credential: {pendingRun.credential}</p>
+                    ) : null}
+                    <pre data-testid="confirm-arguments" className="max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono">
+                        {JSON.stringify(pendingRun.arguments, null, 2)}
+                    </pre>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={confirmRun}
+                            className="rounded border border-[var(--citadel-border)] px-2 py-1"
+                        >
+                            Send
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPendingRun(null)}
+                            className="rounded border border-[var(--citadel-border)] px-2 py-1"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <button
+                    type="button"
+                    onClick={requestRun}
+                    disabled={!manifest || running || blocked}
+                    className="rounded border border-[var(--citadel-border)] px-2 py-1 text-xs disabled:opacity-50"
+                >
+                    {running ? 'Running…' : blocked ? 'Needs approval' : 'Run'}
+                </button>
+            )}
         </div>
     );
 }

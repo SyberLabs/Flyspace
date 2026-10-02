@@ -79,7 +79,8 @@ A manifest describes a capability. It does not grant itself authority.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
 - Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and input replays. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
 - Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
-- HTTP capabilities are `browser_direct` or `server_broker`. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects. Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
+- HTTP capabilities are `browser_direct` or `server_broker`. A provider cannot choose: admission sets `browser_direct` unless the host's `AdmissionPolicy.brokerOrigins` names the origin, and then only for read and compute. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects.
+- A base URL is https, carries no query or fragment, and an IP literal in it must be public. Loopback (http or https) is allowed only when the host itself built the manifest (`validateManifest(..., { hostCreated: true })`). Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
 - MCP tools compile from schemas and run through `mcpClient.ts`, a thin adapter over the official TypeScript SDK v2 (`@modelcontextprotocol/client`). The SDK negotiates the protocol era (`auto`: probe 2026-07-28, fall back to the 2025 handshake) and forwards cancellation. An MCP credential slot is keyed by server id; execution resolves it and passes it as per-call headers, so revoking the slot stops the next call. A sync MCP call is bounded by the same 15 s request timeout as HTTP.
 - Long work uses the `async_poll` profile, never a longer request timeout. The transport is `{ kind: 'async', runtimeId, operation }`: the host binds the runtime (`asyncRuntime.ts`) and its endpoint, and a proposal cannot name one. `start` returns an external run id, which the vault ledger records before polling. Each start and each poll is still one request of at most 15 s, and the whole run is bounded by the profile's `maxDurationMs` (at most one hour): no sleep or poll request extends past that deadline, except the single observation recovery makes of a run that already outlived it. A run this session is still polling is not expired underneath it by another admission; it settles its own row. Omni never repeats a start. A write that was started and not observed to finish (deadline, repeated poll failures, or cancel) is `uncertain`. `reconcileAsyncExecution` and `recoverAsyncExecutions` read the ledger after a reload and poll the external run id; an uncertain run closes only when the destination reports a terminal status. Async capabilities run manually only. An untrusted async runtime lands at `write`, like an untrusted MCP server. The server ledger carries the same fields (`db/migrations/005_capability_async.sql`).
 - Speech has a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. A denied microphone is `Permission denied`, not the browser error code.
@@ -90,8 +91,22 @@ A manifest describes a capability. It does not grant itself authority.
 | --- | --- | --- |
 | read | GET, HEAD | the user runs it |
 | compute | `x-omni-effect: compute` on a safe method, or an explicit bring/MCP declaration | the user runs it |
-| write | POST, PUT, PATCH | approval is `approved` and the user runs it |
-| destructive | DELETE, or `destructiveHint`, or a tightened GET/HEAD | approval is `approved` and the user runs it |
+| write | POST, PUT, PATCH | approval is `approved`, and the user confirms the shown request for this run |
+| destructive | DELETE, or `destructiveHint`, or a tightened GET/HEAD | approval is `approved`, and the user confirms the shown request for this run |
+
+Approval admits a capability; it does not admit its arguments. Before each
+write or destructive run, `previewCapabilityRun` resolves the method, the URL
+(without the credential) and the arguments, and the block shows them.
+`executeCapability` dispatches the run only with the digest of that exact
+preview (`confirmedRun`); different arguments, including a wire that changed
+after the preview, are refused as `CONFIRMATION_REQUIRED`. A run is prepared
+once: its arguments (every declared input supplied, in an object with no
+prototype) and, for http, the exact URL, header values and body text. The
+digest is computed from that prepared run, and dispatch sends the same
+objects. An input or apiKey name may not be `__proto__`, `prototype`, or a
+name `Object.prototype` defines. A path argument
+fills one path segment: `.` and `..` are refused, and the resolved pathname
+must equal the expanded template.
 
 A method cannot be relabeled into a weaker class. GET and HEAD may be tightened to write or destructive. POST, PUT, and PATCH are at least write. DELETE stays destructive. An observed HTTP error on a write or destructive call is not marked retryable.
 

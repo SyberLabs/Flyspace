@@ -1,7 +1,9 @@
 // Installed manifests only. Proposals are not executable.
 // Side effects stop here until approveCapability has moved them to `approved`.
 
-import { sha256 } from './hash';
+import { canonicalize, sha256 } from './hash';
+import { joinUrl, resolveHttpPath, stringifyParam } from './httpTarget';
+import { redact } from './redact';
 import {
     admitExecution,
     executionRecord,
@@ -87,6 +89,134 @@ export interface ExecuteOptions {
     idempotencyKey?: string;
     /** Time source for async_poll waits. Tests inject one instead of sleeping. */
     clock?: AsyncClock;
+    /**
+     * Write and destructive runs only: the digest of the RunPreview a person
+     * confirmed. A run whose request differs from that preview is refused.
+     */
+    confirmedRun?: string;
+}
+
+export { joinUrl };
+
+/** What a write or destructive run will send, shown to a person before it is sent. */
+export interface RunPreview {
+    capabilityId: string;
+    effect: CapabilityManifest['effect'];
+    /** HTTP method, or CALL / START for a tool or job transport. */
+    method: string;
+    /** The resolved request URL without any credential, or the tool or job it targets. */
+    url: string;
+    arguments: Record<string, unknown>;
+    /** Where the credential travels, never its value. */
+    credential?: string;
+    digest: string;
+}
+
+/**
+ * Validate a run and describe it without dispatching anything. The digest
+ * binds the manifest, method, URL, arguments and, for http, the exact
+ * header values and body text; executeCapability accepts a write or
+ * destructive run only with the digest of its own preview.
+ */
+export function previewCapabilityRun(
+    capabilityId: string,
+    input: Record<string, unknown> = {}
+): { ok: true; preview: RunPreview } | { ok: false; result: CapabilityResult } {
+    const manifest = readCapability(capabilityId);
+    if (!manifest) return { ok: false, result: failure(capabilityId, 'NOT_INSTALLED', 'Capability is not installed', false) };
+    if (manifest.approval === 'denied' || manifest.approval === 'pending') {
+        return { ok: false, result: failure(capabilityId, 'EFFECT_NOT_APPROVED', `${manifest.effect} capability is ${manifest.approval}; execution is refused`, false) };
+    }
+    const inputErrors = validateInput(manifest, input);
+    if (inputErrors.length > 0) return { ok: false, result: failure(capabilityId, 'INPUT_INVALID', inputErrors.join('; '), false) };
+    const prepared = prepareRun(manifest, input);
+    if ('error' in prepared) return { ok: false, result: failure(capabilityId, 'INPUT_INVALID', prepared.error, false) };
+    return { ok: true, preview: prepared.run.preview };
+}
+
+/** The exact http request one run sends, before the credential is attached. */
+interface HttpPlan {
+    /** Path and query inputs applied. */
+    url: string;
+    /** Header inputs, as sent. */
+    headers: Record<string, string>;
+    /** The body text, as sent. */
+    body?: string;
+}
+
+/**
+ * One run, prepared once. Its preview digest is computed from these objects,
+ * and dispatch sends these same objects, so what a person confirmed and
+ * what leaves the process cannot differ.
+ */
+interface PreparedRun {
+    args: Record<string, unknown>;
+    http?: HttpPlan;
+    preview: RunPreview;
+}
+
+function prepareRun(manifest: CapabilityManifest, input: Record<string, unknown>): { run: PreparedRun } | { error: string } {
+    const args = argumentsFor(manifest, input);
+    const transport = manifest.transport;
+    let method: string;
+    let url: string;
+    let http: HttpPlan | undefined;
+    if (transport.kind === 'http') {
+        const target = resolveHttpPath(transport.baseUrl, transport.path, args);
+        if ('error' in target) return { error: target.error };
+        const headers = Object.create(null) as Record<string, string>;
+        let body: string | undefined;
+        for (const entry of manifest.inputs) {
+            if (!Object.hasOwn(args, entry.name)) continue;
+            const value = args[entry.name];
+            if (entry.in === 'query') target.url.searchParams.set(entry.name, stringifyParam(value));
+            else if (entry.in === 'header') headers[entry.name] = stringifyParam(value);
+            else if (entry.in === 'body') body = JSON.stringify(value);
+        }
+        method = transport.method;
+        url = target.url.toString();
+        http = { url, headers, ...(body !== undefined ? { body } : {}) };
+    } else if (transport.kind === 'mcp') {
+        method = 'CALL';
+        url = `mcp:${transport.serverId}/${transport.toolName}`;
+    } else if (transport.kind === 'async') {
+        method = 'START';
+        url = `async:${transport.runtimeId}/${transport.operation}`;
+    } else {
+        method = 'CALL';
+        url = `local:${transport.handler}`;
+    }
+    const credential = credentialPlacement(manifest);
+    const digest = sha256(canonicalize({
+        capabilityId: manifest.id,
+        manifestDigest: manifest.digest,
+        method,
+        url,
+        arguments: args,
+        ...(http ? { headers: http.headers, body: http.body } : {})
+    }));
+    return {
+        run: {
+            args,
+            ...(http ? { http } : {}),
+            preview: {
+                capabilityId: manifest.id,
+                effect: manifest.effect,
+                method,
+                url,
+                arguments: args,
+                ...(credential ? { credential } : {}),
+                digest
+            }
+        }
+    };
+}
+
+function credentialPlacement(manifest: CapabilityManifest): string | undefined {
+    const auth = manifest.auth;
+    if (auth.kind === 'none') return undefined;
+    if (auth.kind === 'apiKey') return auth.in === 'query' ? `query parameter ${auth.name}` : `header ${auth.name}`;
+    return 'Authorization header';
 }
 
 type AsyncProfile = Extract<CapabilityExecutionProfile, { kind: 'async_poll' }>;
@@ -104,7 +234,8 @@ async function executeAsync(
     record: ExecutionRecord,
     idempotencyKey: string,
     signal: AbortSignal | undefined,
-    clock: AsyncClock
+    clock: AsyncClock,
+    secret: string | undefined
 ): Promise<CapabilityResult> {
     const runId = record.runId;
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
@@ -133,16 +264,17 @@ async function executeAsync(
             externalRunId = started?.externalRunId;
         } catch (error) {
             if (error instanceof AsyncStartRejected) {
-                return finish(failure(manifest.id, 'ASYNC_START_REJECTED', error.message, false), runId, 'failed', clock.now());
+                return finish(dispatchedFailure(manifest, 'ASYNC_START_REJECTED', error.message, false, secret), runId, 'failed', clock.now());
             }
             if (sideEffect || signal?.aborted) {
                 return finish(failure(manifest.id, 'EFFECT_UNCERTAIN', UNOBSERVED, false), runId, 'uncertain', clock.now());
             }
-            return finish(failure(
-                manifest.id,
+            return finish(dispatchedFailure(
+                manifest,
                 'UPSTREAM_ERROR',
                 error instanceof Error ? error.message : 'The start request failed',
-                false
+                false,
+                secret
             ), runId, 'failed', clock.now());
         }
         if (typeof externalRunId !== 'string' || !EXTERNAL_RUN_ID_PATTERN.test(externalRunId)) {
@@ -164,7 +296,7 @@ async function executeAsync(
             signal,
             onObserve: (status, at) => observeExecution(runId, status, at)
         });
-        return settleAsync(manifest, runId, outcome, 'running', clock.now());
+        return settleAsync(manifest, runId, outcome, 'running', clock.now(), secret);
     } finally {
         activeAsyncRuns.delete(runId);
     }
@@ -175,7 +307,8 @@ function settleAsync(
     runId: string,
     outcome: PollOutcome,
     from: 'running' | 'uncertain',
-    at: number
+    at: number,
+    secret: string | undefined
 ): CapabilityResult {
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
     let result: CapabilityResult;
@@ -188,15 +321,16 @@ function settleAsync(
                 // The external run id is already recorded, and the destination
                 // said the run succeeded. Rejecting the value must not read as
                 // a clean failure that invites another start under the same key.
-                result = failure(
-                    manifest.id,
+                result = dispatchedFailure(
+                    manifest,
                     'TYPED_OUTPUT_MISMATCH',
                     `The destination reported success and the value was rejected: ${detail}`,
-                    false
+                    false,
+                    secret
                 );
                 status = 'uncertain';
             } else {
-                result = failure(manifest.id, 'TYPED_OUTPUT_MISMATCH', detail, false);
+                result = dispatchedFailure(manifest, 'TYPED_OUTPUT_MISMATCH', detail, false, secret);
                 status = 'failed';
             }
         } else {
@@ -205,7 +339,7 @@ function settleAsync(
             status = 'succeeded';
         }
     } else if (outcome.kind === 'failed') {
-        result = failure(manifest.id, 'ASYNC_RUN_FAILED', outcome.message, false);
+        result = dispatchedFailure(manifest, 'ASYNC_RUN_FAILED', outcome.message, false, secret);
         status = 'failed';
     } else if (outcome.kind === 'canceled') {
         result = failure(manifest.id, 'EFFECT_UNCERTAIN', `Polling was canceled. ${UNOBSERVED}`, false);
@@ -215,7 +349,7 @@ function settleAsync(
         status = 'uncertain';
     } else {
         const code = outcome.kind === 'deadline' ? 'DEADLINE' : 'UNOBSERVABLE';
-        result = failure(manifest.id, code, outcome.kind === 'deadline' ? 'The run did not finish within its profile' : outcome.message, false);
+        result = dispatchedFailure(manifest, code, outcome.kind === 'deadline' ? 'The run did not finish within its profile' : outcome.message, false, secret);
         status = 'failed';
     }
 
@@ -300,7 +434,7 @@ export async function reconcileAsyncExecution(
             signal: options.signal,
             onObserve: (status, at) => observeExecution(runId, status, at)
         });
-        const result = settleAsync(manifest, runId, outcome, record.status, clock.now());
+        const result = settleAsync(manifest, runId, outcome, record.status, clock.now(), auth.secret);
         const after = executionRecord(runId);
         return {
             runId,
@@ -337,10 +471,15 @@ function bounded(signal: AbortSignal | undefined): AbortSignal {
     return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
+/**
+ * Every declared input the caller supplied as an own property, in an object
+ * with no prototype, so no input name can be swallowed by an accessor or
+ * read through inheritance.
+ */
 function argumentsFor(manifest: CapabilityManifest, input: Record<string, unknown>): Record<string, unknown> {
-    const args: Record<string, unknown> = {};
+    const args = Object.create(null) as Record<string, unknown>;
     for (const entry of manifest.inputs) {
-        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
+        if (Object.hasOwn(input, entry.name) && input[entry.name] !== undefined) args[entry.name] = input[entry.name];
     }
     return args;
 }
@@ -367,6 +506,21 @@ export async function executeCapability(
         return finish(failure(capabilityId, 'INPUT_INVALID', inputErrors.join('; '), false));
     }
 
+    const prepared = prepareRun(manifest, input);
+    if ('error' in prepared) {
+        return finish(failure(capabilityId, 'INPUT_INVALID', prepared.error, false));
+    }
+    const run = prepared.run;
+    if ((manifest.effect === 'write' || manifest.effect === 'destructive')
+        && options.confirmedRun !== run.preview.digest) {
+        return finish(failure(
+            capabilityId,
+            'CONFIRMATION_REQUIRED',
+            `This ${manifest.effect} run was not confirmed as shown; review the request and confirm it`,
+            false
+        ));
+    }
+
     const auth = applyAuth(manifest);
     if ('error' in auth) return finish(auth.error, undefined);
 
@@ -390,7 +544,7 @@ export async function executeCapability(
         observing: activeAsyncRuns
     });
     if (admission.kind !== 'admit') return replay(manifest, admission.record, admission.kind);
-    if (profile) return executeAsync(manifest, profile, input, auth.headers, admission.record, idempotencyKey, options.signal, clock);
+    if (profile) return executeAsync(manifest, profile, run.args, auth.headers, admission.record, idempotencyKey, options.signal, clock, auth.secret);
 
     const runId = admission.record.runId;
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
@@ -402,7 +556,7 @@ export async function executeCapability(
         }
         const step = await dispatch(
             manifest,
-            input,
+            run,
             auth.headers,
             auth.query,
             options.fetchImpl ?? fetch,
@@ -422,11 +576,12 @@ export async function executeCapability(
 
         const schemaErrors = validateValue(manifest.output.schema, value);
         if (schemaErrors.length > 0) {
-            return finish(failure(
-                capabilityId,
+            return finish(dispatchedFailure(
+                manifest,
                 'TYPED_OUTPUT_MISMATCH',
                 schemaErrors.slice(0, 6).join('; '),
-                false
+                false,
+                auth.secret
             ), runId, 'failed');
         }
         const typed: TypedValue = { schema: manifest.output.schema, value };
@@ -449,11 +604,12 @@ export async function executeCapability(
         if (aborted) {
             return finish(failure(capabilityId, 'CANCELED', 'Execution was canceled', false), runId, 'canceled');
         }
-        return finish(failure(
-            capabilityId,
+        return finish(dispatchedFailure(
+            manifest,
             'UPSTREAM_ERROR',
             error instanceof Error ? error.message : 'Unknown execution error',
-            manifest.effect === 'read' || manifest.effect === 'compute'
+            manifest.effect === 'read' || manifest.effect === 'compute',
+            auth.secret
         ), runId, 'failed');
     }
 }
@@ -466,12 +622,16 @@ function validateInput(manifest: CapabilityManifest, input: Record<string, unkno
         if (!known.has(key)) errors.push(`unexpected input ${key}`);
     }
     for (const entry of manifest.inputs) {
-        const present = input[entry.name] !== undefined;
+        const present = Object.hasOwn(input, entry.name) && input[entry.name] !== undefined;
         if (!present) {
             if (entry.required) errors.push(`${entry.name} is required`);
             continue;
         }
         errors.push(...validateValue(entry.schema, input[entry.name], entry.name));
+    }
+    if (errors.length === 0 && manifest.transport.kind === 'http') {
+        const target = resolveHttpPath(manifest.transport.baseUrl, manifest.transport.path, input);
+        if ('error' in target) errors.push(target.error);
     }
     return errors;
 }
@@ -503,7 +663,7 @@ type Step = { type: 'value'; value: unknown } | { type: 'halt'; result: Capabili
 
 async function dispatch(
     manifest: CapabilityManifest,
-    input: Record<string, unknown>,
+    run: PreparedRun,
     authHeaders: Record<string, string>,
     authQuery: Record<string, string>,
     fetchImpl: typeof fetch,
@@ -513,11 +673,11 @@ async function dispatch(
     markDispatched: () => void
 ): Promise<Step> {
     if (manifest.transport.kind === 'http') {
-        return executeHttp(manifest, input, authHeaders, authQuery, fetchImpl, signal, idempotencyKey, secret, markDispatched);
+        return executeHttp(manifest, run, authHeaders, authQuery, fetchImpl, signal, idempotencyKey, secret, markDispatched);
     }
     markDispatched();
-    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, input, authHeaders, signal);
-    return executeLocal(manifest, input, signal);
+    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, run.args, authHeaders, signal);
+    return executeLocal(manifest, run.args, signal);
 }
 
 function halt(result: CapabilityResult): Step {
@@ -526,7 +686,7 @@ function halt(result: CapabilityResult): Step {
 
 async function executeHttp(
     manifest: CapabilityManifest,
-    input: Record<string, unknown>,
+    run: PreparedRun,
     authHeaders: Record<string, string>,
     authQuery: Record<string, string>,
     fetchImpl: typeof fetch,
@@ -535,31 +695,30 @@ async function executeHttp(
     secret: string | undefined,
     markDispatched: () => void
 ): Promise<Step> {
-    if (manifest.transport.kind !== 'http') {
+    if (manifest.transport.kind !== 'http' || !run.http) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an http capability', false));
     }
-    const path = fillPath(manifest.transport.path, input);
-    const url = joinUrl(manifest.transport.baseUrl, path);
-    const headers: Record<string, string> = { accept: 'application/json', ...authHeaders };
-    for (const entry of manifest.inputs) {
-        if (input[entry.name] === undefined) continue;
-        if (entry.in === 'query') url.searchParams.set(entry.name, stringifyParam(input[entry.name]));
-        if (entry.in === 'header') headers[entry.name] = stringifyParam(input[entry.name]);
-    }
+    // Sent exactly as prepared (and, for a write, as confirmed); only the
+    // credential is added here.
+    const url = new URL(run.http.url);
+    const headers = Object.assign(
+        Object.create(null) as Record<string, string>,
+        { accept: 'application/json' },
+        authHeaders,
+        run.http.headers
+    );
     for (const [key, value] of Object.entries(authQuery)) url.searchParams.set(key, value);
 
-    let body: string | undefined;
-    const bodyInput = manifest.inputs.find(entry => entry.in === 'body');
-    if (bodyInput && input[bodyInput.name] !== undefined) {
-        body = JSON.stringify(input[bodyInput.name]);
-        if (!headers['content-type'] && !headers['Content-Type']) headers['content-type'] = 'application/json';
+    const body = run.http.body;
+    if (body !== undefined && !headers['content-type'] && !headers['Content-Type']) {
+        headers['content-type'] = 'application/json';
     }
 
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     markDispatched();
     if (manifest.transport.access === 'server_broker') {
-        return executeBroker(manifest, input, idempotencyKey, secret, fetchImpl, requestSignal);
+        return executeBroker(manifest, run.args, idempotencyKey, secret, fetchImpl, requestSignal);
     }
     const response = await fetchImpl(url.toString(), {
         method: manifest.transport.method,
@@ -634,11 +793,7 @@ async function executeLocal(manifest: CapabilityManifest, input: Record<string, 
     if (!handler) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No local handler bound for ${manifest.transport.handler}`, false));
     }
-    const args: Record<string, unknown> = {};
-    for (const entry of manifest.inputs) {
-        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
-    }
-    return { type: 'value', value: await handler(args, { signal }) };
+    return { type: 'value', value: await handler(argumentsFor(manifest, input), { signal }) };
 }
 
 async function executeBroker(
@@ -666,12 +821,10 @@ async function executeBroker(
         executionStatus?: string;
     };
     if (payload.error) {
-        return halt(failure(
-            manifest.id,
-            payload.error.code || 'UPSTREAM_ERROR',
-            payload.error.message || 'Broker request failed',
-            false
-        ));
+        const code = typeof payload.error.code === 'string' && /^[A-Z_]{1,40}$/.test(payload.error.code)
+            ? payload.error.code
+            : 'UPSTREAM_ERROR';
+        return halt(dispatchedFailure(manifest, code, payload.error.message || 'Broker request failed', false, secret));
     }
     if (!response.ok) {
         return halt(failure(manifest.id, 'UPSTREAM_ERROR', `Broker HTTP ${response.status}`, false));
@@ -692,10 +845,7 @@ async function executeMcp(
     if (!transport) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No MCP transport bound for ${manifest.transport.serverId}`, false));
     }
-    const args: Record<string, unknown> = {};
-    for (const entry of manifest.inputs) {
-        if (input[entry.name] !== undefined) args[entry.name] = input[entry.name];
-    }
+    const args = argumentsFor(manifest, input);
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     return {
@@ -708,25 +858,6 @@ async function executeMcp(
             { headers: { ...authHeaders } }
         )
     };
-}
-
-function fillPath(path: string, input: Record<string, unknown>): string {
-    return path.replace(/\{([^}]+)\}/g, (_match, name: string) => {
-        const value = input[name];
-        return encodeURIComponent(stringifyParam(value));
-    });
-}
-
-function stringifyParam(value: unknown): string {
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    return JSON.stringify(value);
-}
-
-export function joinUrl(baseUrl: string, path: string): URL {
-    const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-    const relative = path.startsWith('/') ? path.slice(1) : path;
-    return new URL(relative, base);
 }
 
 function encodeBase64(value: string): string {
@@ -747,7 +878,7 @@ function replay(manifest: CapabilityManifest, record: ExecutionRecord, kind: 're
         return remembered(failure(
             manifest.id,
             'EFFECT_UNCERTAIN',
-            record.receipt?.message ?? 'The call was dispatched and the outcome was not observed. Do not retry automatically.',
+            redact(record.receipt?.message ?? 'The call was dispatched and the outcome was not observed. Do not retry automatically.', slotSecret(manifest)),
             false
         ), record.runId);
     }
@@ -763,7 +894,7 @@ function replay(manifest: CapabilityManifest, record: ExecutionRecord, kind: 're
     return remembered(failure(
         manifest.id,
         record.receipt?.code ?? 'UPSTREAM_ERROR',
-        record.receipt?.message ?? 'The previous run failed',
+        redact(record.receipt?.message ?? 'The previous run failed', slotSecret(manifest)),
         false
     ), record.runId);
 }
@@ -771,6 +902,27 @@ function replay(manifest: CapabilityManifest, record: ExecutionRecord, kind: 're
 function remembered(result: CapabilityResult, runId: string): CapabilityResult {
     result.runId = runId;
     return result;
+}
+
+function slotSecret(manifest: CapabilityManifest): string | undefined {
+    return manifest.auth.kind !== 'none' && manifest.auth.secretRef
+        ? capabilitySecrets.get(manifest.auth.secretRef)
+        : undefined;
+}
+
+/**
+ * A failure whose message came back from a dispatched call. The credential
+ * is removed in every encoding it could have been sent in, and the message
+ * is capped, before it reaches the result, its presentation or a receipt.
+ */
+function dispatchedFailure(
+    manifest: CapabilityManifest,
+    code: string,
+    message: string,
+    retryable: boolean,
+    secret: string | undefined
+): CapabilityResult {
+    return failure(manifest.id, code, redact(message, secret ?? slotSecret(manifest)), retryable);
 }
 
 function failure(capabilityId: string, code: string, message: string, retryable: boolean): CapabilityResult {

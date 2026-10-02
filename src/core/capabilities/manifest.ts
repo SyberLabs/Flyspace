@@ -5,6 +5,7 @@
 
 import { canonicalize, sha256 } from './hash';
 import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
+import { classifyAddress, isIpLiteral, isLoopbackAddress } from './egress';
 import { validateValueType, type ValueType } from './valueType';
 
 export const CAPABILITY_MANIFEST_VERSION = 1 as const;
@@ -138,6 +139,8 @@ const MANIFEST_KEYS = new Set([
 
 const RUNTIME_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/;
 const MAX_OAUTH_SCOPES = 20;
+/** Each input schema is already depth-bounded by validateValueType. */
+export const MAX_MANIFEST_INPUTS = 64;
 const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5B\x5D-\x7E]{1,200}$/;
 const OPERATION_PATTERN = /^[A-Za-z0-9_.:-]{1,120}$/;
 
@@ -151,6 +154,16 @@ export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_.:-]{0,63}$/;
 const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
 const SECRET_REF_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,64}$/;
+
+/**
+ * Names an object property cannot hold as plain data: __proto__ (an
+ * accessor), prototype, and every name Object.prototype already defines
+ * (constructor, toString, ...), which a lookup would find by inheritance.
+ * An input or credential placement may not use one.
+ */
+export function isReservedName(name: string): boolean {
+    return name === '__proto__' || name === 'prototype' || Object.prototype.hasOwnProperty.call(Object.prototype, name);
+}
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -289,6 +302,8 @@ function validateAuth(auth: unknown, errors: string[]): void {
         if (auth.in !== 'header' && auth.in !== 'query') errors.push('apiKey auth requires in: header or query');
         if (typeof auth.name !== 'string' || !/^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,64}$/.test(auth.name)) {
             errors.push('apiKey auth requires a header or query name');
+        } else if (isReservedName(auth.name)) {
+            errors.push(`apiKey auth name ${auth.name} is reserved`);
         }
     }
     if (auth.prefix !== undefined && (typeof auth.prefix !== 'string' || auth.prefix.length > 32)) {
@@ -358,7 +373,9 @@ function validateProvenance(provenance: unknown, errors: string[]): void {
     }
 }
 
-function validateHttpUrl(baseUrl: string, errors: string[]): void {
+const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata.google.com']);
+
+function validateHttpUrl(baseUrl: string, errors: string[], hostCreated: boolean): void {
     let url: URL;
     try {
         url = new URL(baseUrl);
@@ -369,15 +386,27 @@ function validateHttpUrl(baseUrl: string, errors: string[]): void {
     if (url.username || url.password) {
         errors.push('transport.baseUrl must not embed credentials');
     }
-    const host = url.hostname.toLowerCase();
-    if (host === '169.254.169.254' || host === 'metadata.google.internal') {
-        errors.push('transport.baseUrl targets a metadata service');
+    // A query or fragment here is never sent (paths are joined onto the base)
+    // and would only be stored and digested.
+    if (url.search || url.hash) {
+        errors.push('transport.baseUrl must not carry a query or fragment');
     }
-    const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-    if (url.protocol === 'http:' && !loopback) {
-        errors.push('transport.baseUrl must be https, except loopback http');
-    } else if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         errors.push('transport.baseUrl must be http or https');
+        return;
+    }
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    const literal = isIpLiteral(host);
+    const loopback = host === 'localhost' || host.endsWith('.localhost') || (literal && isLoopbackAddress(host));
+    if (METADATA_HOSTS.has(host) || host === '169.254.169.254') {
+        errors.push('transport.baseUrl targets a metadata service');
+    } else if (loopback) {
+        if (!hostCreated) errors.push('transport.baseUrl may target loopback only in a host-created manifest');
+    } else if (literal && !classifyAddress(host).ok) {
+        errors.push('transport.baseUrl targets a non-public address');
+    }
+    if (url.protocol === 'http:' && !loopback) {
+        errors.push('transport.baseUrl must be https, except loopback http in a host-created manifest');
     }
 }
 
@@ -391,7 +420,15 @@ export interface ManifestValidation {
     errors: string[];
 }
 
-export function validateManifest(input: unknown): ManifestValidation {
+export interface ManifestValidationOptions {
+    /**
+     * The host itself built this manifest (not a compiler, provider, model or
+     * stored snapshot). Only then may an http transport target loopback.
+     */
+    hostCreated?: boolean;
+}
+
+export function validateManifest(input: unknown, options: ManifestValidationOptions = {}): ManifestValidation {
     const errors: string[] = [];
     if (!isRecord(input)) return { ok: false, errors: ['manifest must be an object'] };
 
@@ -487,7 +524,7 @@ export function validateManifest(input: unknown): ManifestValidation {
         }
     } else if (input.transport.kind === 'http') {
         if (typeof input.transport.baseUrl !== 'string') errors.push('transport.baseUrl is required');
-        else validateHttpUrl(input.transport.baseUrl, errors);
+        else validateHttpUrl(input.transport.baseUrl, errors, options.hostCreated === true);
         if (typeof input.transport.method !== 'string' || !METHODS.includes(input.transport.method as HttpMethod)) {
             errors.push('transport.method is invalid');
         }
@@ -520,6 +557,8 @@ export function validateManifest(input: unknown): ManifestValidation {
 
     if (!Array.isArray(input.inputs)) {
         errors.push('inputs must be a list');
+    } else if (input.inputs.length > MAX_MANIFEST_INPUTS) {
+        errors.push(`inputs exceeds ${MAX_MANIFEST_INPUTS}`);
     } else if (isRecord(input.transport)) {
         const names = new Set<string>();
         let bodies = 0;
@@ -532,6 +571,8 @@ export function validateManifest(input: unknown): ManifestValidation {
             }
             if (typeof entry.name !== 'string' || !NAME_PATTERN.test(entry.name)) {
                 errors.push('input name is invalid');
+            } else if (isReservedName(entry.name)) {
+                errors.push(`input name ${entry.name} is reserved`);
             } else if (names.has(entry.name)) {
                 errors.push(`duplicate input ${entry.name}`);
             } else {

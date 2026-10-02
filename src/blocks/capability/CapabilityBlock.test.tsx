@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { CapabilityBlockView } from './CapabilityBlock';
 import { compileOpenApi } from '@/core/capabilities/openapi';
 import {
+    approveCapability,
     clearCapabilities,
     installProposal
 } from '@/core/capabilities/registry';
@@ -106,6 +107,47 @@ describe('CapabilityBlockView', () => {
         render(<CapabilityBlockView instanceId={instanceId} />);
         const button = screen.getByRole('button', { name: 'Needs approval' }) as HTMLButtonElement;
         expect(button.disabled).toBe(true);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('shows the method, resolved URL and arguments of an approved write and sends it only after Send', async () => {
+        const compiled = compileOpenApi(SPEC);
+        const create = compiled.manifests.find(manifest => manifest.source.operationId === 'createPost')!;
+        installProposal(create);
+        approveCapability(create.id);
+        const fetchMock = vi.fn(async () => new Response(null, { status: 201 }));
+        vi.stubGlobal('fetch', fetchMock);
+        const instanceId = useBlockStore.getState().addBlock(blockRegistry.get(create.id)!, { x: 0, y: 0 });
+        useBlockStore.getState().setParams(instanceId, { body: { title: 'Draft from a persona' } });
+        render(<CapabilityBlockView instanceId={instanceId} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+        const dialog = screen.getByRole('group', { name: 'Confirm request' });
+        expect(within(dialog).getByTestId('confirm-method').textContent).toBe('POST');
+        expect(within(dialog).getByTestId('confirm-url').textContent).toBe('https://board.example.test/v1/posts');
+        expect(within(dialog).getByTestId('confirm-arguments').textContent).toContain('Draft from a persona');
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+        expect((fetchMock.mock.calls[0] as unknown[])[0]).toBe('https://board.example.test/v1/posts');
+    });
+
+    it('cancelling the confirmation sends nothing', () => {
+        const compiled = compileOpenApi(SPEC);
+        const create = compiled.manifests.find(manifest => manifest.source.operationId === 'createPost')!;
+        installProposal(create);
+        approveCapability(create.id);
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const instanceId = useBlockStore.getState().addBlock(blockRegistry.get(create.id)!, { x: 0, y: 0 });
+        useBlockStore.getState().setParams(instanceId, { body: { title: 'Never sent' } });
+        render(<CapabilityBlockView instanceId={instanceId} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByRole('group', { name: 'Confirm request' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Run' })).toBeTruthy();
         expect(fetchMock).not.toHaveBeenCalled();
     });
 });

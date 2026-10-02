@@ -7,7 +7,8 @@ import {
     ensureSpeechCapabilities,
     installProposal
 } from './registry';
-import { executeCapability } from './execute';
+// Write runs need a confirmed preview; these tests exercise the engine after one.
+import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
 import { latestExecutionRecord } from './executionLedger';
 import { capabilitySecrets } from './secrets';
 import { openSpeechSession, runSpeechHandler, setSpeechEngine } from './speech';

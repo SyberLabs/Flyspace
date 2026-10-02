@@ -15,7 +15,9 @@ import {
     runInstalledCapability,
     uninstallCapability
 } from './registry';
-import { bindMcpTransport, executeCapability, unbindMcpTransport } from './execute';
+import { bindMcpTransport, unbindMcpTransport } from './execute';
+// Write runs need a confirmed preview; these tests exercise the engine after one.
+import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
 import { capabilitySecrets } from './secrets';
 import { blockRegistry } from '../registry/BlockRegistry';
 import { useBlockStore } from '../stores/blockStore';

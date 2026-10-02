@@ -6,27 +6,76 @@
 
 import { assessEgress } from '@/core/capabilities/egress';
 import { canonicalize, sha256 } from '@/core/capabilities/hash';
+import { resolveHttpPath } from '@/core/capabilities/httpTarget';
+import { redact } from '@/core/capabilities/redact';
 import { validateManifest, type CapabilityManifest } from '@/core/capabilities/manifest';
+import { isBlockedDestination } from './egressBlockList';
 import type { PinnedRequest, PinnedResponse } from './pinnedFetch';
 import type { ServerExecution, ServerLedger } from './capability.ledger';
 
 const MAX_BODY = 1_000_000;
+/** Total budget for one broker request, from route entry to the last upstream byte. */
+export const BROKER_DEADLINE_MS = 15_000;
 const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 30;
+const MAX_PER_CALLER = 30;
+const MAX_GLOBAL = 120;
 
-const hits = new Map<string, number[]>();
+export interface BrokerRateLimiter {
+    allow(caller: string, now: number): boolean;
+}
+
+/**
+ * A sliding one-minute window per caller, under one global window for the
+ * process. Entries outside the window are pruned on every call, so the map
+ * holds at most the callers admitted in the last minute (no more than the
+ * global cap). Per process: a multi-instance deployment needs a shared store.
+ */
+export function createBrokerRateLimiter(perCaller = MAX_PER_CALLER, global = MAX_GLOBAL): BrokerRateLimiter {
+    const hits = new Map<string, number[]>();
+    let all: number[] = [];
+    return {
+        allow(caller, now) {
+            const live = (at: number) => now - at < WINDOW_MS;
+            all = all.filter(live);
+            for (const [key, times] of hits) {
+                const kept = times.filter(live);
+                if (kept.length === 0) hits.delete(key);
+                else hits.set(key, kept);
+            }
+            const recent = hits.get(caller) ?? [];
+            if (all.length >= global || recent.length >= perCaller) return false;
+            recent.push(now);
+            hits.set(caller, recent);
+            all.push(now);
+            return true;
+        }
+    };
+}
+
+const processLimiter = createBrokerRateLimiter();
 
 export interface BrokerDeps {
     ledger: ServerLedger;
     resolve: (hostname: string) => Promise<string[]>;
     fetch: (request: PinnedRequest) => Promise<PinnedResponse>;
     now?: () => number;
+    /** Aborts on client disconnect or the total deadline. Defaults to the deadline alone. */
+    signal?: AbortSignal;
+    /** Who is asking. The client address until the broker authenticates callers. */
+    caller?: string;
+    limiter?: BrokerRateLimiter;
 }
 
 export async function handleCapabilityBroker(
     body: unknown,
     deps: BrokerDeps
 ): Promise<{ status: number; body: unknown }> {
+    const signal = deps.signal ?? AbortSignal.timeout(BROKER_DEADLINE_MS);
+    // Counted before parsing: the budget belongs to the caller, not to a
+    // manifest the caller chose.
+    if (!(deps.limiter ?? processLimiter).allow(deps.caller ?? 'local', deps.now?.() ?? Date.now())) {
+        return json(429, 'broker rate limit exceeded');
+    }
     const parsed = parseBody(body);
     if ('error' in parsed) return json(400, parsed.error);
     const { manifest, input, idempotencyKey, secret } = parsed;
@@ -39,9 +88,6 @@ export async function handleCapabilityBroker(
     }
     if (manifest.approval !== 'auto') {
         return json(403, 'broker capability is not approved to run');
-    }
-    if (!allow(manifest.id, deps.now?.() ?? Date.now())) {
-        return json(429, 'broker rate limit exceeded');
     }
 
     let url: URL;
@@ -56,9 +102,11 @@ export async function handleCapabilityBroker(
     }
 
     const host = url.hostname.replace(/^\[|\]$/g, '');
-    const addresses = isIp(host) ? [host] : await deps.resolve(host).catch(() => []);
+    const addresses = isIp(host) ? [host] : await untilAborted(() => deps.resolve(host), signal).catch(() => [] as string[]);
+    if (signal.aborted) return json(504, { error: { code: 'DEADLINE', message: DEADLINE_PASSED } });
     const egress = assessEgress(url, addresses.map(address => ({ address })));
     if (!egress.ok) return json(403, egress.reason);
+    if (addresses.some(isBlockedDestination)) return json(403, 'broker host is not a public address');
 
     const inputDigest = sha256(canonicalize(input));
     const runId = `run_${sha256(`${manifest.digest}|${idempotencyKey}`).slice(0, 16)}`;
@@ -80,38 +128,90 @@ export async function handleCapabilityBroker(
             error: admission.kind === 'conflict'
                 ? { code: 'IDEMPOTENCY_CONFLICT', message: 'Idempotency key was already used for a different input' }
                 : admission.row.error
-                    ? { code: admission.row.status === 'uncertain' ? 'EFFECT_UNCERTAIN' : 'UPSTREAM_ERROR', message: admission.row.error }
+                    ? {
+                        code: admission.row.status === 'uncertain' ? 'EFFECT_UNCERTAIN' : storedCode(admission.row.error),
+                        message: 'The previous run failed'
+                    }
                     : undefined
         });
     }
 
+    // The caller may have gone, or the deadline passed, while the ledger was
+    // busy. Nothing has been sent yet, so the run is canceled, not failed.
+    if (signal.aborted) {
+        await deps.ledger.finish(admission.row.runId, 'canceled');
+        return json(504, { runId: admission.row.runId, executionStatus: 'canceled', error: { code: 'DEADLINE', message: DEADLINE_PASSED } });
+    }
     await deps.ledger.markDispatched(admission.row.runId);
     const headers = applyAuth(manifest, secret);
+    const method = manifest.transport.method;
     try {
-        const response = await deps.fetch({
+        const response = await untilAborted(() => deps.fetch({
             url,
             address: addresses[0],
-            method: manifest.transport.method,
+            method,
             headers,
-            signal: undefined,
+            signal,
             maxBytes: MAX_BODY
-        });
+        }), signal);
         if (response.status >= 300 && response.status < 400) {
-            await deps.ledger.finish(admission.row.runId, 'failed', 'Redirects are not followed');
-            return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'HTTP_REDIRECT_REFUSED', message: 'Redirects are not followed' } });
+            await deps.ledger.finish(admission.row.runId, 'failed', 'HTTP_REDIRECT_REFUSED');
+            return failed(502, admission.row.runId, 'HTTP_REDIRECT_REFUSED', 'Redirects are not followed', secret);
         }
         if (response.status < 200 || response.status >= 300) {
-            await deps.ledger.finish(admission.row.runId, 'failed', `HTTP ${response.status}`);
-            return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'HTTP_ERROR', message: `HTTP ${response.status}` } });
+            await deps.ledger.finish(admission.row.runId, 'failed', 'HTTP_ERROR');
+            return failed(502, admission.row.runId, 'HTTP_ERROR', `HTTP ${response.status}`, secret);
         }
         const value = response.text.trim() === '' ? null : JSON.parse(response.text) as unknown;
         await deps.ledger.finish(admission.row.runId, 'succeeded');
         return json(200, { runId: admission.row.runId, executionStatus: 'succeeded', value });
-    } catch (error) {
-        const message = scrub(error instanceof Error ? error.message : 'Broker request failed', secret);
-        await deps.ledger.finish(admission.row.runId, 'failed', message);
-        return json(502, { runId: admission.row.runId, executionStatus: 'failed', error: { code: 'UPSTREAM_ERROR', message } });
+    } catch {
+        if (signal.aborted) {
+            await deps.ledger.finish(admission.row.runId, 'failed', 'DEADLINE');
+            return failed(504, admission.row.runId, 'DEADLINE', DEADLINE_PASSED, secret);
+        }
+        // The transport's own error text describes the destination's network
+        // (refused, reset, certificate). None of it goes back to the caller.
+        await deps.ledger.finish(admission.row.runId, 'failed', 'UPSTREAM_ERROR');
+        return failed(502, admission.row.runId, 'UPSTREAM_ERROR', UPSTREAM_FAILED, secret);
     }
+}
+
+const UPSTREAM_FAILED = 'The upstream request failed';
+
+/**
+ * The ledger's error column holds a code, never upstream text. Rows written
+ * before that rule may hold text; it is not echoed back.
+ */
+function storedCode(error: string): string {
+    return /^[A-Z_]{1,40}$/.test(error) ? error : 'UPSTREAM_ERROR';
+}
+
+function failed(status: number, runId: string, code: string, message: string, secret: string | undefined) {
+    return json(status, { runId, executionStatus: 'failed', error: { code, message: redact(message, secret) } });
+}
+const DEADLINE_PASSED = 'The broker request did not finish within its deadline';
+
+/**
+ * Start the work only if the signal has not aborted, then settle with it or
+ * reject when the signal aborts, whichever comes first. Work is never started
+ * after an abort, and once started, Promise.race observes its outcome, so a
+ * late rejection is never left unhandled.
+ */
+function untilAborted<T>(start: () => Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) return Promise.reject(signal.reason);
+    let work: Promise<T>;
+    try {
+        work = start();
+    } catch (error) {
+        return Promise.reject(error);
+    }
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        signal.addEventListener('abort', onAbort, { once: true });
+    });
+    return Promise.race([work, aborted]).finally(() => signal.removeEventListener('abort', onAbort));
 }
 
 function parseBody(body: unknown): {
@@ -141,14 +241,11 @@ function parseBody(body: unknown): {
 
 function buildUrl(manifest: CapabilityManifest, input: Record<string, unknown>): URL {
     if (manifest.transport.kind !== 'http') throw new Error('not http');
-    const path = manifest.transport.path.replace(/\{([^}]+)\}/g, (_match, name: string) => {
-        const value = input[name];
-        return encodeURIComponent(value === undefined ? '' : String(value));
-    });
-    const base = manifest.transport.baseUrl.endsWith('/') ? manifest.transport.baseUrl : `${manifest.transport.baseUrl}/`;
-    const url = new URL(path.startsWith('/') ? path.slice(1) : path, base);
+    const target = resolveHttpPath(manifest.transport.baseUrl, manifest.transport.path, input);
+    if ('error' in target) throw new Error(target.error);
+    const url = target.url;
     for (const entry of manifest.inputs) {
-        if (input[entry.name] === undefined || entry.in !== 'query') continue;
+        if (!Object.hasOwn(input, entry.name) || input[entry.name] === undefined || entry.in !== 'query') continue;
         const value = input[entry.name];
         url.searchParams.set(entry.name, typeof value === 'string' ? value : JSON.stringify(value));
     }
@@ -164,22 +261,6 @@ function applyAuth(manifest: CapabilityManifest, secret: string | undefined): Re
         headers[manifest.auth.name] = `${manifest.auth.prefix ?? ''}${secret}`;
     }
     return headers;
-}
-
-function allow(capabilityId: string, now: number): boolean {
-    const recent = (hits.get(capabilityId) ?? []).filter(at => now - at < WINDOW_MS);
-    if (recent.length >= MAX_PER_WINDOW) {
-        hits.set(capabilityId, recent);
-        return false;
-    }
-    recent.push(now);
-    hits.set(capabilityId, recent);
-    return true;
-}
-
-function scrub(message: string, secret: string | undefined): string {
-    if (!secret || secret.length < 8) return message;
-    return message.split(secret).join('[redacted]');
 }
 
 function isIp(host: string): boolean {
