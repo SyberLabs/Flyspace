@@ -167,8 +167,14 @@ function prepareRun(manifest: CapabilityManifest, args: Readonly<Record<string, 
         if ('error' in target) return { error: target.error };
         const headers = Object.create(null) as Record<string, string>;
         let body: string | undefined;
+        const credentialHeader = credentialHeaderName(manifest);
         for (const entry of manifest.inputs) {
             if (!Object.hasOwn(args, entry.name)) continue;
+            // Header names are case-insensitive: an input in the credential's
+            // header would replace or join it.
+            if (entry.in === 'header' && entry.name.toLowerCase() === credentialHeader) {
+                return { error: `${entry.name} carries the credential and cannot be supplied as an input` };
+            }
             const value = args[entry.name];
             if (entry.in === 'query') target.url.searchParams.set(entry.name, stringifyParam(value));
             else if (entry.in === 'header') headers[entry.name] = stringifyParam(value);
@@ -213,6 +219,14 @@ function prepareRun(manifest: CapabilityManifest, args: Readonly<Record<string, 
             }
         }
     };
+}
+
+/** The header the credential travels in, lower-cased, or undefined. */
+function credentialHeaderName(manifest: CapabilityManifest): string | undefined {
+    const auth = manifest.auth;
+    if (auth.kind === 'none') return undefined;
+    if (auth.kind === 'apiKey') return auth.in === 'query' ? undefined : auth.name?.toLowerCase();
+    return 'authorization';
 }
 
 function credentialPlacement(manifest: CapabilityManifest): string | undefined {
