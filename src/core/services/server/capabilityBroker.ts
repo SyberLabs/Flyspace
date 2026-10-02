@@ -102,7 +102,7 @@ export async function handleCapabilityBroker(
     }
 
     const host = url.hostname.replace(/^\[|\]$/g, '');
-    const addresses = isIp(host) ? [host] : await untilAborted(deps.resolve(host), signal).catch(() => [] as string[]);
+    const addresses = isIp(host) ? [host] : await untilAborted(() => deps.resolve(host), signal).catch(() => [] as string[]);
     if (signal.aborted) return json(504, { error: { code: 'DEADLINE', message: DEADLINE_PASSED } });
     const egress = assessEgress(url, addresses.map(address => ({ address })));
     if (!egress.ok) return json(403, egress.reason);
@@ -136,13 +136,20 @@ export async function handleCapabilityBroker(
         });
     }
 
+    // The caller may have gone, or the deadline passed, while the ledger was
+    // busy. Nothing has been sent yet, so the run is canceled, not failed.
+    if (signal.aborted) {
+        await deps.ledger.finish(admission.row.runId, 'canceled');
+        return json(504, { runId: admission.row.runId, executionStatus: 'canceled', error: { code: 'DEADLINE', message: DEADLINE_PASSED } });
+    }
     await deps.ledger.markDispatched(admission.row.runId);
     const headers = applyAuth(manifest, secret);
+    const method = manifest.transport.method;
     try {
-        const response = await untilAborted(deps.fetch({
+        const response = await untilAborted(() => deps.fetch({
             url,
             address: addresses[0],
-            method: manifest.transport.method,
+            method,
             headers,
             signal,
             maxBytes: MAX_BODY
@@ -185,9 +192,20 @@ function failed(status: number, runId: string, code: string, message: string, se
 }
 const DEADLINE_PASSED = 'The broker request did not finish within its deadline';
 
-/** Settle with the work, or reject when the signal aborts, whichever comes first. */
-function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+/**
+ * Start the work only if the signal has not aborted, then settle with it or
+ * reject when the signal aborts, whichever comes first. Work is never started
+ * after an abort, and once started, Promise.race observes its outcome, so a
+ * late rejection is never left unhandled.
+ */
+function untilAborted<T>(start: () => Promise<T>, signal: AbortSignal): Promise<T> {
     if (signal.aborted) return Promise.reject(signal.reason);
+    let work: Promise<T>;
+    try {
+        work = start();
+    } catch (error) {
+        return Promise.reject(error);
+    }
     let onAbort!: () => void;
     const aborted = new Promise<never>((_, reject) => {
         onAbort = () => reject(signal.reason);
