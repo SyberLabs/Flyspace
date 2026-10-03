@@ -6,6 +6,9 @@
     "nodejs_compat"
   ],
   "main": "vinext/server/fetch-handler",
+  "routes": [
+    { "pattern": "omni.syberlabs.io", "custom_domain": true }
+  ],
   "vars": {
     "OMNI_PUBLIC_DEMO": "1",
     "NEXT_PUBLIC_OMNI_PUBLIC_DEMO": "1"

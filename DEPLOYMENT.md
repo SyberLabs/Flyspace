@@ -1,6 +1,7 @@
 # Deployment
 
-**Status: CI exists. CD and a public deployment are not built yet.**
+**Status: CI exists. CD is not built. The limited public preview has a manual
+deploy path to Cloudflare Workers (below). The full app has no public deployment.**
 
 This records the decision so it does not get re-argued from scratch, and lists
 what has to be true before OmniOS is reachable from anywhere but your own
@@ -44,8 +45,11 @@ question or send the canvas to the configured Kev endpoint.
 Deploy the preview only after all of these are true:
 
 - Set `OMNI_PUBLIC_DEMO=1` and `NEXT_PUBLIC_OMNI_PUBLIC_DEMO=1`. Verify
-  `/api/llm` returns 503, and both inference ledger routes
-  report `configured:false` on the deployed host. Do not set `DATABASE_URL`,
+  `/api/llm`, `/api/jev-persona` and `/api/capability-broker` return 503 on
+  the deployed host. Both inference ledger routes must return no runs: on the
+  Worker, production mode with no OIDC issuer answers 503 "Hosted
+  authentication is not configured" before the preview check, and without
+  hosted auth they answer `configured:false`. Either is acceptable. Do not set `DATABASE_URL`,
   or Anthropic/Google keys on the public Worker.
 - If enabling Kev persona suggestions, keep `DECISION_PROVIDER=kev` and
   `NEXT_PUBLIC_DECISION_PROVIDER=kev`. After authorizing question transmission
@@ -64,6 +68,22 @@ Deploy the preview only after all of these are true:
 - Validate the Next-to-Cloudflare runtime build and smoke-test the deployed
   routes before attaching `omni.syberlabs.io`. The existing local Next server
   is not a Cloudflare deployment.
+
+### Deploying the preview
+
+`wrangler.jsonc` sets the preview flags and attaches `omni.syberlabs.io` as a
+Workers custom domain. The `syberlabs.io` zone must be in the same Cloudflare
+account. Deploy from a clean checkout of `main`:
+
+```bash
+npm ci
+npm run build:vinext
+npx wrangler login          # once per machine, or set CLOUDFLARE_API_TOKEN
+npm run start:vinext        # optional: smoke-test the Worker on localhost
+npm run deploy:vinext
+```
+
+Then run the route checks above against `https://omni.syberlabs.io`.
 
 This preview does not satisfy the controls for the full app. Keep the private
 deployment requirements below for any deployment that enables paid LLMs

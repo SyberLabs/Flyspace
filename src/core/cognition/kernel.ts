@@ -53,6 +53,10 @@ export interface TurnResult {
 
 /** The one actionable "no LLM" message, everywhere. */
 export function unavailableMessage(config: LLMConfig): string {
+    // A preview visitor cannot start Ollama or set a key on our server.
+    if (process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1') {
+        return 'AI answers are off in the public preview. Live data and wires still work.';
+    }
     return config.provider === 'local'
         ? 'No LLM available — make sure Ollama is running (localhost:11434).'
         : `No LLM available — set the ${config.provider} API key in .env.`;
