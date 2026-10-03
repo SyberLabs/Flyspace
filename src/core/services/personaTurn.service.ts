@@ -188,6 +188,8 @@ export async function runPersonaTurn(
         }
 
         if (!final.success) {
+            // No answer was produced, so no source informed one (FINDINGS.md).
+            turnSources = [];
             commit(`⚠️ ${final.error}`, false);
             return { ran: true, success: false, error: final.error };
         }

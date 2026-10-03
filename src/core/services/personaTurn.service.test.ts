@@ -127,6 +127,19 @@ describe('runPersonaTurn — fail-closed conversation', () => {
         expect(personaData().isThinking).toBe(false);
     });
 
+    it('cites no source on a failed turn, even when wires carried data', async () => {
+        mockStream({
+            sources: [{ id: 'fred', kind: 'wire', label: 'FRED Series' }],
+            chunks: [],
+            result: { success: false, error: 'No LLM available' }
+        });
+
+        await runPersonaTurn(PERSONA);
+
+        expect(lastAssistant()?.sources).toEqual([]);
+        expect(lastAssistant()?.sourcedFrom).toEqual([]);
+    });
+
     it('clears isThinking when the stream throws', async () => {
         mockStream({
             sources: [],

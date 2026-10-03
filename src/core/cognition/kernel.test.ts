@@ -79,6 +79,19 @@ describe('runTurn — the one turn lifecycle (apex A4)', () => {
         expect(mockService.complete).not.toHaveBeenCalled();
     });
 
+    it('tells a public preview visitor that AI is off, not how to start Ollama', async () => {
+        vi.stubEnv('NEXT_PUBLIC_OMNI_PUBLIC_DEMO', '1');
+        try {
+            setConfig({ provider: 'local', model: 'tinyllama' });
+            mockService.isAvailable.mockResolvedValue(false);
+            const result = await runTurn([{ role: 'user', content: 'q' }]);
+            expect(result.error).toMatch(/public preview/);
+            expect(result.error).not.toMatch(/Ollama|localhost/);
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+
     it('never throws — provider errors land in the result', async () => {
         setConfig({});
         mockService.isAvailable.mockResolvedValue(true);
