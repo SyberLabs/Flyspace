@@ -37,6 +37,7 @@ import {
 } from './project';
 import type { CapabilityExecutionProfile, CapabilityManifest } from './manifest';
 import { isRecord, validateValue } from './valueType';
+import { toJsonValue } from './jsonValue';
 
 const MAX_BODY_CHARS = 1_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -127,9 +128,9 @@ export function previewCapabilityRun(
     if (manifest.approval === 'denied' || manifest.approval === 'pending') {
         return { ok: false, result: failure(capabilityId, 'EFFECT_NOT_APPROVED', `${manifest.effect} capability is ${manifest.approval}; execution is refused`, false) };
     }
-    const inputErrors = validateInput(manifest, input);
-    if (inputErrors.length > 0) return { ok: false, result: failure(capabilityId, 'INPUT_INVALID', inputErrors.join('; '), false) };
-    const prepared = prepareRun(manifest, input);
+    const checked = checkInput(manifest, input);
+    if ('errors' in checked) return { ok: false, result: failure(capabilityId, 'INPUT_INVALID', checked.errors.join('; '), false) };
+    const prepared = prepareRun(manifest, checked.args);
     if ('error' in prepared) return { ok: false, result: failure(capabilityId, 'INPUT_INVALID', prepared.error, false) };
     return { ok: true, preview: prepared.run.preview };
 }
@@ -150,13 +151,13 @@ interface HttpPlan {
  * what leaves the process cannot differ.
  */
 interface PreparedRun {
-    args: Record<string, unknown>;
+    /** Frozen, JSON-only, and the exact object each transport receives. */
+    args: Readonly<Record<string, unknown>>;
     http?: HttpPlan;
     preview: RunPreview;
 }
 
-function prepareRun(manifest: CapabilityManifest, input: Record<string, unknown>): { run: PreparedRun } | { error: string } {
-    const args = argumentsFor(manifest, input);
+function prepareRun(manifest: CapabilityManifest, args: Readonly<Record<string, unknown>>): { run: PreparedRun } | { error: string } {
     const transport = manifest.transport;
     let method: string;
     let url: string;
@@ -166,8 +167,14 @@ function prepareRun(manifest: CapabilityManifest, input: Record<string, unknown>
         if ('error' in target) return { error: target.error };
         const headers = Object.create(null) as Record<string, string>;
         let body: string | undefined;
+        const credentialHeader = credentialHeaderName(manifest);
         for (const entry of manifest.inputs) {
             if (!Object.hasOwn(args, entry.name)) continue;
+            // Header names are case-insensitive: an input in the credential's
+            // header would replace or join it.
+            if (entry.in === 'header' && entry.name.toLowerCase() === credentialHeader) {
+                return { error: `${entry.name} carries the credential and cannot be supplied as an input` };
+            }
             const value = args[entry.name];
             if (entry.in === 'query') target.url.searchParams.set(entry.name, stringifyParam(value));
             else if (entry.in === 'header') headers[entry.name] = stringifyParam(value);
@@ -187,12 +194,14 @@ function prepareRun(manifest: CapabilityManifest, input: Record<string, unknown>
         url = `local:${transport.handler}`;
     }
     const credential = credentialPlacement(manifest);
+    // The arguments are hashed as the exact text a JSON encoder writes for
+    // this frozen object, and this object is what the transport receives.
     const digest = sha256(canonicalize({
         capabilityId: manifest.id,
         manifestDigest: manifest.digest,
         method,
         url,
-        arguments: args,
+        argumentsJson: JSON.stringify(args),
         ...(http ? { headers: http.headers, body: http.body } : {})
     }));
     return {
@@ -212,6 +221,14 @@ function prepareRun(manifest: CapabilityManifest, input: Record<string, unknown>
     };
 }
 
+/** The header the credential travels in, lower-cased, or undefined. */
+function credentialHeaderName(manifest: CapabilityManifest): string | undefined {
+    const auth = manifest.auth;
+    if (auth.kind === 'none') return undefined;
+    if (auth.kind === 'apiKey') return auth.in === 'query' ? undefined : auth.name?.toLowerCase();
+    return 'authorization';
+}
+
 function credentialPlacement(manifest: CapabilityManifest): string | undefined {
     const auth = manifest.auth;
     if (auth.kind === 'none') return undefined;
@@ -229,7 +246,7 @@ const activeAsyncRuns = new Set<string>();
 async function executeAsync(
     manifest: CapabilityManifest,
     profile: AsyncProfile,
-    input: Record<string, unknown>,
+    args: Readonly<Record<string, unknown>>,
     headers: Record<string, string>,
     record: ExecutionRecord,
     idempotencyKey: string,
@@ -256,7 +273,7 @@ async function executeAsync(
         markExecutionDispatched(runId, clock.now());
         let externalRunId: unknown;
         try {
-            const started = await runtime.start(operation, argumentsFor(manifest, input), {
+            const started = await runtime.start(operation, args, {
                 headers: { ...headers },
                 signal: bounded(signal),
                 idempotencyKey
@@ -471,19 +488,6 @@ function bounded(signal: AbortSignal | undefined): AbortSignal {
     return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-/**
- * Every declared input the caller supplied as an own property, in an object
- * with no prototype, so no input name can be swallowed by an accessor or
- * read through inheritance.
- */
-function argumentsFor(manifest: CapabilityManifest, input: Record<string, unknown>): Record<string, unknown> {
-    const args = Object.create(null) as Record<string, unknown>;
-    for (const entry of manifest.inputs) {
-        if (Object.hasOwn(input, entry.name) && input[entry.name] !== undefined) args[entry.name] = input[entry.name];
-    }
-    return args;
-}
-
 export async function executeCapability(
     capabilityId: string,
     input: Record<string, unknown> = {},
@@ -501,12 +505,12 @@ export async function executeCapability(
         ));
     }
 
-    const inputErrors = validateInput(manifest, input);
-    if (inputErrors.length > 0) {
-        return finish(failure(capabilityId, 'INPUT_INVALID', inputErrors.join('; '), false));
+    const checked = checkInput(manifest, input);
+    if ('errors' in checked) {
+        return finish(failure(capabilityId, 'INPUT_INVALID', checked.errors.join('; '), false));
     }
 
-    const prepared = prepareRun(manifest, input);
+    const prepared = prepareRun(manifest, checked.args);
     if ('error' in prepared) {
         return finish(failure(capabilityId, 'INPUT_INVALID', prepared.error, false));
     }
@@ -535,7 +539,10 @@ export async function executeCapability(
         capabilityId,
         manifestDigest: manifest.digest,
         effect: manifest.effect,
-        input,
+        // The digest of the exact request that will be sent (never the
+        // credential), so any different request under the same key conflicts
+        // instead of replaying.
+        input: run.preview.digest,
         idempotencyKey,
         // An async job's budget is its profile, not the per-request timeout.
         deadlineMs: profile ? profile.maxDurationMs + REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS + 5_000,
@@ -614,26 +621,43 @@ export async function executeCapability(
     }
 }
 
-function validateInput(manifest: CapabilityManifest, input: Record<string, unknown>): string[] {
-    if (!isRecord(input)) return ['input must be an object'];
+/**
+ * Read each declared input the caller supplied, once, as an own property, and
+ * copy it into the JSON domain. That copy is validated, prepared, hashed and
+ * dispatched; the caller's objects are not read again. An input left
+ * undefined at the top level is not supplied. Inside a value, undefined and
+ * every other value JSON cannot carry exactly is refused.
+ */
+function checkInput(
+    manifest: CapabilityManifest,
+    input: Record<string, unknown>
+): { args: Readonly<Record<string, unknown>> } | { errors: string[] } {
+    if (!isRecord(input)) return { errors: ['input must be an object'] };
     const errors: string[] = [];
     const known = new Set(manifest.inputs.map(entry => entry.name));
     for (const key of Object.keys(input)) {
         if (!known.has(key)) errors.push(`unexpected input ${key}`);
     }
+    const args = Object.create(null) as Record<string, unknown>;
     for (const entry of manifest.inputs) {
-        const present = Object.hasOwn(input, entry.name) && input[entry.name] !== undefined;
-        if (!present) {
+        const supplied = Object.hasOwn(input, entry.name) ? input[entry.name] : undefined;
+        if (supplied === undefined) {
             if (entry.required) errors.push(`${entry.name} is required`);
             continue;
         }
-        errors.push(...validateValue(entry.schema, input[entry.name], entry.name));
+        const copied = toJsonValue(supplied, entry.name);
+        if ('error' in copied) {
+            errors.push(copied.error);
+            continue;
+        }
+        errors.push(...validateValue(entry.schema, copied.value, entry.name));
+        args[entry.name] = copied.value;
     }
     if (errors.length === 0 && manifest.transport.kind === 'http') {
-        const target = resolveHttpPath(manifest.transport.baseUrl, manifest.transport.path, input);
+        const target = resolveHttpPath(manifest.transport.baseUrl, manifest.transport.path, args);
         if ('error' in target) errors.push(target.error);
     }
-    return errors;
+    return errors.length > 0 ? { errors } : { args: Object.freeze(args) };
 }
 
 function applyAuth(manifest: CapabilityManifest): { headers: Record<string, string>; query: Record<string, string>; secret?: string } | { error: CapabilityResult } {
@@ -785,7 +809,7 @@ async function readBounded(response: Response, capabilityId: string): Promise<{ 
     return { type: 'text', text };
 }
 
-async function executeLocal(manifest: CapabilityManifest, input: Record<string, unknown>, signal?: AbortSignal): Promise<Step> {
+async function executeLocal(manifest: CapabilityManifest, args: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<Step> {
     if (manifest.transport.kind !== 'local') {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not a local capability', false));
     }
@@ -793,12 +817,12 @@ async function executeLocal(manifest: CapabilityManifest, input: Record<string, 
     if (!handler) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No local handler bound for ${manifest.transport.handler}`, false));
     }
-    return { type: 'value', value: await handler(argumentsFor(manifest, input), { signal }) };
+    return { type: 'value', value: await handler(args, { signal }) };
 }
 
 async function executeBroker(
     manifest: CapabilityManifest,
-    input: Record<string, unknown>,
+    input: Readonly<Record<string, unknown>>,
     idempotencyKey: string,
     secret: string | undefined,
     fetchImpl: typeof fetch,
@@ -834,7 +858,7 @@ async function executeBroker(
 
 async function executeMcp(
     manifest: CapabilityManifest,
-    input: Record<string, unknown>,
+    args: Readonly<Record<string, unknown>>,
     authHeaders: Record<string, string>,
     signal?: AbortSignal
 ): Promise<Step> {
@@ -845,7 +869,6 @@ async function executeMcp(
     if (!transport) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No MCP transport bound for ${manifest.transport.serverId}`, false));
     }
-    const args = argumentsFor(manifest, input);
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     return {

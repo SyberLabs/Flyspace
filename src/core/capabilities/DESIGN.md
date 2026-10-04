@@ -73,11 +73,11 @@ store, and it is revalidated first.
 
 A manifest describes a capability. It does not grant itself authority.
 
-- Credential slots are `origin + scheme + placement`. Two APIs that both name a scheme `ApiKey` do not share a secret, and a proposal cannot point its `secretRef` at another origin's slot.
+- Credential slots are `origin + scheme + placement`. Two APIs that both name a scheme `ApiKey` do not share a secret, and a proposal cannot point its `secretRef` at another origin's slot. A run cannot supply a header input in the header the credential travels in (`Authorization`, or the apiKey header name, in any case); that is `INPUT_INVALID`.
 - HTTP method is an effect floor. `x-omni-effect` and MCP annotations may raise that floor. They cannot turn POST into auto-running compute. Untrusted MCP `readOnlyHint` is not approval.
 - Capability ids are a hash of canonical origin and operation. Speech handlers keep pinned ids. A different origin cannot reuse an existing id.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
-- Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and input replays. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
+- Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and the same request replays; a different request under that key conflicts. The request is compared by its digest (the one a write confirms), and the broker's server ledger compares the method and URL it sends, taken before the credential is added. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
 - Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
 - HTTP capabilities are `browser_direct` or `server_broker`. A provider cannot choose: admission sets `browser_direct` unless the host's `AdmissionPolicy.brokerOrigins` names the origin, and then only for read and compute. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects.
 - A base URL is https, carries no query or fragment, and an IP literal in it must be public. Loopback (http or https) is allowed only when the host itself built the manifest (`validateManifest(..., { hostCreated: true })`). Unsupported OpenAPI constructs fail compilation instead of becoming `any`.
@@ -103,7 +103,15 @@ after the preview, are refused as `CONFIRMATION_REQUIRED`. A run is prepared
 once: its arguments (every declared input supplied, in an object with no
 prototype) and, for http, the exact URL, header values and body text. The
 digest is computed from that prepared run, and dispatch sends the same
-objects. An input or apiKey name may not be `__proto__`, `prototype`, or a
+objects. Each argument is copied once into the JSON domain and frozen:
+strings, finite numbers, booleans, null, dense arrays and plain objects, with
+-0 written as 0. Inside a value, `undefined`, `NaN`, `±Infinity`, a BigInt, a
+function, a symbol (as a value or a key), a non-plain object (a `Date`, `Map`,
+`Set`, class instance, or anything with `toJSON`), a sparse array, an accessor
+and a `__proto__` key are `INPUT_INVALID` before any preview exists. The
+digest hashes the exact JSON text of that copy, and the MCP tool, the async
+runtime and the local handler each receive that same object. An input
+left `undefined` at the top level is not supplied. An input or apiKey name may not be `__proto__`, `prototype`, or a
 name `Object.prototype` defines. A path argument
 fills one path segment: `.` and `..` are refused, and the resolved pathname
 must equal the expanded template.

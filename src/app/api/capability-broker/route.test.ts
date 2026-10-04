@@ -8,6 +8,17 @@ vi.mock('@/core/services/server/capabilityBroker', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@/core/services/server/capabilityBroker')>()),
     handleCapabilityBroker: handler
 }));
+const readBody = vi.hoisted(() => vi.fn());
+vi.mock('@/core/services/server/boundedJson', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/core/services/server/boundedJson')>();
+    return {
+        ...actual,
+        readBoundedJson: (...args: Parameters<typeof actual.readBoundedJson>) => {
+            readBody(...args);
+            return actual.readBoundedJson(...args);
+        }
+    };
+});
 vi.mock('@/core/capabilities/manifest', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@/core/capabilities/manifest')>();
     return {
@@ -34,6 +45,7 @@ beforeEach(() => {
     delete process.env.OMNI_PUBLIC_DEMO;
     handler.mockClear();
     validate.mockClear();
+    readBody.mockClear();
 });
 
 afterEach(() => {
@@ -87,5 +99,45 @@ describe('/api/capability-broker request admission', () => {
         await POST(brokerRequest('{}', { origin: SITE, 'content-type': 'application/json' }));
         expect((handler.mock.calls[0][1] as { caller?: string }).caller).toBe('198.51.100.9');
         expect((handler.mock.calls[1][1] as { caller?: string }).caller).toBe('local');
+    });
+
+    it('refuses an over-budget caller with 429 before reading or parsing the body', async () => {
+        const headers = { origin: SITE, 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.77' };
+        for (let i = 0; i < 30; i++) {
+            expect((await POST(brokerRequest('{}', headers))).status).toBe(200);
+        }
+        expect(handler).toHaveBeenCalledTimes(30);
+        // Each admitted request hands the broker its admission, so it is not counted twice.
+        expect(handler.mock.calls.every(call => (call[1] as { admission?: unknown }).admission !== undefined)).toBe(true);
+        readBody.mockClear();
+
+        // A body stream that records any read. highWaterMark 0: nothing is pulled until someone reads.
+        const pulled = vi.fn();
+        const stream = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                pulled();
+                controller.enqueue(new TextEncoder().encode('{"manifest":{}}'));
+                controller.close();
+            }
+        }, { highWaterMark: 0 });
+        const parse = vi.spyOn(JSON, 'parse');
+        try {
+            const request = new NextRequest(`${SITE}/api/capability-broker`, {
+                method: 'POST',
+                headers,
+                body: stream,
+                duplex: 'half'
+            } as ConstructorParameters<typeof NextRequest>[1]);
+            const response = await POST(request);
+            expect(response.status).toBe(429);
+            expect(readBody).not.toHaveBeenCalled();
+            expect(pulled).not.toHaveBeenCalled();
+            expect(parse).not.toHaveBeenCalled();
+            expect(handler).toHaveBeenCalledTimes(30);
+            // The stream was never locked or read, so the server can discard it.
+            expect(stream.locked).toBe(false);
+        } finally {
+            parse.mockRestore();
+        }
     });
 });

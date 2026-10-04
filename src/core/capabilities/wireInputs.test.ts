@@ -105,4 +105,15 @@ describe('resolveWiredInputs', () => {
         useWireStore.getState().addWire(note, listen);
         expect(resolveWiredInputs(listen)).toEqual({});
     });
+
+    it('matches typed fields by own property only, never through a prototype', () => {
+        const source = place('text_note');
+        const speak = place('cap_speech_speak');
+        useBlockStore.getState().updateData(source, {
+            typed: { value: Object.create({ text: 'inherited' }) as Record<string, unknown> },
+            content: 'from content'
+        });
+        useWireStore.getState().addWire(source, speak);
+        expect(resolveWiredInputs(speak)).toEqual({ text: 'from content' });
+    });
 });

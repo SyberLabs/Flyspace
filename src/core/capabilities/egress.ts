@@ -111,7 +111,7 @@ function classifyV4(address: string): EgressDecision {
     if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) {
         return { ok: false, reason: 'address is not a public IPv4 address' };
     }
-    const [a, b] = parts;
+    const [a, b, c] = parts;
     const blocked =
         a === 0
         || a === 10
@@ -119,11 +119,12 @@ function classifyV4(address: string): EgressDecision {
         || (a === 100 && b >= 64 && b <= 127)
         || (a === 169 && b === 254)
         || (a === 172 && b >= 16 && b <= 31)
-        || (a === 192 && b === 0)
+        // 192.0.0.0/24 (protocol assignments) and the three TEST-NET /24s.
+        || (a === 192 && b === 0 && (c === 0 || c === 2))
         || (a === 192 && b === 168)
         || (a === 198 && (b === 18 || b === 19))
-        || (a === 198 && b === 51)
-        || (a === 203 && b === 113)
+        || (a === 198 && b === 51 && c === 100)
+        || (a === 203 && b === 0 && c === 113)
         || a >= 224;
     return blocked
         ? { ok: false, reason: 'address is not a public IPv4 address' }

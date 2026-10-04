@@ -54,6 +54,35 @@ export function createBrokerRateLimiter(perCaller = MAX_PER_CALLER, global = MAX
 
 const processLimiter = createBrokerRateLimiter();
 
+/** Proof that one request was already counted against the broker budget. Spent once. */
+export interface BrokerAdmission {
+    readonly caller: string;
+}
+
+const issuedAdmissions = new WeakSet<BrokerAdmission>();
+
+/**
+ * Count one request against the caller's and the global budget, before any
+ * of its body is read. Null means refuse it with 429. The route calls this
+ * first and hands the result to `handleCapabilityBroker`, which then does
+ * not count the same request again.
+ */
+export function admitBrokerCaller(
+    caller: string,
+    options: { limiter?: BrokerRateLimiter; now?: () => number } = {}
+): BrokerAdmission | null {
+    if (!(options.limiter ?? processLimiter).allow(caller, options.now?.() ?? Date.now())) return null;
+    const admission = Object.freeze({ caller });
+    issuedAdmissions.add(admission);
+    return admission;
+}
+
+function spend(admission: BrokerAdmission | undefined, caller: string): boolean {
+    if (!admission || !issuedAdmissions.has(admission)) return false;
+    issuedAdmissions.delete(admission);
+    return admission.caller === caller;
+}
+
 export interface BrokerDeps {
     ledger: ServerLedger;
     resolve: (hostname: string) => Promise<string[]>;
@@ -64,6 +93,8 @@ export interface BrokerDeps {
     /** Who is asking. The client address until the broker authenticates callers. */
     caller?: string;
     limiter?: BrokerRateLimiter;
+    /** From `admitBrokerCaller`, when the request was counted before its body was read. */
+    admission?: BrokerAdmission;
 }
 
 export async function handleCapabilityBroker(
@@ -72,8 +103,10 @@ export async function handleCapabilityBroker(
 ): Promise<{ status: number; body: unknown }> {
     const signal = deps.signal ?? AbortSignal.timeout(BROKER_DEADLINE_MS);
     // Counted before parsing: the budget belongs to the caller, not to a
-    // manifest the caller chose.
-    if (!(deps.limiter ?? processLimiter).allow(deps.caller ?? 'local', deps.now?.() ?? Date.now())) {
+    // manifest the caller chose. A request the route already counted, before
+    // reading its body, is not counted twice.
+    const caller = deps.caller ?? 'local';
+    if (!spend(deps.admission, caller) && !admitBrokerCaller(caller, { limiter: deps.limiter, now: deps.now })) {
         return json(429, 'broker rate limit exceeded');
     }
     const parsed = parseBody(body);
@@ -96,6 +129,10 @@ export async function handleCapabilityBroker(
     } catch {
         return json(400, 'broker URL could not be built');
     }
+    // The URL is everything the caller's input changes in the request this
+    // broker sends, so the run is keyed on it, taken before the credential
+    // is added: the ledger holds nothing derived from the secret.
+    const inputDigest = sha256(canonicalize({ method: manifest.transport.method, url: url.toString() }));
 
     if (manifest.auth.kind === 'apiKey' && manifest.auth.in === 'query' && manifest.auth.name && secret) {
         url.searchParams.set(manifest.auth.name, `${manifest.auth.prefix ?? ''}${secret}`);
@@ -108,7 +145,6 @@ export async function handleCapabilityBroker(
     if (!egress.ok) return json(403, egress.reason);
     if (addresses.some(isBlockedDestination)) return json(403, 'broker host is not a public address');
 
-    const inputDigest = sha256(canonicalize(input));
     const runId = `run_${sha256(`${manifest.digest}|${idempotencyKey}`).slice(0, 16)}`;
     const row: ServerExecution = {
         runId,

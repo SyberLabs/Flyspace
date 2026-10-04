@@ -76,7 +76,7 @@ function matchValue(value: unknown, manifest: CapabilityManifest): Record<string
     if (isRecord(value)) {
         const picked: Record<string, unknown> = {};
         for (const input of manifest.inputs) {
-            if (!(input.name in value)) continue;
+            if (!Object.hasOwn(value, input.name)) continue;
             if (validateValue(input.schema, value[input.name]).length === 0) {
                 picked[input.name] = value[input.name];
             }

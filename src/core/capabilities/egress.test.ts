@@ -93,3 +93,21 @@ describe('egress policy', () => {
         expect(assessEgress(new URL('https://2130706433/'), []).ok).toBe(false);
     });
 });
+
+describe('IPv4 documentation ranges', () => {
+    // The three TEST-NET blocks are /24s (RFC 5737). The rest of their /16s
+    // is ordinary public space.
+    it.each(['192.0.2.1', '192.0.2.255', '198.51.100.0', '198.51.100.77', '203.0.113.0', '203.0.113.255', '192.0.0.8'])(
+        'refuses %s',
+        (address) => {
+            expect(classifyAddress(address).ok).toBe(false);
+        }
+    );
+
+    it.each(['192.0.1.1', '192.0.3.0', '198.51.0.1', '198.51.99.255', '198.51.101.0', '203.113.0.1', '203.0.112.255', '203.0.114.0'])(
+        'allows public %s',
+        (address) => {
+            expect(classifyAddress(address).ok).toBe(true);
+        }
+    );
+});

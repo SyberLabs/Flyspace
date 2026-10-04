@@ -42,6 +42,11 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** An own property of a schema map. A name Object.prototype defines is not one. */
+function own<T>(record: Record<string, T> | undefined, name: string): T | undefined {
+    return record !== undefined && Object.hasOwn(record, name) ? record[name] : undefined;
+}
+
 function isPrimitive(value: unknown): value is Primitive {
     return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
@@ -84,6 +89,9 @@ export function validateValueType(schema: unknown, path = 'schema', depth = 0): 
             errors.push(`${path}.enum must be a non-empty list of primitives`);
         } else if (schema.enum.some(entry => !isPrimitive(entry) || !kindMatchesEnum(kind as ValueKind, entry))) {
             errors.push(`${path}.enum values must match kind ${kind}`);
+        } else if (schema.enum.some(entry => typeof entry === 'number' && (!Number.isFinite(entry) || Object.is(entry, -0)))) {
+            // The digest writes these as null and 0, so they would hash as another enum.
+            errors.push(`${path}.enum numbers must be finite and not -0`);
         }
     }
 
@@ -114,7 +122,7 @@ export function validateValueType(schema: unknown, path = 'schema', depth = 0): 
                 errors.push(`${path}.required must be a list of names`);
             } else if (isRecord(schema.properties)) {
                 for (const name of schema.required) {
-                    if (!(name in schema.properties)) {
+                    if (!Object.hasOwn(schema.properties, name)) {
                         errors.push(`${path}.required names missing property ${name}`);
                     }
                 }
@@ -170,15 +178,16 @@ export function validateValue(schema: ValueType, value: unknown, path = 'value',
     if (schema.kind === 'object' && isRecord(value)) {
         const properties = schema.properties ?? {};
         for (const name of schema.required ?? []) {
-            if (value[name] === undefined) errors.push(`${path}.${name} is required`);
+            if (!Object.hasOwn(value, name) || value[name] === undefined) errors.push(`${path}.${name} is required`);
         }
         for (const [name, child] of Object.entries(value)) {
             if (name === '__proto__' || name === 'constructor' || name === 'prototype') {
                 errors.push(`${path}.${name} is not an allowed key`);
                 continue;
             }
-            if (properties[name]) {
-                errors.push(...validateValue(properties[name], child, `${path}.${name}`, depth + 1));
+            const declared = own(properties, name);
+            if (declared) {
+                errors.push(...validateValue(declared, child, `${path}.${name}`, depth + 1));
                 continue;
             }
             if (schema.additionalProperties === false) {
@@ -229,13 +238,13 @@ export function isAssignable(source: ValueType, target: ValueType): boolean {
         const sourceProps = source.properties ?? {};
         const targetProps = target.properties ?? {};
         for (const name of target.required ?? []) {
-            const from = sourceProps[name];
-            const to = targetProps[name];
+            const from = own(sourceProps, name);
+            const to = own(targetProps, name);
             if (!from || !to || !isAssignable(from, to)) return false;
             if (!(source.required ?? []).includes(name)) return false;
         }
         for (const [name, from] of Object.entries(sourceProps)) {
-            const to = targetProps[name];
+            const to = own(targetProps, name);
             if (to) {
                 if (!isAssignable(from, to)) return false;
                 continue;
