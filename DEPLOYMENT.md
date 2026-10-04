@@ -1,7 +1,8 @@
 # Deployment
 
-**Status: CI exists. CD is not built. The limited public preview has a manual
-deploy path to Cloudflare Workers (below). The full app has no public deployment.**
+**Status: CI exists. CD is not built. The limited public preview is deployed
+by hand to https://omni.syberlabs.io on Cloudflare Workers (below), first on
+2026-10-03 from `35260bd`. The full app has no public deployment.**
 
 This records the decision so it does not get re-argued from scratch, and lists
 what has to be true before OmniOS is reachable from anywhere but your own
@@ -84,6 +85,9 @@ npm run deploy:vinext
 ```
 
 Then run the route checks above against `https://omni.syberlabs.io`.
+`workers.dev` and preview URLs are off, so the custom domain is the only
+address. To undo a bad release, `npx wrangler rollback` restores the prior
+version.
 
 This preview does not satisfy the controls for the full app. Keep the private
 deployment requirements below for any deployment that enables paid LLMs
