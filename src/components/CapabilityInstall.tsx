@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { compileOpenApi } from '@/core/capabilities/openapi';
+import { credentialPlacement } from '@/core/capabilities/execute';
 import { capabilitySecrets } from '@/core/capabilities/secrets';
 import { installProposal, approveCapability, denyCapability, uninstallCapability } from '@/core/capabilities/registry';
 import { useCapabilityStore } from '@/core/capabilities/store';
@@ -141,18 +142,19 @@ export function CapabilityInstall() {
 
 /**
  * Where a request, and the credential on it, will go: the origin the manifest
- * will call and the auth kind and placement as the manifest carries them.
+ * will call, the auth kind, and the placement the executor will use (bearer
+ * and basic carry none on the manifest; they travel in Authorization).
  * A pasted document chooses both, so the title alone must not stand for them.
  */
 function Destination({ manifest }: { manifest: CapabilityManifest }) {
     const { auth, transport } = manifest;
     if (transport.kind !== 'http') return null;
     const origin = new URL(transport.baseUrl).origin;
-    const placement = [auth.kind, auth.in ? `in ${auth.in}` : null, auth.name ?? null].filter(Boolean).join(' ');
+    const placement = credentialPlacement(manifest);
     return (
         <span className="block text-[var(--text-muted)]">
             {origin}
-            {auth.kind !== 'none' ? <span className="ml-1">· {placement}</span> : null}
+            {placement ? <span className="ml-1">· {auth.kind} in {placement}</span> : null}
             {auth.in === 'query' ? (
                 <span className="ml-1 text-[var(--truth-red)]">Key travels in the URL</span>
             ) : null}

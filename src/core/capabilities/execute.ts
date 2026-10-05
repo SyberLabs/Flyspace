@@ -229,7 +229,8 @@ function credentialHeaderName(manifest: CapabilityManifest): string | undefined 
     return 'authorization';
 }
 
-function credentialPlacement(manifest: CapabilityManifest): string | undefined {
+/** Where the credential travels, in the words the run preview uses. The install door shows the same words. */
+export function credentialPlacement(manifest: CapabilityManifest): string | undefined {
     const auth = manifest.auth;
     if (auth.kind === 'none') return undefined;
     if (auth.kind === 'apiKey') return auth.in === 'query' ? `query parameter ${auth.name}` : `header ${auth.name}`;

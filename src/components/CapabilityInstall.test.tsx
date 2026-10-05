@@ -122,10 +122,28 @@ describe('CapabilityInstall', () => {
 
         const secret = screen.getByLabelText(/^Secret cred_/).closest('label')!;
         expect(secret.textContent).toContain('https://board.example.test');
-        expect(secret.textContent).toContain('apiKey in query api_key');
+        expect(secret.textContent).toContain('apiKey in query parameter api_key');
         expect(secret.textContent).toContain('Key travels in the URL');
         // Both proposal rows share the slot, so each row carries the warning too.
         expect(screen.getAllByText('Key travels in the URL')).toHaveLength(3);
+    });
+
+    it('shows the Authorization header for a bearer scheme, which carries no placement on the manifest', () => {
+        const bearerSpec = {
+            ...SPEC,
+            components: { securitySchemes: { boardKey: { type: 'http', scheme: 'bearer' } } }
+        };
+        render(<CapabilityInstall />);
+        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        fireEvent.change(screen.getByLabelText('OpenAPI document'), {
+            target: { value: JSON.stringify(bearerSpec) }
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Compile' }));
+
+        const secret = screen.getByLabelText(/^Secret cred_/).closest('label')!;
+        expect(secret.textContent).toContain('https://board.example.test');
+        expect(secret.textContent).toContain('bearer in Authorization header');
+        expect(screen.queryByText('Key travels in the URL')).toBeNull();
     });
 
     it('approves and removes through separate controls', () => {
