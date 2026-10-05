@@ -7,7 +7,6 @@
 import { blockRegistry } from '../registry/BlockRegistry';
 import type { OmniBlockSchema, PortSchema } from '../schemas/block.schema';
 import { useBlockStore } from '../stores/blockStore';
-import { wireService } from '../services/wire.service';
 import { createOmniError } from '../gateway/omnidata.schema';
 import { validateManifest, type CapabilityManifest } from './manifest';
 import { allCapabilities, capabilityIds, claimHydration, deleteCapability, readCapability, writeCapability } from './state';
@@ -213,7 +212,6 @@ export async function runInstalledCapability(
         result.ok ? 'connected' : 'error',
         result.error?.message
     );
-    wireService.refreshWiresFromSource(instanceId);
     return result;
 }
 
