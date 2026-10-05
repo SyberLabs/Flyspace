@@ -165,6 +165,43 @@ export function isReservedName(name: string): boolean {
     return name === '__proto__' || name === 'prototype' || Object.prototype.hasOwnProperty.call(Object.prototype, name);
 }
 
+/**
+ * Header names a manifest may not place a credential or a header input in,
+ * lower-case. A caller-chosen name here would let the manifest steer the
+ * connection the credential travels on, not just the request: hop-by-hop
+ * and connection control (RFC 7230 §6.1: Connection, Keep-Alive,
+ * Proxy-Authenticate, Proxy-Authorization, TE, Trailer, Transfer-Encoding,
+ * Upgrade, and the pre-standard Proxy-Connection), message framing
+ * (Content-Length, RFC 7230 §3.3), the request target (Host, RFC 7230 §5.4),
+ * and the user agent's own state (Cookie and Set-Cookie, RFC 6265).
+ * `Authorization` is not listed: it is the credential's own header.
+ */
+export const DENIED_HEADER_NAMES: ReadonlySet<string> = new Set([
+    'connection',
+    'content-length',
+    'cookie',
+    'host',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'proxy-connection',
+    'set-cookie',
+    'te',
+    'trailer',
+    'transfer-encoding',
+    'upgrade'
+]);
+
+/**
+ * Header names are case-insensitive, so the check is on the lower-cased
+ * name. HTTP/2 pseudo-headers (RFC 7540 §8.1.2.1) start with ':' and are
+ * already outside the token grammar; they are refused here as well so the
+ * rule holds without the grammar.
+ */
+export function isDeniedHeaderName(name: string): boolean {
+    return name.startsWith(':') || DENIED_HEADER_NAMES.has(name.toLowerCase());
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -304,6 +341,8 @@ function validateAuth(auth: unknown, errors: string[]): void {
             errors.push('apiKey auth requires a header or query name');
         } else if (isReservedName(auth.name)) {
             errors.push(`apiKey auth name ${auth.name} is reserved`);
+        } else if (auth.in === 'header' && isDeniedHeaderName(auth.name)) {
+            errors.push(`apiKey auth name ${auth.name} is a transport header`);
         }
     }
     if (auth.prefix !== undefined && (typeof auth.prefix !== 'string' || auth.prefix.length > 32)) {
@@ -573,6 +612,8 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
                 errors.push('input name is invalid');
             } else if (isReservedName(entry.name)) {
                 errors.push(`input name ${entry.name} is reserved`);
+            } else if (entry.in === 'header' && isDeniedHeaderName(entry.name)) {
+                errors.push(`input name ${entry.name} is a transport header`);
             } else if (names.has(entry.name)) {
                 errors.push(`duplicate input ${entry.name}`);
             } else {
