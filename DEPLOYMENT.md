@@ -118,6 +118,16 @@ account and keeps the canvas available offline. Local `npm run dev` and
 `npm start` bind to `127.0.0.1`; container listeners must remain private unless
 all other API surfaces are separately protected.
 
+Per-caller rate budgets (today only `/api/capability-broker`, 30 requests a
+minute per caller under a global 120) key on `clientKey()` in
+`src/core/services/server/clientKey.ts`. It trusts Cloudflare's
+`cf-connecting-ip` always, and `x-real-ip` or the last `x-forwarded-for` hop
+only when `OMNI_TRUSTED_PROXY=1` declares a proxy you control in front of the
+server. Without that flag every caller shares one `direct` bucket, so a
+client-written header cannot buy a fresh budget; the global cap is the
+backstop. Set the flag only behind your own reverse proxy, and make that proxy
+overwrite, not append to, the headers it forwards.
+
 Hosted inference also requires `DATABASE_URL` and migration 003. Each paid
 request carries `Idempotency-Key`; the ledger stores owner, key, and digest
 with the `running` attempt before provider dispatch. Reusing a key with the

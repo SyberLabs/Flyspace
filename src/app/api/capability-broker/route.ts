@@ -5,6 +5,7 @@
 import { lookup } from 'node:dns/promises';
 import { NextRequest, NextResponse } from 'next/server';
 import { admitBrokerCaller, BROKER_DEADLINE_MS, handleCapabilityBroker } from '@/core/services/server/capabilityBroker';
+import { clientKey } from '@/core/services/server/clientKey';
 import { openServerLedger } from '@/core/services/server/capability.ledger';
 import { pinnedFetch } from '@/core/services/server/pinnedFetch';
 import { readBoundedJson, RequestBodyTooLarge } from '@/core/services/server/boundedJson';
@@ -16,18 +17,6 @@ const MAX_REQUEST_BYTES = 256 * 1024;
 
 function reply(status: number, body: unknown) {
     return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
-}
-
-/**
- * The nearest hop's view of the client: the last x-forwarded-for entry. Next
- * fills that header from the socket when it is absent; a proxy in front
- * appends the address it saw. Without a proxy a client can choose it, which
- * is why the broker also enforces a global cap that does not depend on it.
- */
-function callerKey(request: NextRequest): string {
-    const forwarded = request.headers.get('x-forwarded-for');
-    const last = forwarded?.split(',').map(part => part.trim()).filter(Boolean).pop();
-    return last ? last.slice(0, 64) : 'local';
 }
 
 export async function POST(request: NextRequest) {
@@ -47,7 +36,7 @@ export async function POST(request: NextRequest) {
     // The caller and global budgets are checked before any body byte is read,
     // so an over-budget caller costs no read and no parse. Like the refusals
     // above, a 429 leaves the body unread for the server to discard.
-    const caller = callerKey(request);
+    const caller = clientKey(request);
     const admission = admitBrokerCaller(caller);
     if (!admission) return reply(429, { error: 'broker rate limit exceeded' });
 
