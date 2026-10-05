@@ -88,7 +88,7 @@ there too; the warning is the record of it.
 
 `src/core/interaction/interaction.test.ts` (typed wire admission, refusal in the
 store), `src/core/interaction/session.test.ts` (undo of a delete restores the
-wires and drops one the canvas now refuses), `src/core/capabilities/boundary.test.ts` (`join_titles` projection,
+wires once, by id, and drops one the canvas now refuses), `src/core/capabilities/boundary.test.ts` (`join_titles` projection,
 typed mismatch refused), and `src/core/stores/wireAdmission.test.ts` (hydrate
 and shell restore drop an incompatible wire; every built-in template's wires
 pass `admitWire`).

@@ -83,4 +83,20 @@ describe('undo of a delete', () => {
         expect(warn.mock.calls[0][0]).toContain(`dropped saved wire ${wireId}`);
         expect(warn.mock.calls[0][0]).toContain('incompatible-type');
     });
+
+    it('does not duplicate a wire the canvas already has back', () => {
+        const saved = useWireStore.getState().getWire(wireId)!;
+        deleteBlock('dst');
+        // Between the delete and its undo, a shell load (say, an undone
+        // navigation) restored the block and the same wire from the saved shell.
+        useBlockStore.getState().restoreBlock(block('dst', [anyIn]));
+        useWireStore.getState().replaceWiresForShell('root', [saved]);
+        expect(useWireStore.getState().wires).toHaveLength(1);
+
+        expect(spatialSession.undo()).toBe(true);
+
+        expect(useBlockStore.getState().blocks.filter(b => b.instance_id === 'dst')).toHaveLength(1);
+        expect(useWireStore.getState().wires.map(wire => wire.id)).toEqual([wireId]);
+        expect(warn).not.toHaveBeenCalled();
+    });
 });
