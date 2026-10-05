@@ -361,6 +361,7 @@ describe('capability compiler', () => {
         const compiled = compileMcpTools([
             {
                 serverId: 'board',
+                origin: 'https://board.example.test',
                 name: 'list_board',
                 description: 'Read the board',
                 annotations: { readOnlyHint: true },
@@ -372,6 +373,7 @@ describe('capability compiler', () => {
             },
             {
                 serverId: 'board',
+                origin: 'https://board.example.test',
                 name: 'wipe_board',
                 annotations: { readOnlyHint: true, destructiveHint: true },
                 outputSchema: { type: 'boolean' }
@@ -383,6 +385,7 @@ describe('capability compiler', () => {
         expect(read).toMatchObject({ effect: 'write', approval: 'pending' });
         const trusted = compileMcpTools([{
             serverId: 'board',
+            origin: 'https://board.example.test',
             name: 'list_board',
             annotations: { readOnlyHint: true },
             inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
@@ -396,6 +399,7 @@ describe('capability compiler', () => {
 
         const calls: unknown[] = [];
         bindMcpTransport('board', {
+            origin: 'https://board.example.test',
             call: async (_server, tool, args) => {
                 calls.push({ tool, args });
                 return ['alpha'];

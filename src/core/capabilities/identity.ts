@@ -37,15 +37,17 @@ export function credentialSlot(baseUrl: string, auth: SlotAuth): string {
 }
 
 /**
- * Slot for any transport that can carry a credential. Non-HTTP destinations
- * are named by kind and host-bound id, which cannot collide with a URL origin.
+ * Slot for any transport that can carry a credential. An MCP server is a URL
+ * origin like an HTTP base and takes the same slot, so two servers that share
+ * a label never share a secret. An async runtime is named by kind and
+ * host-bound id, which cannot collide with a URL origin.
  */
 export function transportCredentialSlot(
     transport: CapabilityTransport,
     auth: SlotAuth
 ): string | undefined {
     if (transport.kind === 'http') return credentialSlot(transport.baseUrl, auth);
-    if (transport.kind === 'mcp') return slotFor(`mcp:${transport.serverId}`, auth);
+    if (transport.kind === 'mcp') return credentialSlot(transport.origin, auth);
     if (transport.kind === 'async') return slotFor(`async:${transport.runtimeId}`, auth);
     return undefined;
 }

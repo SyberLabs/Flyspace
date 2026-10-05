@@ -48,6 +48,8 @@ export interface McpCallContext {
 }
 
 export interface McpTransport {
+    /** URL origin this transport sends to. A manifest whose transport.origin differs is not bound to it. */
+    origin: string;
     call(
         serverId: string,
         toolName: string,
@@ -868,6 +870,16 @@ async function executeMcp(
     const transport = mcpTransports.get(manifest.transport.serverId);
     if (!transport) {
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No MCP transport bound for ${manifest.transport.serverId}`, false));
+    }
+    // The slot was derived from the manifest's origin. A label rebound to
+    // another origin does not receive that origin's credential.
+    if (transport.origin !== manifest.transport.origin) {
+        return halt(failure(
+            manifest.id,
+            'TRANSPORT_NOT_BOUND',
+            `MCP transport for ${manifest.transport.serverId} is bound to ${transport.origin}, not ${manifest.transport.origin}`,
+            false
+        ));
     }
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;

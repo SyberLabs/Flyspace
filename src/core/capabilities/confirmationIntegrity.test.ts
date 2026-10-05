@@ -143,7 +143,7 @@ describe('the confirmed request is the dispatched request', () => {
             externalIdentity: { operationId: 'post', sourceLocator: 'fixture://mcp/board' },
             title: 'Post',
             auth: { kind: 'none' },
-            transport: { kind: 'mcp', serverId: 'board', toolName: 'post' },
+            transport: { kind: 'mcp', serverId: 'board', origin: 'https://board.example.test', toolName: 'post' },
             inputs: [
                 { name: 'channel', in: 'argument', required: true, schema: { kind: 'string' } },
                 { name: 'message', in: 'argument', required: true, schema: { kind: 'object' } }
@@ -156,7 +156,7 @@ describe('the confirmed request is the dispatched request', () => {
         expect(installed.ok, installed.errors.join('; ')).toBe(true);
         const manifest = approveCapability(installed.manifest!.id).manifest!;
         const received: Array<Record<string, unknown>> = [];
-        bindMcpTransport('board', { call: async (_server, _tool, args) => { received.push(args); return null; } });
+        bindMcpTransport('board', { origin: 'https://board.example.test', call: async (_server, _tool, args) => { received.push(args); return null; } });
         try {
             const input = { channel: 'ops', message: { text: 'deploy' } };
             const preview = previewCapabilityRun(manifest.id, input);
