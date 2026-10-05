@@ -122,7 +122,13 @@ export interface ShellBlockState {
  * Global application settings
  */
 export interface OmniSettings {
-    /** Use mock data for APIs */
+    /**
+     * Fast refresh. When true, the built-in data blocks poll their live
+     * upstreams every 5–60 s instead of every 1–60 min. No mock-data path
+     * exists: every request goes to the real API either way. The key name is
+     * historical and kept so persisted settings survive; renaming it needs a
+     * persist migration.
+     */
     useMockData: boolean;
 
     /** Canvas grid snapping enabled */
