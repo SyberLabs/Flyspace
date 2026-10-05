@@ -106,6 +106,17 @@ describe('ShellPanel a11y', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
+    it('announces the slot a shell already holds when its picker opens', () => {
+        seedShell();
+        useShellStore.setState({ hotkeySlots: { 3: 'shell_a' } });
+        render(<ShellPanel isOpen onClose={vi.fn()} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Assign hotkey to Alpha' }));
+        const picker = screen.getByRole('group', { name: 'Hotkey slot for Alpha' });
+        expect(within(picker).getByRole('button', { name: 'Slot 3' }).getAttribute('aria-pressed')).toBe('true');
+        expect(within(picker).getByRole('button', { name: 'Slot 1' }).getAttribute('aria-pressed')).toBe('false');
+    });
+
     it('the hotkey slot is chosen with buttons, never through window.prompt or alert', () => {
         seedShell();
         const promptSpy = vi.fn(() => '3');

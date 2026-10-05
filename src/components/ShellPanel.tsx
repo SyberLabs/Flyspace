@@ -61,8 +61,11 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
     };
 
     // Get hotkey number for a shell
+    // Object.entries yields string keys, so convert: a cast alone left the
+    // value "3", which never === the numeric slot the picker compares against.
     const getHotkeyForShell = (shellId: string): number | undefined => {
-        return Object.entries(hotkeySlots).find(([, id]) => id === shellId)?.[0] as unknown as number;
+        const key = Object.entries(hotkeySlots).find(([, id]) => id === shellId)?.[0];
+        return key === undefined ? undefined : Number(key);
     };
 
     // Handle creating a new shell
