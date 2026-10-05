@@ -1,23 +1,32 @@
 // One rule for "who is calling", for every route that budgets per caller.
-// The key prefers an address a platform asserted and never trusts a header
-// the client could have written on its own. Without a trusted proxy every
-// caller shares one bucket, so a forged header buys nothing and the global
-// cap is the backstop, as before.
+// Every address header a request carries could have been written by the
+// client unless something you control sits in front and owns that header,
+// so the key trusts a header only when the deployment declares that
+// ingress. Undeclared, every caller shares one bucket and the global cap is
+// the backstop, as before.
 
 const KEY_MAX = 64;
-/** Where the trusted-proxy flag is read from; `process.env` by default. */
+/** Where the ingress declaration is read from; `process.env` by default. */
 export type ClientKeyEnv = Readonly<Record<string, string | undefined>>;
-/** Every unproxied caller shares this bucket. */
+/** Every caller shares this bucket when no ingress is declared. */
 export const DIRECT_CLIENT = 'direct';
 
+export type Ingress = 'cloudflare' | 'proxy' | 'direct';
+
 /**
- * `OMNI_TRUSTED_PROXY=1` declares that a proxy you control sits in front of
- * this server and sets `x-real-ip` or appends to `x-forwarded-for`. Default
- * off: a bare `next dev` or `next start` has no such proxy, and there a client
- * can write both headers.
+ * `OMNI_TRUSTED_PROXY` names what sits in front of this server:
+ * - `cloudflare`: a Cloudflare Worker or proxied zone, which sets
+ *   `cf-connecting-ip` and overwrites any value the client sent.
+ * - `proxy` (or `1`, the older spelling): a reverse proxy you control that
+ *   sets `x-real-ip` or appends to `x-forwarded-for`.
+ * Unset, or any other value, means nothing is trusted: a bare `next dev`,
+ * `next start` or `wrangler dev` has no ingress that owns these headers.
  */
-export function trustedProxyDeclared(env: ClientKeyEnv = process.env): boolean {
-    return env.OMNI_TRUSTED_PROXY?.trim() === '1';
+export function declaredIngress(env: ClientKeyEnv = process.env): Ingress {
+    const value = env.OMNI_TRUSTED_PROXY?.trim().toLowerCase();
+    if (value === 'cloudflare') return 'cloudflare';
+    if (value === 'proxy' || value === '1') return 'proxy';
+    return 'direct';
 }
 
 function lastHop(forwarded: string | null): string | undefined {
@@ -25,23 +34,26 @@ function lastHop(forwarded: string | null): string | undefined {
 }
 
 /**
- * The per-caller limiter key for a request, in this order:
- * 1. `cf-connecting-ip`: Cloudflare sets it on the Workers path and
- *    overwrites any value a client sent, so it cannot be forged from outside.
- * 2. `x-real-ip`, only when a trusted proxy is declared.
- * 3. The last `x-forwarded-for` hop (the address the nearest proxy saw),
- *    only when a trusted proxy is declared.
- * 4. `DIRECT_CLIENT`: one shared bucket under the global cap.
+ * The per-caller limiter key for a request, by declared ingress:
+ * - `cloudflare`: `cf-connecting-ip`.
+ * - `proxy`: `x-real-ip`, else the last `x-forwarded-for` hop (the address
+ *   the nearest proxy saw).
+ * - `direct`, or a declared header that is absent: `DIRECT_CLIENT`, one
+ *   shared bucket under the global cap.
+ * No header is trusted outside its declared ingress.
  */
 export function clientKey(request: Request, env: ClientKeyEnv = process.env): string {
     const headers = request.headers;
-    const cloudflare = headers.get('cf-connecting-ip')?.trim();
-    if (cloudflare) return cloudflare.slice(0, KEY_MAX);
-    if (trustedProxyDeclared(env)) {
-        const real = headers.get('x-real-ip')?.trim();
-        if (real) return real.slice(0, KEY_MAX);
-        const hop = lastHop(headers.get('x-forwarded-for'));
-        if (hop) return hop.slice(0, KEY_MAX);
+    let address: string | undefined;
+    switch (declaredIngress(env)) {
+        case 'cloudflare':
+            address = headers.get('cf-connecting-ip')?.trim();
+            break;
+        case 'proxy':
+            address = headers.get('x-real-ip')?.trim() || lastHop(headers.get('x-forwarded-for'));
+            break;
+        case 'direct':
+            break;
     }
-    return DIRECT_CLIENT;
+    return address ? address.slice(0, KEY_MAX) : DIRECT_CLIENT;
 }
