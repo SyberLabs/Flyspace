@@ -7,13 +7,14 @@ import {
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
 function captureFetch(body: unknown = { ok: true }) {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
         calls.push({ url: String(url), init });
-        return { json: async () => body } as unknown as Response;
+        return Response.json(body);
     }));
     return calls;
 }
@@ -45,7 +46,9 @@ describe('fetchPublicProvider', () => {
 
     it('Open-Meteo hits the forecast URL with the requested coordinates', async () => {
         const calls = captureFetch({ current: { temperature_2m: 12 } });
-        await fetchPublicProvider('openmeteo', { latitude: '51.5', longitude: '-0.12' });
+        const { status, body } = await fetchPublicProvider('openmeteo', { latitude: '51.5', longitude: '-0.12' });
+        expect(status).toBe(200);
+        expect(body).toEqual({ current: { temperature_2m: 12 } });
         expect(calls[0].url).toContain('api.open-meteo.com/v1/forecast');
         expect(calls[0].url).toContain('latitude=51.5');
         expect(calls[0].url).toContain('longitude=-0.12');
@@ -68,6 +71,7 @@ describe('fetchPublicProvider', () => {
     });
 
     it('an upstream throw becomes a 502 without echoing the error text', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('secret-in-url'); }));
         const { status, body } = await fetchPublicProvider('wikipedia', {});
         expect(status).toBe(502);
