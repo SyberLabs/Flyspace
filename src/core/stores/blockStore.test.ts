@@ -8,10 +8,7 @@ const schema: OmniBlockSchema = {
     block_id: 'fred_series',
     display_name: 'FRED Series',
     category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '1h',
     semantic_tags: [],
-    wiring_logic: ''
 };
 
 function addBlock(): string {
