@@ -357,6 +357,22 @@ describe('capability compiler', () => {
         expect(rejected.rejected[0]?.errors.join(' ')).toMatch(/digest/);
     });
 
+    it('gives two MCP servers with the same label and tool at different origins distinct ids that coexist', () => {
+        const tool = {
+            serverId: 'board',
+            name: 'list_board',
+            inputSchema: { type: 'object', properties: {} },
+            outputSchema: { type: 'array', items: { type: 'string' } }
+        };
+        const [first] = compileMcpTools([{ ...tool, origin: 'https://board.example.test' }]).manifests;
+        const [second] = compileMcpTools([{ ...tool, origin: 'https://other.example.test' }]).manifests;
+        expect(first.id).not.toBe(second.id);
+        expect(installProposal(first).ok).toBe(true);
+        expect(installProposal(second).ok).toBe(true);
+        expect(getCapability(first.id)?.transport).toMatchObject({ origin: 'https://board.example.test' });
+        expect(getCapability(second.id)?.transport).toMatchObject({ origin: 'https://other.example.test' });
+    });
+
     it('compiles MCP tools and Bring descriptions through the same gate', async () => {
         const compiled = compileMcpTools([
             {

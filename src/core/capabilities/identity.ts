@@ -21,7 +21,8 @@ export function canonicalBase(baseUrl: string): string {
 
 export function capabilityIdentityKey(transport: CapabilityTransport): string {
     if (transport.kind === 'local') return `local|${transport.handler}`;
-    if (transport.kind === 'mcp') return `mcp|${transport.serverId}|${transport.toolName}`;
+    // The origin is in the key so two servers that share a label are two capabilities.
+    if (transport.kind === 'mcp') return `mcp|${transport.origin}|${transport.serverId}|${transport.toolName}`;
     if (transport.kind === 'async') return `async|${transport.runtimeId}|${transport.operation}`;
     return `http|${canonicalBase(transport.baseUrl)}|${transport.method}|${transport.path}`;
 }
