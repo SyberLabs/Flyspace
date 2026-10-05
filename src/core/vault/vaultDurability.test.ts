@@ -1,6 +1,7 @@
 // Durability of the vault (MasterMind critique 2026-10-05, finding O4):
 // persistence is requested once, a failed write is recorded, and a version
-// change from another connection closes ours instead of blocking it.
+// change from another connection (a newer open or a delete) closes ours
+// instead of blocking it, and never reloads the page under the user.
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
@@ -89,7 +90,7 @@ describe('vaultStorage — durability (O4)', () => {
         expect(await vaultStorage.getItem('omni-a')).toBe('2');
     });
 
-    it('closes its connection on versionchange so a newer open is not blocked, then reloads', async () => {
+    it('yields to a newer open on versionchange without reloading; later writes record VersionError', async () => {
         stubNavigatorStorage(vi.fn().mockResolvedValue(true));
         const reload = vi.fn();
         vi.stubGlobal('window', { location: { reload } });
@@ -106,7 +107,39 @@ describe('vaultStorage — durability (O4)', () => {
 
         expect(newer.version).toBe(2);
         expect(blocked).not.toHaveBeenCalled();
-        expect(reload).toHaveBeenCalledTimes(1);
+        expect(reload).not.toHaveBeenCalled();
+
+        // This tab's code only knows version 1, so its next write cannot open
+        // the upgraded vault. That is recorded, not hidden, and not "fixed" by
+        // reloading under the user.
+        await vaultStorage.setItem('omni-a', '2');
+        expect(getVaultHealth().lastFailure?.code).toBe('VersionError');
+        expect(reload).not.toHaveBeenCalled();
         newer.close();
+    });
+
+    it('yields to deleteDatabase without reloading, and the next access recreates the vault', async () => {
+        stubNavigatorStorage(vi.fn().mockResolvedValue(true));
+        const reload = vi.fn();
+        vi.stubGlobal('window', { location: { reload } });
+
+        await vaultStorage.setItem('omni-a', '1');
+
+        // What e2e/helpers.ts freshStart does from inside the page while the
+        // app holds its connection open.
+        const outcome = await new Promise<string>((resolve) => {
+            const req = indexedDB.deleteDatabase(VAULT_DB_NAME);
+            req.onsuccess = () => resolve('success');
+            req.onerror = () => resolve('error');
+            req.onblocked = () => resolve('blocked');
+        });
+
+        expect(outcome).toBe('success');
+        expect(reload).not.toHaveBeenCalled();
+
+        await vaultStorage.setItem('omni-b', '2');
+        expect(await vaultStorage.getItem('omni-a')).toBeNull();
+        expect(await vaultStorage.getItem('omni-b')).toBe('2');
+        expect(getVaultHealth().lastFailure).toBeNull();
     });
 });

@@ -14,8 +14,9 @@
 //   (server render, unit tests without fake-indexeddb).
 // - DURABILITY IS VISIBLE: the first open asks the browser for persistent
 //   storage once, a failed write is recorded instead of swallowed, and a
-//   version change from another tab closes this connection and reloads so
-//   the upgrade is never blocked. `getVaultHealth` exposes all three.
+//   version change from another connection (a newer tab's upgrade, or a
+//   deleteDatabase) closes this connection so it is never blocked. The page is
+//   never reloaded under the user. `getVaultHealth` exposes all three.
 // ============================================
 
 import { openDB, type IDBPDatabase } from 'idb';
@@ -107,12 +108,17 @@ function getDb(): Promise<IDBPDatabase> {
             blocked() {
                 setHealth({ lastFailure: { code: 'VersionBlocked', at: Date.now() } });
             },
-            // onversionchange: a newer tab wants to upgrade. Close so it is not
-            // blocked, then reload onto the new version.
+            // onversionchange: another connection wants to upgrade or delete
+            // this database. Close so it is not blocked and drop the cached
+            // handle; the next access reopens lazily. After a delete that
+            // recreates the vault. After an upgrade the reopen fails with
+            // VersionError, which recordFailure surfaces: this tab's code does
+            // not know the new schema, and a page reload here would abort any
+            // put still in flight and hydrate older state (Codex review on
+            // #92; it also tore down the e2e freshStart helper mid-evaluate).
             blocking(_currentVersion, _blockedVersion, event) {
                 (event.target as IDBDatabase | null)?.close();
                 dbPromise = null;
-                if (typeof window !== 'undefined') window.location.reload();
             },
             // The browser closed the connection (e.g. storage cleared); reopen next time.
             terminated() {
