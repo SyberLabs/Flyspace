@@ -284,8 +284,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             {/* Info Box */}
                             <div className="p-4 bg-[var(--citadel-primary)]/5 border border-[var(--citadel-primary)]/20 rounded-lg">
                                 <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                                    <strong className="text-[var(--citadel-primary)]">Tip:</strong> Twelve demo APIs need no key.
-                                    Toggle &quot;Use Mock Data&quot; to explore without live calls.
+                                    <strong className="text-[var(--citadel-primary)]">Tip:</strong> Twelve public data sources need no key.
+                                    Every block polls live data; &quot;Fast refresh&quot; only shortens the interval.
                                 </p>
                             </div>
                         </div>

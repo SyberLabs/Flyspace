@@ -25,6 +25,9 @@ describe('Settings — the refresh toggle says what it does', () => {
         expect(screen.getByText('Live data, polled every 5–60 s (no mock data exists)')).toBeTruthy();
         expect(screen.queryByText('Use Mock Data')).toBeNull();
         expect(screen.queryByText(/demo data/i)).toBeNull();
+        // Substring match over the whole panel, so copy embedded in a longer
+        // sentence (the info-box tip) cannot promise a mock mode either.
+        expect(document.body.textContent).not.toMatch(/mock data(?!\s+exists)/i);
         unmount();
 
         useSettingsStore.setState({ useMockData: false });
