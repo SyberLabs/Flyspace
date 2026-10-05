@@ -2,6 +2,7 @@
 
 import { blockRegistry } from '@/core/registry/BlockRegistry';
 import { useBlockStore } from '@/core/stores/blockStore';
+import { useMindStore } from '@/core/stores/mindStore';
 import { useShellStore } from '@/core/stores/shellStore';
 import { useWireStore } from '@/core/stores/wireStore';
 import { getShellTemplate, SHELL_TEMPLATES } from '@/core/shells/templates';
@@ -64,6 +65,18 @@ function createStoreMutator(): CanvasMutator {
         },
         disconnect(wireId) {
             useWireStore.getState().removeWire(wireId);
+        },
+        keep(poolId, entry) {
+            return useMindStore.getState().pushContext(poolId, entry);
+        },
+        unkeep(poolId, entryId) {
+            useMindStore.setState(state => ({
+                contextPools: state.contextPools.map(pool =>
+                    pool.id === poolId
+                        ? { ...pool, entries: pool.entries.filter(e => e.id !== entryId), updatedAt: Date.now() }
+                        : pool
+                )
+            }));
         },
         openShell(target: SpeechShellKind) {
             const previousShellId = useBlockStore.getState().activeShellId;

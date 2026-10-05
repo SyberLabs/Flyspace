@@ -20,6 +20,7 @@ export type SpatialAction =
     | 'connect'
     | 'branch'
     | 'crystallize'
+    | 'keep'
     | 'delete'
     | 'cancel'
     | 'undo'

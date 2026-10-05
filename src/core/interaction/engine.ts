@@ -2,6 +2,7 @@
 // Adapters never call the canvas stores.
 
 import type { BlockInstance } from '@/core/schemas/block.schema';
+import type { ContextEntry } from '@/core/schemas/mind.schema';
 import { evaluateWireAdmission } from './ports';
 import { defaultSpeechCatalog, parseSpeech, type SpeechCatalog, type SpeechIntent, type SpeechShellKind } from './speech';
 import { describeCommand } from './speechReply';
@@ -27,8 +28,13 @@ export interface CanvasMutator {
     restore(block: BlockInstance): void;
     connect(sourceId: string, targetId: string): { ok: true; wireId: string } | { ok: false; reason: string };
     disconnect(wireId: string): void;
+    /** Admit one entry into a Mind pool; returns the entry id so undo can remove it. */
+    keep(poolId: string, entry: KeptEntry): string;
+    unkeep(poolId: string, entryId: string): void;
     openShell(target: SpeechShellKind): { ok: true; name: string; previousShellId: string } | { ok: false; reason: string };
 }
+
+export type KeptEntry = Omit<ContextEntry, 'id' | 'timestamp'>;
 
 interface UndoEntry {
     commandId: string;
@@ -97,6 +103,31 @@ export class InteractionEngine {
         }, () => {
             this.canvas.move(blockId, from.x, from.y);
         });
+    }
+
+    /**
+     * A click keeps text (a Think reply) in a Mind pool. Pools are persisted
+     * canvas memory a Memory block can wire into a persona prompt, so model
+     * output reaches one only through this commit boundary, with an undo.
+     */
+    keep(poolId: string, entry: KeptEntry, timestampMs = Date.now()): SpatialCommand {
+        const proposal = this.proposal('keep', [], {
+            modalities: ['pointer'],
+            confidence: 1,
+            timestampMs,
+            evidence: ['pointer-click:keep', `pool:${poolId}`]
+        });
+        proposal.target = { id: poolId };
+        if (!entry.content.trim()) return this.refuse(proposal, 'empty-content');
+        const entryId = this.canvas.keep(poolId, entry);
+        proposal.subjects = [{ id: entryId }];
+        return this.commitTracked(proposal, {
+            command: 'KEEP',
+            subject: entryId,
+            target: poolId,
+            modalities: ['pointer'],
+            committedAt: timestampMs
+        }, () => this.canvas.unkeep(poolId, entryId));
     }
 
     select(ids: string[]): void {

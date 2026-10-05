@@ -65,6 +65,7 @@ describe('typed wire admission', () => {
 class MemoryCanvas implements CanvasMutator {
     blocks: BlockInstance[] = [];
     wires: Array<{ id: string; source: string; target: string }> = [];
+    kept: Array<{ id: string; poolId: string; content: string }> = [];
     shell = 'root';
 
     listBlocks(): CanvasBlockView[] {
@@ -109,6 +110,14 @@ class MemoryCanvas implements CanvasMutator {
         return { ok: true as const, wireId };
     }
     disconnect(wireId: string) { this.wires = this.wires.filter(wire => wire.id !== wireId); }
+    keep(poolId: string, entry: { content: string }) {
+        const id = `kept_${this.kept.length + 1}`;
+        this.kept.push({ id, poolId, content: entry.content });
+        return id;
+    }
+    unkeep(poolId: string, entryId: string) {
+        this.kept = this.kept.filter(item => !(item.poolId === poolId && item.id === entryId));
+    }
     openShell(target: { id: string; name: string; kind: 'root' | 'template' | 'saved' }) {
         const previousShellId = this.shell;
         this.shell = target.kind === 'root' ? 'root' : target.id;
@@ -153,6 +162,21 @@ describe('spatial command lifecycle', () => {
         expect(placed.lifecycle).toBe('committed');
         expect(canvas.blocks.some(item => item.schema.block_id === 'persona_researcher')).toBe(true);
         expect(engine.speak('make it pop')).toMatchObject({ lifecycle: 'refused', reason: 'unrecognized-speech' });
+    });
+
+    it('keeps a reply in a pool as a committed command, refuses empty text, and undo removes it', () => {
+        const entry = { type: 'analysis' as const, content: 'Rates look steady.', importance: 0.8 };
+        const command = engine.keep('observations', entry, 4000);
+        expect(command).toMatchObject({ lifecycle: 'committed', action: 'keep', target: 'observations', modalities: ['pointer'] });
+        expect(canvas.kept).toEqual([{ id: 'kept_1', poolId: 'observations', content: 'Rates look steady.' }]);
+        expect(engine.snapshot().traces.at(-1)).toMatchObject({ command: 'KEEP', subject: 'kept_1', target: 'observations' });
+
+        expect(engine.keep('observations', { ...entry, content: '   ' }, 4100)).toMatchObject({ lifecycle: 'refused', reason: 'empty-content' });
+        expect(canvas.kept).toHaveLength(1);
+
+        expect(engine.undo()).toBe(true);
+        expect(canvas.kept).toEqual([]);
+        expect(engine.snapshot().commands.find(item => item.id === command.id)?.lifecycle).toBe('undone');
     });
 
     it('previews a delete until confirm, then undo restores the block', () => {

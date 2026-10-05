@@ -21,7 +21,7 @@ interface MindPanelProps {
 export function MindPanel({ isOpen, onClose }: MindPanelProps) {
     // Shell-specific state
     const [activeTab, setActiveTab] = useState<'personas' | 'context' | 'graph' | 'settings'>('personas');
-    const [thinkResult, setThinkResult] = useState<string | null>(null);
+    const [thinkResult, setThinkResult] = useState<{ text: string; ok: boolean } | null>(null);
     const [isThinking, setIsThinking] = useState(false);
 
     // Tool state
@@ -56,12 +56,12 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
             const result = await engine.think();
 
             if (result.success) {
-                setThinkResult(result.response || 'Analysis complete.');
+                setThinkResult({ text: result.response || 'Analysis complete.', ok: true });
             } else {
-                setThinkResult(`Error: ${result.error}`);
+                setThinkResult({ text: `Error: ${result.error}`, ok: false });
             }
         } catch (error) {
-            setThinkResult(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            setThinkResult({ text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, ok: false });
         } finally {
             setIsThinking(false);
         }
@@ -185,7 +185,8 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                         <ThinkResultModal
                             isOpen={!!thinkResult}
                             onClose={() => setThinkResult(null)}
-                            response={thinkResult || ''}
+                            response={thinkResult?.text || ''}
+                            ok={thinkResult?.ok ?? false}
                             personaName={activePersona?.name || 'The Mind'}
                             personaEmoji={activePersona?.avatar || '🧠'}
                         />
