@@ -56,6 +56,17 @@ outcome.
 every chunk straight through and keeps only a running character count and a
 bounded head. The client's streaming behaviour is byte-for-byte unchanged.
 
+### What `streamed` means
+
+`streamed` is true only when the provider's bytes passed through to the client
+as they arrived. It is not a copy of the request's `stream` flag. Today only
+the local provider (Ollama) streams. The Anthropic and Google adapters have no
+streaming path: a `stream: true` request to them completes the whole answer and
+hands it over as one chunk, and the row records `streamed: false`. The route
+asks the adapter module (`providerStreams`) rather than guessing. Real
+streaming for those providers is a separate package; when it lands, flipping
+that one function makes their rows true.
+
 The wrapper distinguishes normal completion, user cancellation, and ambiguous
 transport outcomes:
 
@@ -199,8 +210,9 @@ characters.
   cursor. `(started_at DESC, id DESC)` is already a stable sort key, so
   keyset pagination drops in when the ledger is big enough to need it.
 - **Latency is measured around the whole provider call**, not to first token.
-  A streamed row's `latency_ms` is time to *last* byte. Time-to-first-token is
-  the more useful number for a streaming UI and is not yet recorded.
+  A streamed row's `latency_ms` is time to *last* byte; a buffered row's is the
+  whole call, since there was no earlier byte. Time-to-first-token is the more
+  useful number for a streaming UI and is not yet recorded.
 - **A cascade that ran before Postgres was configured has no parent edge.**
   `parent_run_id` is nullable for exactly this reason: the upstream answer was
   never recorded, so the honest value is NULL rather than a guess. Lineage stops

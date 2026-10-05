@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
-import { runStream, runComplete } from './llm.adapters';
+import { runStream, runComplete, providerStreams } from './llm.adapters';
 
 describe('Ollama HTTP boundary', () => {
     let sourceServer: Server;
@@ -90,6 +90,38 @@ describe('Ollama HTTP boundary', () => {
             fetch.mockRestore();
             process.env.OMNI_DEPLOYMENT_MODE = 'local';
             delete process.env.OLLAMA_BASE_URL;
+        }
+    });
+});
+
+describe('providerStreams', () => {
+    it('is true only for the local provider, which has a streaming path', () => {
+        expect(providerStreams('local')).toBe(true);
+        expect(providerStreams('anthropic')).toBe(false);
+        expect(providerStreams('google')).toBe(false);
+    });
+
+    it('a cloud runStream hands the completed answer over as one chunk', async () => {
+        const previousKey = process.env.ANTHROPIC_API_KEY;
+        process.env.ANTHROPIC_API_KEY = 'test-key';
+        const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+            content: [{ text: 'whole answer' }], usage: { input_tokens: 1, output_tokens: 2 }, stop_reason: 'end_turn'
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
+        try {
+            const stream = await runStream({
+                provider: 'anthropic', model: 'm', messages: [{ role: 'user', content: 'hi' }]
+            });
+            const reader = stream.getReader();
+            const chunks: string[] = [];
+            for (let next = await reader.read(); !next.done; next = await reader.read()) {
+                chunks.push(new TextDecoder().decode(next.value));
+            }
+            expect(chunks).toEqual(['whole answer']);
+            expect(fetch).toHaveBeenCalledOnce();
+        } finally {
+            fetch.mockRestore();
+            if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+            else process.env.ANTHROPIC_API_KEY = previousKey;
         }
     });
 });

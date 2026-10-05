@@ -66,6 +66,10 @@ cp .env.example .env
 | `GOOGLE_API_KEY` | Gemini for Mind / personas. |
 | `DATABASE_URL` | **Optional.** Postgres for the inference ledger. Blank = off. |
 
+Only Ollama streams an answer token by token today. Anthropic and Google
+answers arrive whole and are shown when complete; the ledger records those
+runs as `streamed: false`.
+
 ### The inference ledger (optional)
 
 Set `DATABASE_URL` and run `npm run db:migrate` to keep a durable server-side
