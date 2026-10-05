@@ -18,6 +18,7 @@ import {
 } from '../schemas/mind.schema';
 import { resolveModel } from '../models.registry';
 import { vaultStorage } from '../vault';
+import { newId } from '../id';
 
 // ============================================
 // STORE INTERFACE
@@ -76,7 +77,7 @@ interface MindStore extends MindState {
 // ============================================
 
 function generateId(prefix: string): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `${prefix}_${newId()}`;
 }
 
 /**
@@ -392,7 +393,7 @@ export const useMindStore = create<MindStore>()(
                     } else {
                         // Create new awareness entry
                         newEntries.push({
-                            id: crypto.randomUUID(),
+                            id: newId(),
                             type: 'observation',
                             content: summary,
                             importance: 0.3, // Lower importance for background awareness
