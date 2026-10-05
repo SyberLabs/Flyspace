@@ -88,6 +88,46 @@ describe('CapabilityInstall', () => {
         expect(listCapabilities().some(manifest => manifest.source.operationId === 'listPosts')).toBe(false);
     });
 
+    it('shows the origin and credential placement beside every proposal and secret field', () => {
+        render(<CapabilityInstall />);
+        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        fireEvent.change(screen.getByLabelText('OpenAPI document'), {
+            target: { value: JSON.stringify(SPEC) }
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Compile' }));
+
+        for (const title of ['List posts', 'Create post']) {
+            const row = screen.getByLabelText(title).closest('label')!;
+            expect(row.textContent).toContain('https://board.example.test');
+            expect(row.textContent).toContain('apiKey in header X-Board-Key');
+        }
+        const secret = screen.getByLabelText(/^Secret cred_/).closest('label')!;
+        expect(secret.textContent).toContain('https://board.example.test');
+        expect(secret.textContent).toContain('apiKey in header X-Board-Key');
+        expect(secret.textContent).not.toContain('/v1');
+        expect(screen.queryByText('Key travels in the URL')).toBeNull();
+    });
+
+    it('warns beside the secret field when the key will travel in the URL', () => {
+        const querySpec = {
+            ...SPEC,
+            components: { securitySchemes: { boardKey: { type: 'apiKey', in: 'query', name: 'api_key' } } }
+        };
+        render(<CapabilityInstall />);
+        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        fireEvent.change(screen.getByLabelText('OpenAPI document'), {
+            target: { value: JSON.stringify(querySpec) }
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Compile' }));
+
+        const secret = screen.getByLabelText(/^Secret cred_/).closest('label')!;
+        expect(secret.textContent).toContain('https://board.example.test');
+        expect(secret.textContent).toContain('apiKey in query api_key');
+        expect(secret.textContent).toContain('Key travels in the URL');
+        // Both proposal rows share the slot, so each row carries the warning too.
+        expect(screen.getAllByText('Key travels in the URL')).toHaveLength(3);
+    });
+
     it('approves and removes through separate controls', () => {
         render(<CapabilityInstall />);
         fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));

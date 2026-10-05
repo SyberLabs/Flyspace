@@ -21,14 +21,18 @@ export function CapabilityInstall() {
     const [secrets, setSecrets] = useState<Record<string, string>>({});
     const installed = useCapabilityStore(state => state.manifests);
 
-    const secretRefs = useMemo(() => {
-        const refs = new Set<string>();
+    // One slot per origin + scheme + placement, so the first selected manifest
+    // that names a slot describes where every value typed into it will go.
+    const secretSlots = useMemo(() => {
+        const slots = new Map<string, CapabilityManifest>();
         for (const manifest of proposals) {
             if (!selected[manifest.id]) continue;
-            if (manifest.auth.secretRef) refs.add(manifest.auth.secretRef);
+            const ref = manifest.auth.secretRef;
+            if (ref && !slots.has(ref)) slots.set(ref, manifest);
         }
-        return [...refs];
+        return slots;
     }, [proposals, selected]);
+    const secretRefs = [...secretSlots.keys()];
 
     const compile = () => {
         let parsed: unknown;
@@ -103,12 +107,14 @@ export function CapabilityInstall() {
                             <span>
                                 {manifest.title}
                                 <span className="ml-1 text-[var(--text-muted)]">{manifest.effect}</span>
+                                <Destination manifest={manifest} />
                             </span>
                         </label>
                     ))}
                     {secretRefs.map(ref => (
                         <label key={ref} className="block text-xs text-[var(--text-muted)]">
                             Secret {ref}
+                            <Destination manifest={secretSlots.get(ref)!} />
                             <input
                                 type="password"
                                 aria-label={`Secret ${ref}`}
@@ -130,6 +136,27 @@ export function CapabilityInstall() {
                 </div>
             ) : null}
         </div>
+    );
+}
+
+/**
+ * Where a request, and the credential on it, will go: the origin the manifest
+ * will call and the auth kind and placement as the manifest carries them.
+ * A pasted document chooses both, so the title alone must not stand for them.
+ */
+function Destination({ manifest }: { manifest: CapabilityManifest }) {
+    const { auth, transport } = manifest;
+    if (transport.kind !== 'http') return null;
+    const origin = new URL(transport.baseUrl).origin;
+    const placement = [auth.kind, auth.in ? `in ${auth.in}` : null, auth.name ?? null].filter(Boolean).join(' ');
+    return (
+        <span className="block text-[var(--text-muted)]">
+            {origin}
+            {auth.kind !== 'none' ? <span className="ml-1">· {placement}</span> : null}
+            {auth.in === 'query' ? (
+                <span className="ml-1 text-[var(--truth-red)]">Key travels in the URL</span>
+            ) : null}
+        </span>
     );
 }
 
