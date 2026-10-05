@@ -49,11 +49,18 @@ function createStoreMutator(): CanvasMutator {
         remove(id) {
             const block = useBlockStore.getState().getBlock(id);
             if (!block) return undefined;
+            const wires = useWireStore.getState().wires.filter(
+                wire => wire.sourceBlockId === id || wire.targetBlockId === id
+            );
             useBlockStore.getState().removeBlock(id);
-            return block;
+            return { block, wires };
         },
-        restore(block) {
-            useBlockStore.setState(state => ({ blocks: [...state.blocks, block] }));
+        restore({ block, wires }) {
+            useBlockStore.getState().restoreBlock(block);
+            // Wires are admitted, not drawn: the restore path re-runs admitWire.
+            const shellId = block.shellId;
+            const kept = useWireStore.getState().getWiresByShell(shellId);
+            useWireStore.getState().replaceWiresForShell(shellId, [...kept, ...wires]);
         },
         connect(sourceId, targetId) {
             const wireId = useWireStore.getState().addWire(sourceId, targetId);
