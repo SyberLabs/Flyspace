@@ -89,18 +89,11 @@ export class MindEngine {
             // this.distributeInsights(insights, activePersona);
 
             // Add raw response to observations
-            mindStore.addToPool('observations', {
-                type: 'analysis',
-                content: response.content,
-                importance: 0.8,
-                metadata: {
-                    source: activePersona.name,
-                    tokensUsed: response.tokensUsed,
-                    blocksAnalyzed: snapshot.totalBlocks,
-                    snapshotTimestamp: snapshot.timestamp
-                }
-            });
-
+            // only when the user clicks "Keep as observation" in ThinkResultModal;
+            // this engine returns the reply and stores nothing. The pool is
+            // persisted Mind state that a Memory block can wire into a persona
+            // prompt (MemoryBlock.tsx, wire.service.ts), so model output enters
+            // it only when admitted (AGENTS.md stop condition 1).
             mindStore.setStatus('ready');
 
             return {

@@ -7,9 +7,9 @@
 
 import { useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Copy, Sparkles, Check } from 'lucide-react';
+import { X, Copy, Sparkles, Check, Eye } from 'lucide-react';
 import { useState } from 'react';
-import { useBlockStore } from '@/core/stores';
+import { useBlockStore, useMindStore } from '@/core/stores';
 import { cn } from '@/lib/utils';
 import './ThinkResultModal.css';
 
@@ -74,6 +74,19 @@ export function ThinkResultModal({
 
         onClose();
     }, [response, personaName, addBlock, onClose]);
+
+    // The only way a Think reply enters the observations pool. The engine
+    // returns the reply and writes nothing; the pool is persisted and a Memory
+    // block can wire it into a persona prompt, so it takes a click to get in.
+    const handleKeepObservation = useCallback(() => {
+        useMindStore.getState().pushContext('observations', {
+            type: 'analysis',
+            content: response,
+            importance: 0.8,
+            metadata: { source: personaName, savedAt: Date.now() }
+        });
+        onClose();
+    }, [response, personaName, onClose]);
 
     return (
         <AnimatePresence>
@@ -143,6 +156,13 @@ export function ThinkResultModal({
                                         Copy
                                     </>
                                 )}
+                            </button>
+                            <button
+                                className="think-modal-btn think-modal-btn-secondary"
+                                onClick={handleKeepObservation}
+                            >
+                                <Eye className="w-4 h-4" />
+                                Keep as observation
                             </button>
                             <button
                                 className="think-modal-btn think-modal-btn-primary"
