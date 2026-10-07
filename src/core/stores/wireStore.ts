@@ -14,6 +14,18 @@ import { evaluateWireAdmission } from '../interaction/ports';
 import { useBlockStore } from './blockStore';
 import { admitConnection, type ConnectionAdmission } from '../capabilities/compatibility';
 import { vaultStorage } from '../vault';
+import { admitRecords, type Shape } from '../vault/hydration';
+
+/** What a persisted DataWire must carry to be read back (see vault/hydration). */
+export const DATA_WIRE_SHAPE = {
+    id: 'string',
+    sourceBlockId: 'string',
+    targetBlockId: 'string',
+    wireType: 'string',
+    filters: { autoRefresh: 'boolean' },
+    status: 'string',
+    shellId: 'string'
+} as const satisfies Shape<DataWire>;
 
 /**
  * The one admission rule for a wire, whatever path it arrives on: the live
@@ -223,6 +235,16 @@ export const useWireStore = create<WireStoreState>()(
             partialize: (state) => ({
                 wires: state.wires
             }),
+            // Shape first (here), then admission (onRehydrateStorage): a wire
+            // that is not a DataWire never reaches admitWire.
+            merge: (persistedState, currentState) => {
+                if (!persistedState) return currentState;
+                const persisted = persistedState as { wires?: unknown };
+                return {
+                    ...currentState,
+                    wires: admitRecords<DataWire>('omni-wires', 'wires', persisted.wires, DATA_WIRE_SHAPE)
+                };
+            },
             // A wire the live canvas would refuse must not come back on reload.
             onRehydrateStorage: () => (_state, error) => {
                 if (!error) revalidateWhenBlocksHydrated();

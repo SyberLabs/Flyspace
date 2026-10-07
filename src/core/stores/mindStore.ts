@@ -13,10 +13,58 @@ import {
     LLM_DEFAULTS,
     PersonaConfig,
     ContextEntry,
+    ContextPool,
+    KnowledgeGraph,
     createInitialMindState
 } from '../schemas/mind.schema';
 import { resolveModel } from '../models.registry';
 import { vaultStorage } from '../vault';
+import { admitField, admitRecords, type Shape } from '../vault/hydration';
+
+// What each persisted record must carry to be read back (see vault/hydration).
+const LLM_CONFIG_SHAPE = {
+    provider: 'string',
+    model: 'string',
+    temperature: 'number',
+    maxTokens: 'number'
+} as const satisfies Shape<LLMConfig>;
+
+const GRAPH_SHAPE = {
+    nodes: 'array',
+    edges: 'array',
+    lastUpdated: 'number'
+} as const satisfies Shape<KnowledgeGraph>;
+
+const PERSONA_SHAPE = {
+    id: 'string',
+    name: 'string',
+    description: 'string',
+    systemPrompt: 'string',
+    traits: 'array',
+    isBuiltIn: 'boolean',
+    createdAt: 'number',
+    updatedAt: 'number'
+} as const satisfies Shape<PersonaConfig>;
+
+const CONTEXT_POOL_SHAPE = {
+    id: 'string',
+    name: 'string',
+    description: 'string',
+    entries: 'array',
+    maxEntries: 'number',
+    pruneStrategy: 'string',
+    isSystem: 'boolean',
+    createdAt: 'number',
+    updatedAt: 'number'
+} as const satisfies Shape<ContextPool>;
+
+const CONTEXT_ENTRY_SHAPE = {
+    id: 'string',
+    type: 'string',
+    content: 'string',
+    importance: 'number',
+    timestamp: 'number'
+} as const satisfies Shape<ContextEntry>;
 
 // ============================================
 // STORE INTERFACE
@@ -316,6 +364,9 @@ export const useMindStore = create<MindStore>()(
         }),
         {
             name: 'omni-mind',
+            // v1 is the first versioned blob. Nothing changed shape; the
+            // version exists so the next change can migrate instead of cast.
+            version: 1,
             // OmniVault (IndexedDB): context pools + graph grow over time (A2).
             storage: createJSONStorage(() => vaultStorage),
             partialize: (state) => ({
@@ -325,28 +376,22 @@ export const useMindStore = create<MindStore>()(
                 activePersonaId: state.activePersonaId,
                 contextPools: state.contextPools
             }),
-            // Merge persisted state with fresh state to ensure new built-in pools exist
+            // v0 → v1: carried forward unchanged. Shape is merge's job.
+            migrate: (persistedState: unknown) => persistedState,
+            // Every persisted field is checked against its schema. A field or
+            // record that does not fit is dropped and recorded, and the fresh
+            // default stands in. Built-in pools the blob lacks are added.
             merge: (persistedState, currentState) => {
-                const persisted = persistedState as Partial<MindStore> | undefined;
-                if (!persisted) return currentState;
-
-                // Ensure all built-in pools exist (handles schema migrations)
-                const freshPools = currentState.contextPools;
-                const persistedPools = persisted.contextPools || [];
-
-                // Add any missing built-in pools
-                const mergedPools = [...persistedPools];
-                for (const freshPool of freshPools) {
-                    if (!mergedPools.find(p => p.id === freshPool.id)) {
-                        mergedPools.push(freshPool);
-                    }
-                }
+                if (!persistedState) return currentState;
+                const persisted = persistedState as Record<string, unknown>;
 
                 // Migrate persisted LLM config: drop any persisted apiKey (keys
                 // are now server-side only) and reset removed providers
                 // (openai/deepseek) to the default local provider.
                 const validProviders: LLMProvider[] = ['local', 'anthropic', 'google'];
-                const persistedLLM = persisted.llmConfig as (LLMConfig & { apiKey?: string }) | undefined;
+                const persistedLLM = admitField<LLMConfig & { apiKey?: string }>(
+                    'omni-mind', persisted, 'llmConfig', LLM_CONFIG_SHAPE
+                );
                 let mergedLLM = currentState.llmConfig;
                 if (persistedLLM) {
                     if (validProviders.includes(persistedLLM.provider)) {
@@ -365,10 +410,31 @@ export const useMindStore = create<MindStore>()(
                     mergedLLM = { ...mergedLLM, model: healedModel };
                 }
 
+                const graph = admitField<KnowledgeGraph>('omni-mind', persisted, 'graph', GRAPH_SHAPE);
+                const personas = persisted.personas === undefined
+                    ? currentState.personas
+                    : admitRecords<PersonaConfig>('omni-mind', 'personas', persisted.personas, PERSONA_SHAPE);
+                const activePersonaId = admitField<string>('omni-mind', persisted, 'activePersonaId', 'string');
+
+                // Ensure all built-in pools exist (handles schema migrations)
+                const mergedPools = admitRecords<ContextPool>(
+                    'omni-mind', 'contextPools', persisted.contextPools, CONTEXT_POOL_SHAPE
+                ).map(pool => ({
+                    ...pool,
+                    entries: admitRecords<ContextEntry>('omni-mind', `${pool.id}.entries`, pool.entries, CONTEXT_ENTRY_SHAPE)
+                }));
+                for (const freshPool of currentState.contextPools) {
+                    if (!mergedPools.find(p => p.id === freshPool.id)) {
+                        mergedPools.push(freshPool);
+                    }
+                }
+
                 return {
                     ...currentState,
-                    ...persisted,
                     llmConfig: mergedLLM,
+                    graph: graph ?? currentState.graph,
+                    personas,
+                    activePersonaId: activePersonaId ?? currentState.activePersonaId,
                     contextPools: mergedPools
                 };
             }
