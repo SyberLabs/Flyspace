@@ -23,7 +23,14 @@ export interface WireFilters {
 }
 
 /**
- * Wire connection status
+ * Wire connection status.
+ *
+ * Only 'active' has a writer. The status machine that set 'stale', 'error'
+ * and 'disconnected' was deleted on 2026-09-30 (commit 2bb55d4) and nothing
+ * replaced it: no code decides when a wire is stale (MasterMind D2 is open).
+ * The three values stay in the union because wires saved before that date
+ * can still carry them; such a wire is drawn in its status colour and is
+ * excluded from persona context.
  */
 export type WireStatus = 'active' | 'stale' | 'error' | 'disconnected';
 
@@ -147,9 +154,6 @@ export interface PersonaBlockData {
 
     /** Last context update timestamp */
     lastContextUpdate?: number;
-
-    /** Aggregated context from wired blocks */
-    currentContext?: string;
 
     /** Whether the block is collapsed */
     isCollapsed: boolean;

@@ -5,7 +5,7 @@
 // Save, load, and manage shell configurations
 // ============================================
 
-import { useState } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShellStore, useBlockStore } from '@/core/stores';
 import { ShellConfig } from '@/core/schemas/shell.schema';
@@ -37,10 +37,35 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
     const [newShellDescription, setNewShellDescription] = useState('');
     const [saveShellName, setSaveShellName] = useState('');
     const [saveShellDescription, setSaveShellDescription] = useState('');
+    // Inline confirmation state: which shell is awaiting a delete decision,
+    // and which shell has its hotkey slot picker open. These replace the
+    // browser's native confirm()/prompt()/alert(), which no screen reader or
+    // test can see into.
+    const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+    const [hotkeyPickerId, setHotkeyPickerId] = useState<string | null>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+
+    // Initial focus lands on the dialog itself when it opens.
+    useEffect(() => {
+        if (isOpen) panelRef.current?.focus();
+    }, [isOpen]);
+
+    // Escape dismisses the innermost open thing: an inline confirmation
+    // first, then the panel. The Create/Save dialogs are siblings of the
+    // panel and handle their own Escape.
+    const handlePanelKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key !== 'Escape') return;
+        if (pendingDeleteId) { setPendingDeleteId(null); panelRef.current?.focus(); return; }
+        if (hotkeyPickerId) { setHotkeyPickerId(null); panelRef.current?.focus(); return; }
+        onClose();
+    };
 
     // Get hotkey number for a shell
+    // Object.entries yields string keys, so convert: a cast alone left the
+    // value "3", which never === the numeric slot the picker compares against.
     const getHotkeyForShell = (shellId: string): number | undefined => {
-        return Object.entries(hotkeySlots).find(([, id]) => id === shellId)?.[0] as unknown as number;
+        const key = Object.entries(hotkeySlots).find(([, id]) => id === shellId)?.[0];
+        return key === undefined ? undefined : Number(key);
     };
 
     // Handle creating a new shell
@@ -81,11 +106,21 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
         if (newShellId) onClose();
     };
 
-    // Handle deleting a shell
+    // Handle deleting a shell: ask inline first, then delete on confirmation
     const handleDeleteShell = (shellId: string) => {
-        if (confirm('Delete this shell? This action cannot be undone.')) {
-            deleteShell(shellId);
-        }
+        setHotkeyPickerId(null);
+        setPendingDeleteId(shellId);
+    };
+
+    const handleConfirmDelete = (shellId: string) => {
+        deleteShell(shellId);
+        setPendingDeleteId(null);
+        panelRef.current?.focus();
+    };
+
+    const handleCancelDelete = () => {
+        setPendingDeleteId(null);
+        panelRef.current?.focus();
     };
 
     // Handle duplicating a shell
@@ -96,16 +131,21 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
         }
     };
 
-    // Handle assigning hotkey
+    // Handle assigning hotkey: open the 1-9 slot picker, then assign
     const handleAssignHotkey = (shellId: string) => {
-        const slot = prompt('Enter hotkey slot (1-9):');
-        const slotNum = parseInt(slot || '', 10);
+        setPendingDeleteId(null);
+        setHotkeyPickerId(shellId);
+    };
 
-        if (slotNum >= 1 && slotNum <= 9) {
-            assignHotkey(shellId, slotNum);
-        } else {
-            alert('Invalid slot number. Please enter a number between 1-9.');
-        }
+    const handleChooseHotkey = (shellId: string, slot: number) => {
+        assignHotkey(shellId, slot);
+        setHotkeyPickerId(null);
+        panelRef.current?.focus();
+    };
+
+    const handleCancelHotkey = () => {
+        setHotkeyPickerId(null);
+        panelRef.current?.focus();
     };
 
     // Group shells by type
@@ -126,22 +166,29 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
                     />
 
-                    {/* Panel */}
+                    {/* Panel: modal, because the backdrop blocks the canvas and a click on it closes */}
                     <motion.div
+                        ref={panelRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="shell-manager-title"
+                        tabIndex={-1}
+                        onKeyDown={handlePanelKeyDown}
                         initial={{ x: -400, opacity: 0 }}
                         animate={{ x: 0, opacity: 1 }}
                         exit={{ x: -400, opacity: 0 }}
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed left-0 top-0 bottom-0 w-[400px] bg-[var(--citadel-surface)] border-r border-[var(--citadel-border)] z-50 flex flex-col"
+                        className="fixed left-0 top-0 bottom-0 w-[400px] bg-[var(--citadel-surface)] border-r border-[var(--citadel-border)] z-50 flex flex-col focus:outline-none"
                     >
                         {/* Header */}
                         <div className="p-4 border-b border-[var(--citadel-border)]">
                             <div className="flex items-center justify-between mb-3">
-                                <h2 className="text-xl font-semibold text-[var(--citadel-primary)]">
+                                <h2 id="shell-manager-title" className="text-xl font-semibold text-[var(--citadel-primary)]">
                                     Shell Manager
                                 </h2>
                                 <button
                                     onClick={onClose}
+                                    aria-label="Close Shell Manager"
                                     className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                                 >
                                     ✕
@@ -236,6 +283,12 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                     onDuplicate={handleDuplicateShell}
                                     onAssignHotkey={handleAssignHotkey}
                                     getHotkeyForShell={getHotkeyForShell}
+                                    pendingDeleteId={pendingDeleteId}
+                                    onConfirmDelete={handleConfirmDelete}
+                                    onCancelDelete={handleCancelDelete}
+                                    hotkeyPickerId={hotkeyPickerId}
+                                    onChooseHotkey={handleChooseHotkey}
+                                    onCancelHotkey={handleCancelHotkey}
                                 />
                             )}
 
@@ -250,6 +303,12 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                     onDuplicate={handleDuplicateShell}
                                     onAssignHotkey={handleAssignHotkey}
                                     getHotkeyForShell={getHotkeyForShell}
+                                    pendingDeleteId={pendingDeleteId}
+                                    onConfirmDelete={handleConfirmDelete}
+                                    onCancelDelete={handleCancelDelete}
+                                    hotkeyPickerId={hotkeyPickerId}
+                                    onChooseHotkey={handleChooseHotkey}
+                                    onCancelHotkey={handleCancelHotkey}
                                 />
                             )}
 
@@ -264,6 +323,12 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                     onDuplicate={handleDuplicateShell}
                                     onAssignHotkey={handleAssignHotkey}
                                     getHotkeyForShell={getHotkeyForShell}
+                                    pendingDeleteId={pendingDeleteId}
+                                    onConfirmDelete={handleConfirmDelete}
+                                    onCancelDelete={handleCancelDelete}
+                                    hotkeyPickerId={hotkeyPickerId}
+                                    onChooseHotkey={handleChooseHotkey}
+                                    onCancelHotkey={handleCancelHotkey}
                                 />
                             )}
 
@@ -352,7 +417,15 @@ interface ShellSectionProps {
     onDuplicate: (shellId: string) => void;
     onAssignHotkey: (shellId: string) => void;
     getHotkeyForShell: (shellId: string) => number | undefined;
+    pendingDeleteId: string | null;
+    onConfirmDelete: (shellId: string) => void;
+    onCancelDelete: () => void;
+    hotkeyPickerId: string | null;
+    onChooseHotkey: (shellId: string, slot: number) => void;
+    onCancelHotkey: () => void;
 }
+
+const HOTKEY_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 function ShellSection({
     title,
@@ -362,7 +435,13 @@ function ShellSection({
     onDelete,
     onDuplicate,
     onAssignHotkey,
-    getHotkeyForShell
+    getHotkeyForShell,
+    pendingDeleteId,
+    onConfirmDelete,
+    onCancelDelete,
+    hotkeyPickerId,
+    onChooseHotkey,
+    onCancelHotkey
 }: ShellSectionProps) {
     return (
         <div>
@@ -418,33 +497,99 @@ function ShellSection({
                                 <span>{shell.aesthetic}</span>
                             </div>
 
-                            {/* Actions */}
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {/* Actions: shown on hover, and on keyboard focus so Tab users can see them */}
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                                 <button
                                     onClick={() => onLoad(shell.id)}
+                                    aria-label={`Load ${shell.name}`}
                                     className="px-2 py-1 bg-[var(--citadel-primary)] text-[var(--citadel-void)] rounded text-xs hover:opacity-90 transition-opacity"
                                 >
                                     Load
                                 </button>
                                 <button
                                     onClick={() => onDuplicate(shell.id)}
+                                    aria-label={`Duplicate ${shell.name}`}
                                     className="px-2 py-1 bg-[var(--citadel-surface)] text-[var(--text-primary)] rounded text-xs hover:bg-[var(--citadel-border)] transition-colors"
                                 >
                                     Duplicate
                                 </button>
                                 <button
                                     onClick={() => onAssignHotkey(shell.id)}
+                                    aria-label={`Assign hotkey to ${shell.name}`}
+                                    aria-expanded={hotkeyPickerId === shell.id}
                                     className="px-2 py-1 bg-[var(--citadel-surface)] text-[var(--text-primary)] rounded text-xs hover:bg-[var(--citadel-border)] transition-colors"
                                 >
                                     Hotkey
                                 </button>
                                 <button
                                     onClick={() => onDelete(shell.id)}
+                                    aria-label={`Delete ${shell.name}`}
                                     className="px-2 py-1 bg-[var(--truth-red)]/20 text-[var(--truth-red)] rounded text-xs hover:bg-[var(--truth-red)]/30 transition-colors ml-auto"
                                 >
                                     Delete
                                 </button>
                             </div>
+
+                            {/* Inline delete confirmation (replaces window.confirm) */}
+                            {pendingDeleteId === shell.id && (
+                                <div
+                                    role="alertdialog"
+                                    aria-labelledby={`delete-${shell.id}-title`}
+                                    aria-describedby={`delete-${shell.id}-desc`}
+                                    className="mt-2 p-2 border border-[var(--truth-red)]/40 bg-[var(--truth-red)]/10 rounded text-xs"
+                                >
+                                    <div id={`delete-${shell.id}-title`} className="font-medium text-[var(--text-primary)]">
+                                        Delete {shell.name}?
+                                    </div>
+                                    <p id={`delete-${shell.id}-desc`} className="text-[var(--text-muted)] mt-1">
+                                        This action cannot be undone.
+                                    </p>
+                                    <div className="flex gap-1 mt-2">
+                                        <button
+                                            autoFocus
+                                            onClick={onCancelDelete}
+                                            className="px-2 py-1 bg-[var(--citadel-surface)] text-[var(--text-primary)] rounded text-xs hover:bg-[var(--citadel-border)] transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={() => onConfirmDelete(shell.id)}
+                                            className="px-2 py-1 bg-[var(--truth-red)] text-[var(--citadel-void)] rounded text-xs hover:opacity-90 transition-opacity"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Inline hotkey slot picker (replaces window.prompt + alert) */}
+                            {hotkeyPickerId === shell.id && (
+                                <div
+                                    role="group"
+                                    aria-label={`Hotkey slot for ${shell.name}`}
+                                    className="mt-2 flex flex-wrap items-center gap-1 text-xs"
+                                >
+                                    <span className="text-[var(--text-muted)] mr-1">⌘ +</span>
+                                    {HOTKEY_SLOTS.map(slot => (
+                                        <button
+                                            key={slot}
+                                            autoFocus={slot === 1}
+                                            onClick={() => onChooseHotkey(shell.id, slot)}
+                                            aria-label={`Slot ${slot}`}
+                                            aria-pressed={hotkey === slot}
+                                            className="w-7 h-7 bg-[var(--citadel-surface)] text-[var(--text-primary)] rounded text-xs hover:bg-[var(--citadel-border)] transition-colors"
+                                        >
+                                            {slot}
+                                        </button>
+                                    ))}
+                                    <button
+                                        onClick={onCancelHotkey}
+                                        className="px-2 py-1 ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     );
                 })}
@@ -478,6 +623,7 @@ function ShellDialog({
     onCancel,
     confirmText
 }: ShellDialogProps) {
+    const id = useId();
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -485,21 +631,26 @@ function ShellDialog({
             exit={{ opacity: 0, scale: 0.95 }}
             className="fixed inset-0 flex items-center justify-center z-[60]"
             onClick={onCancel}
+            onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
         >
             <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={`${id}-title`}
                 onClick={(e) => e.stopPropagation()}
                 className="bg-[var(--citadel-surface)] border border-[var(--citadel-border)] rounded-lg p-6 w-[400px] shadow-2xl"
             >
-                <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">
+                <h3 id={`${id}-title`} className="text-lg font-semibold text-[var(--text-primary)] mb-4">
                     {title}
                 </h3>
 
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm text-[var(--text-muted)] mb-1">
+                        <label htmlFor={`${id}-name`} className="block text-sm text-[var(--text-muted)] mb-1">
                             Shell Name
                         </label>
                         <input
+                            id={`${id}-name`}
                             type="text"
                             value={nameValue}
                             onChange={(e) => onNameChange(e.target.value)}
@@ -510,10 +661,11 @@ function ShellDialog({
                     </div>
 
                     <div>
-                        <label className="block text-sm text-[var(--text-muted)] mb-1">
+                        <label htmlFor={`${id}-description`} className="block text-sm text-[var(--text-muted)] mb-1">
                             Description (optional)
                         </label>
                         <textarea
+                            id={`${id}-description`}
                             value={descriptionValue}
                             onChange={(e) => onDescriptionChange(e.target.value)}
                             placeholder="What is this shell for?"

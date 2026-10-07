@@ -2,8 +2,11 @@
 
 A durable server-side record of every LLM execution OmniOS performed.
 
-Two tables in Postgres, joined into a DAG of reasoning so a cascade's full
-lineage can be walked. Nothing else moves. The canvas is still local-first.
+Two tables in Postgres, `inference_run` and `inference_source`, joined into a
+DAG of reasoning so a cascade's full lineage can be walked. One more table,
+`capability_execution` (`db/migrations/004_capability_execution.sql`), holds
+the capability broker's execution rows: a manifest digest, an effect and a
+status, not a prompt. Nothing else moves. The canvas is still local-first.
 In local mode Postgres is optional — without `DATABASE_URL`, inference still
 runs and the ledger is a no-op. Hosted mode requires a durable ledger before
 provider dispatch, so missing or failed admission fails closed.

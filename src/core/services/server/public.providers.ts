@@ -10,6 +10,7 @@
 
 import 'server-only';
 import { getApiProvider } from '@/core/schemas/api.schema';
+import { readBoundedJson, RequestBodyTooLarge } from './boundedJson';
 
 export const PUBLIC_PROXY_IDS = [
     'usgs',
@@ -83,10 +84,49 @@ function headersFor(id: PublicProviderId): Record<string, string> {
     };
 }
 
+/**
+ * One deadline for connect, headers and body. 8 s matches /api/jev-persona:
+ * these are single small GETs and a canvas block is waiting on them, so the
+ * broker's 15 s (which covers a whole capability run) would be too generous.
+ */
+export const PUBLIC_UPSTREAM_DEADLINE_MS = 8000;
+/** Same cap the capability broker puts on an upstream body. */
+export const PUBLIC_MAX_RESPONSE_BYTES = 1_000_000;
+
+export type PublicFailureCode =
+    | 'upstream_timeout'
+    | 'upstream_redirect'
+    | 'upstream_status'
+    | 'upstream_too_large'
+    | 'upstream_shape'
+    | 'upstream_unreachable';
+
+export interface PublicFailure {
+    error: { code: PublicFailureCode; message: string };
+}
+
+type Outcome = { status: number; body: unknown };
+
+function failure(id: string, code: PublicFailureCode, message: string, detail: Record<string, unknown> = {}): Outcome {
+    // Status, code and keys only. The upstream body never reaches the log.
+    console.warn('[public proxy] upstream failure', { provider: id, code, ...detail });
+    const body: PublicFailure = { error: { code, message: `${id}: ${message}` } };
+    return { status: 502, body };
+}
+
+function redirectHost(res: Response): string {
+    try {
+        return new URL(res.headers.get('location') || '').host || '(none)';
+    } catch {
+        return '(unparseable)';
+    }
+}
+
 export async function fetchPublicProvider(
     id: string,
-    params: Params
-): Promise<{ status: number; body: unknown }> {
+    params: Params,
+    callerSignal?: AbortSignal
+): Promise<Outcome> {
     if (!isPublicProvider(id)) {
         return {
             status: 400,
@@ -99,14 +139,44 @@ export async function fetchPublicProvider(
         return { status: 400, body: { error: `No public builder for ${id}` } };
     }
 
+    const deadline = AbortSignal.timeout(PUBLIC_UPSTREAM_DEADLINE_MS);
+    const signal = callerSignal ? AbortSignal.any([callerSignal, deadline]) : deadline;
+
+    let res: Response;
     try {
-        const res = await fetch(url, { headers: headersFor(id), cache: 'no-store', redirect: 'follow' });
-        const body = await res.json().catch(() => null);
-        if (body === null) {
-            return { status: 502, body: { error: `${id} returned a non-JSON response` } };
+        // 'manual': a relay that follows redirects can be pointed at whatever
+        // the allowlisted host redirects to. A 3xx is reported, not followed.
+        res = await fetch(url, { headers: headersFor(id), cache: 'no-store', redirect: 'manual', signal });
+    } catch (error) {
+        const name = error instanceof Error ? error.name : 'Unknown';
+        if (name === 'TimeoutError' || name === 'AbortError') {
+            return failure(id, 'upstream_timeout', `no response within ${PUBLIC_UPSTREAM_DEADLINE_MS / 1000} s`);
         }
+        return failure(id, 'upstream_unreachable', 'request failed', { name });
+    }
+
+    if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+        return failure(id, 'upstream_redirect', 'upstream redirected; redirects are not followed', {
+            status: res.status,
+            location: redirectHost(res)
+        });
+    }
+    if (!res.ok) {
+        return failure(id, 'upstream_status', `upstream returned ${res.status}`, { status: res.status });
+    }
+
+    try {
+        const body = await readBoundedJson(res, signal, PUBLIC_MAX_RESPONSE_BYTES);
         return { status: 200, body };
-    } catch {
-        return { status: 502, body: { error: `${id} request failed` } };
+    } catch (error) {
+        if (error instanceof RequestBodyTooLarge) {
+            return failure(id, 'upstream_too_large', `response exceeded ${PUBLIC_MAX_RESPONSE_BYTES} bytes`);
+        }
+        const name = error instanceof Error ? error.name : 'Unknown';
+        if (name === 'TimeoutError' || name === 'AbortError') {
+            return failure(id, 'upstream_timeout', `body not complete within ${PUBLIC_UPSTREAM_DEADLINE_MS / 1000} s`);
+        }
+        // SyntaxError (and only its name): the message would quote the body.
+        return failure(id, 'upstream_shape', 'non-JSON response', { name });
     }
 }
