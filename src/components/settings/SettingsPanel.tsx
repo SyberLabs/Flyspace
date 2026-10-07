@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useSettingsStore } from '@/core/stores';
 import { testPolymarketConnection } from '@/core/services/api.service';
-import { exportVault, importVault, isVaultExport } from '@/core/vault';
+import { exportVault, importVault, isVaultExport, prepareVaultImport } from '@/core/vault';
 import { getKeylessApis } from '@/core/schemas/api.schema';
 import { cn } from '@/lib/utils';
 
@@ -62,9 +62,20 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 setTimeout(() => setDataResult(null), 5000);
                 return;
             }
-            if (!confirm('Importing replaces your current data with the export. Continue?')) return;
-            const restored = await importVault(parsed);
-            setDataResult({ success: true, message: `Restored ${restored} stores — reloading…` });
+            // An imported file cannot carry approval: its write and destructive
+            // capabilities land pending. Say so before the import, where the
+            // user has time to read it, and again in the result.
+            const plan = prepareVaultImport(parsed);
+            const reapprove = plan.needsApproval.length === 0
+                ? ''
+                : ` ${plan.needsApproval.length} write/destructive ${plan.needsApproval.length === 1 ? 'capability' : 'capabilities'}`
+                + ` (${plan.needsApproval.map(c => c.title).join(', ')}) will need approval again before running.`;
+            if (!confirm(`Importing replaces your current data with the export.${reapprove} Continue?`)) return;
+            const report = await importVault(parsed);
+            const pending = report.needsApproval.length === 0
+                ? ''
+                : ` ${report.needsApproval.length} need approval again: ${report.needsApproval.map(c => c.title).join(', ')}.`;
+            setDataResult({ success: true, message: `Restored ${report.restored} stores.${pending} Reloading…` });
             setTimeout(() => window.location.reload(), 800);
         } catch {
             setDataResult({ success: false, message: 'Import failed — file unreadable.' });

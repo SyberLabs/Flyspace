@@ -217,6 +217,18 @@ export function approvalForEffect(effect: CapabilityEffect): CapabilityApproval 
 }
 
 /**
+ * The one rule for a manifest that arrives from outside this store: a write
+ * or destructive effect is `pending` whatever approval it claimed. Read and
+ * compute are returned as they are. `installProposal` and the vault import
+ * both apply it; `approveCapability` is the only way out of `pending`.
+ */
+export function sideEffectPending<T extends Pick<CapabilityManifest, 'effect' | 'approval'>>(manifest: T): T {
+    if (manifest.effect !== 'write' && manifest.effect !== 'destructive') return manifest;
+    if (manifest.approval === 'pending') return manifest;
+    return { ...manifest, approval: 'pending' };
+}
+
+/**
  * Method is the floor. An imported spec may raise the effect
  * (GET marked destructive needs approval) and may not lower it
  * (POST marked compute does not become auto).

@@ -67,7 +67,12 @@ does not place blocks or wires. The OpenAPI install panel still calls
 proposal is stored as `pending` even if it arrived marked `approved`.
 `approveCapability` is the only way into `approved`. `restoreSnapshot` may
 keep an approval the user already granted, because that blob came from this
-store, and it is revalidated first.
+store, and it is revalidated first. A vault import is not that blob: a file
+can have come from anywhere, so `prepareVaultImport` (`importAdmission.ts`)
+runs every write and destructive entry of the imported `omni-capabilities`
+blob through the same `sideEffectPending` rule as `installProposal` before
+it is written, the import reports which capabilities need approval again,
+and read and compute entries pass unchanged.
 
 ## Production boundaries
 
