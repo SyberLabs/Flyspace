@@ -199,8 +199,8 @@ describe('CapabilityInstall with search', () => {
         await search('weather');
         fireEvent.click(screen.getByRole('button', { name: 'Use Visual Crossing Weather API' }));
 
-        expect(await screen.findByLabelText('Weather API (GET /timeline/{location})')).toBeTruthy();
-        expect(screen.getByLabelText('Weather API (GET /forecast)')).toBeTruthy();
+        expect(await screen.findByLabelText('Weather API · timeline/{location}')).toBeTruthy();
+        expect(screen.getByLabelText('Weather API · forecast')).toBeTruthy();
         expect(screen.getByText('GET /timeline/{location}')).toBeTruthy();
     });
 
