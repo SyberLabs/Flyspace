@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isOwnOrigin } from '@/core/services/server/sameOrigin';
 
 export const runtime = 'nodejs';
 
@@ -60,8 +61,7 @@ export async function POST(request: NextRequest) {
         return json(503, { error: 'Persona suggestion is unavailable.' });
     }
 
-    const origin = request.headers.get('origin');
-    if (!origin || origin !== new URL(request.url).origin) {
+    if (!isOwnOrigin(request.headers.get('origin'), request.url)) {
         return json(403, { error: 'Request must come from this site.' });
     }
     if (request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
