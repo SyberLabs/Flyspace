@@ -27,4 +27,12 @@ describe('testPolymarketConnection', () => {
         await expect(testPolymarketConnection()).resolves.toBe(true);
         expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toBe('/api/polymarket');
     });
+
+    it('reports an upstream outage as unhealthy', async () => {
+        vi.mocked(globalThis.fetch).mockResolvedValue({
+            json: async () => ({ success: false, error: 'upstream_status' })
+        } as Response);
+
+        await expect(testPolymarketConnection()).resolves.toBe(false);
+    });
 });
