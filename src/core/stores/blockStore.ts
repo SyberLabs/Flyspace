@@ -87,7 +87,7 @@ interface BlockState {
 function capabilityHeight(schema: OmniBlockSchema): number {
     const inbound = schema.ports?.find(port => port.direction === 'input')?.schema;
     const inputs = inbound?.properties ? Object.keys(inbound.properties).length : 0;
-    return Math.min(560, Math.max(280, 220 + inputs * 52));
+    return Math.min(560, Math.max(280, 220 + inputs * 64)); // a field, its label, and a line of help
 }
 
 export const useBlockStore = create<BlockState>()(

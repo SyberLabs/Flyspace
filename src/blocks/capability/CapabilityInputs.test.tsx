@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { CapabilityBlockView } from './CapabilityBlock';
-import { argumentsFrom, coerceInput, missingInputs } from './CapabilityInputs';
+import { argumentsFrom, bodyFields, CapabilityInputs, coerceInput, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { compileOpenApi } from '@/core/capabilities/openapi';
 import { clearCapabilities, installProposal } from '@/core/capabilities/registry';
 import type { CapabilityInput } from '@/core/capabilities/manifest';
@@ -147,6 +147,76 @@ describe('capability block layout', () => {
         const instanceId = placeWeatherBlock();
         const block = useBlockStore.getState().getBlock(instanceId)!;
         expect(block.dimensions.height).toBeGreaterThanOrEqual(220 + 3 * 52);
+    });
+});
+
+describe('fields say what the spec says', () => {
+    const city: CapabilityInput = { name: 'city', in: 'query', required: true, example: 'Seattle', schema: { kind: 'string', description: 'City for weather information' } };
+    const units: CapabilityInput = { name: 'units', in: 'query', required: false, default: 'us', schema: { kind: 'string', enum: ['metric', 'us'] } };
+    const days: CapabilityInput = { name: 'days', in: 'query', required: false, schema: { kind: 'integer', description: 'How many days ahead' } };
+
+    it('shows the description under the field, linked to it, and the example as the placeholder', () => {
+        render(<CapabilityInputs inputs={[city]} params={{}} wired={{}} onChange={() => {}} />);
+        const field = screen.getByLabelText(/^City/) as HTMLInputElement;
+        expect(field.placeholder).toBe('e.g. Seattle');
+        const help = document.getElementById(field.getAttribute('aria-describedby')!)!;
+        expect(help.textContent).toBe('City for weather information');
+    });
+
+    it('offers the default in a select instead of a bare "Choose"', () => {
+        render(<CapabilityInputs inputs={[city, units]} params={{}} wired={{}} onChange={() => {}} />);
+        expect(screen.getByRole('option', { name: 'Default (us)' })).toBeTruthy();
+    });
+
+    it('folds optional inputs away behind a count, and opens them once one has a value', () => {
+        const { rerender } = render(<CapabilityInputs inputs={[city, units, days]} params={{}} wired={{}} onChange={() => {}} />);
+        const fold = screen.getByText('Optional · 2').closest('details')!;
+        expect(fold.open).toBe(false);
+        rerender(<CapabilityInputs inputs={[city, units, days]} params={{ days: '3' }} wired={{}} onChange={() => {}} />);
+        expect(screen.getByText('Optional · 2').closest('details')!.open).toBe(true);
+    });
+
+    it('does not fold when nothing is required', () => {
+        render(<CapabilityInputs inputs={[units, days]} params={{}} wired={{}} onChange={() => {}} />);
+        expect(screen.getByText('Optional · 2').closest('details')!.open).toBe(true);
+    });
+});
+
+describe('a JSON body laid out as fields', () => {
+    const body: CapabilityInput = {
+        name: 'body', in: 'body', required: true,
+        schema: {
+            kind: 'object', required: ['text'],
+            properties: {
+                text: { kind: 'string', description: 'What to analyse' },
+                language: { kind: 'string', enum: ['en', 'fr'] },
+                limit: { kind: 'integer' }
+            }
+        }
+    };
+
+    it('gives each plain property a field, and keeps a nested body as one JSON box', () => {
+        expect(bodyFields(body)?.map(field => `${field.name}${field.required ? '*' : ''}`)).toEqual(['text*', 'language', 'limit']);
+        const nested: CapabilityInput = { ...body, schema: { kind: 'object', properties: { filter: { kind: 'object' } } } };
+        expect(bodyFields(nested)).toBeNull();
+    });
+
+    it('stores a draft per property, and sends them as one typed object', () => {
+        const onChange = vi.fn();
+        render(<CapabilityInputs inputs={[body]} params={{ body: { text: 'hi' } }} wired={{}} onChange={onChange} />);
+        fireEvent.change(screen.getByLabelText(/^Limit/), { target: { value: '5' } });
+        expect(onChange).toHaveBeenCalledWith('body', { text: 'hi', limit: '5' });
+        expect(argumentsFrom([body], { body: { text: 'hi', limit: '5', language: '' } })).toEqual({ body: { text: 'hi', limit: 5 } });
+    });
+
+    it('names the missing properties, not "body"', () => {
+        expect(missingInputs([body], {}, {}).map(input => input.name)).toEqual(['text']);
+        expect(missingInputs([body], { body: { text: 'hi' } }, {})).toEqual([]);
+        expect(missingInputs([{ ...body, required: false }], {}, {})).toEqual([]);
+    });
+
+    it('summarises the properties that were sent', () => {
+        expect(inputSummaryOf([body], { body: { text: 'hi', limit: '5' } })).toBe('text hi · limit 5');
     });
 });
 

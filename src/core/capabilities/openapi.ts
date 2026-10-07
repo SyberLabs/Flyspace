@@ -2,12 +2,14 @@
 // This compiler does not install anything. A manifest becomes callable only
 // after validateManifest + installProposal.
 
+import { looksLikeKey } from './credentialName';
 import { canonicalCapabilityId, credentialSlot } from './identity';
 import { fromJsonSchema } from './jsonSchema';
 import {
     approvalForEffect,
     effectAllowedForMethod,
     effectForMethod,
+    isInputHint,
     isRecord,
     sealManifest,
     validateManifest,
@@ -325,11 +327,15 @@ function collectInputs(
         if ((location === 'query' || location === 'header') && (converted.schema.kind === 'object' || converted.schema.kind === 'array')) {
             return { error: `${String(parameter.name)}: compound ${location} parameters are outside the supported subset` };
         }
+        const name = String(parameter.name);
+        const schema = withParameterDescription(converted.schema, parameter.description);
+        const hints = looksLikeKey(name) ? {} : inputHints(parameter, deref(spec, parameter.schema));
         inputs.push({
-            name: String(parameter.name),
+            name,
             in: location,
             required: location === 'path' ? true : parameter.required === true,
-            schema: converted.schema
+            schema,
+            ...hints
         });
     }
 
@@ -352,6 +358,28 @@ function collectInputs(
 
     inputs.sort((a, b) => a.in.localeCompare(b.in) || a.name.localeCompare(b.name));
     return { inputs };
+}
+
+/**
+ * Most specs describe a parameter on the parameter object, not its schema.
+ * Keep that text with the input, so a field can say what it is for.
+ */
+function withParameterDescription(schema: ValueType, description: unknown): ValueType {
+    if (schema.description || typeof description !== 'string' || description.trim() === '') return schema;
+    return { ...schema, description: description.trim().slice(0, 500) };
+}
+
+/** A primitive example and default from the spec, where it gives them. */
+function inputHints(parameter: Record<string, unknown>, schema: unknown): Pick<CapabilityInput, 'example' | 'default'> {
+    const fromSchema = isRecord(schema) ? schema : {};
+    const examples = isRecord(parameter.examples) ? Object.values(parameter.examples) : [];
+    const firstExample = examples.map(entry => (isRecord(entry) ? entry.value : undefined)).find(value => value !== undefined);
+    const example = [parameter.example, fromSchema.example, firstExample].find(isInputHint);
+    const fallback = isInputHint(fromSchema.default) ? fromSchema.default : undefined;
+    return {
+        ...(example !== undefined ? { example } : {}),
+        ...(fallback !== undefined ? { default: fallback } : {})
+    };
 }
 
 function collectOutput(
