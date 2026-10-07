@@ -4,15 +4,25 @@
 
 import { NextResponse } from 'next/server';
 
+const UPSTREAM_URL = 'https://gamma-api.polymarket.com/markets?limit=50&closed=false&order=volumeNum&ascending=false';
+const UPSTREAM_DEADLINE_MS = 8000;
+
+type FailureCode = 'upstream_status' | 'upstream_shape' | 'upstream_timeout' | 'upstream_unreachable';
+
+function failure(error: FailureCode) {
+    return NextResponse.json({ success: false, error }, { status: 502 });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function marketsFromRaw(raw: unknown): Record<string, unknown>[] {
+/** Gamma returns a bare array; older shapes wrap it in `data` or `markets`. */
+function marketsFromRaw(raw: unknown): Record<string, unknown>[] | null {
     if (Array.isArray(raw)) return raw.filter(isRecord);
     if (isRecord(raw) && Array.isArray(raw.data)) return raw.data.filter(isRecord);
     if (isRecord(raw) && Array.isArray(raw.markets)) return raw.markets.filter(isRecord);
-    return [];
+    return null;
 }
 
 interface MarketOutcome {
@@ -50,37 +60,36 @@ function asString(value: unknown, fallback: string): string {
 /**
  * Polymarket API endpoint
  * GET /api/polymarket
+ *
+ * Upstream failure is reported as 502 `{ success: false, error }` so the
+ * settings probe and the block see the outage. Logs carry the upstream
+ * status and top-level keys, never the body.
  */
 export async function GET() {
     try {
-        // Try Polymarket's Gamma API - sorted by volume for most active markets
-        const response = await fetch('https://gamma-api.polymarket.com/markets?limit=50&closed=false&order=volumeNum&ascending=false', {
+        // Polymarket's Gamma API, sorted by volume for the most active markets
+        const response = await fetch(UPSTREAM_URL, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
-            }
+            },
+            signal: AbortSignal.timeout(UPSTREAM_DEADLINE_MS)
         });
 
         if (!response.ok) {
-            // If Gamma API fails, return empty array (client will use mock data)
-            console.log('[Polymarket API] API returned', response.status, '- client will use mock data');
-            return NextResponse.json({
-                success: true,
-                markets: [],
-                timestamp: Date.now()
-            });
+            console.warn('[Polymarket API] upstream returned', response.status);
+            return failure('upstream_status');
         }
 
         const rawData: unknown = await response.json();
         const marketsArray = marketsFromRaw(rawData);
 
-        if (
-            marketsArray.length === 0
-            && rawData != null
-            && !Array.isArray(rawData)
-            && !(isRecord(rawData) && (Array.isArray(rawData.data) || Array.isArray(rawData.markets)))
-        ) {
-            console.warn('Unexpected Polymarket API response structure:', rawData);
+        if (marketsArray === null) {
+            console.warn('[Polymarket API] unexpected upstream shape', {
+                status: response.status,
+                keys: isRecord(rawData) ? Object.keys(rawData) : typeof rawData
+            });
+            return failure('upstream_shape');
         }
 
         const markets = marketsArray.slice(0, 50).map((market) => {
@@ -136,12 +145,10 @@ export async function GET() {
         });
 
     } catch (error) {
-        // Log but don't fail - return empty array so client uses mock data
-        console.log('[Polymarket API] Fetch failed, client will use mock data:', error instanceof Error ? error.message : 'Unknown error');
-        return NextResponse.json({
-            success: true,
-            markets: [],
-            timestamp: Date.now()
-        });
+        const name = error instanceof Error ? error.name : 'Unknown';
+        const timedOut = name === 'TimeoutError' || name === 'AbortError';
+        // Only the error name: a JSON SyntaxError message quotes the body.
+        console.warn('[Polymarket API] fetch failed:', name);
+        return failure(timedOut ? 'upstream_timeout' : 'upstream_unreachable');
     }
 }
