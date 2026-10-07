@@ -6,7 +6,7 @@
 import { canonicalize, sha256 } from './hash';
 import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
 import { destinationUrlErrors } from './egress';
-import { validateValueType, type ValueType } from './valueType';
+import { validateValueType, type Primitive, type ValueType } from './valueType';
 
 export const CAPABILITY_MANIFEST_VERSION = 1 as const;
 
@@ -48,6 +48,10 @@ export interface CapabilityInput {
     in: InputLocation;
     required: boolean;
     schema: ValueType;
+    /** A sample value from the spec, shown as a placeholder. Never sent on its own. */
+    example?: Primitive;
+    /** The value the API uses when this is left out, as the spec states it. Shown, not sent. */
+    default?: Primitive;
 }
 
 export interface CapabilityOutput {
@@ -619,6 +623,11 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
                 errors.push(`input ${String(entry.name)} location is invalid`);
             }
             if (typeof entry.required !== 'boolean') errors.push(`input ${String(entry.name)} required must be boolean`);
+            for (const hint of ['example', 'default'] as const) {
+                if (entry[hint] !== undefined && !isInputHint(entry[hint])) {
+                    errors.push(`input ${String(entry.name)} ${hint} must be a short primitive`);
+                }
+            }
             errors.push(...validateValueType(entry.schema, `inputs.${String(entry.name)}.schema`));
             if (entry.in === 'body') bodies += 1;
             if (transportKind === 'http' && entry.in === 'argument') {
@@ -754,8 +763,20 @@ export function canonicalInput(entry: CapabilityInput): CapabilityInput {
         name: entry.name,
         in: entry.in,
         required: entry.required,
-        schema: entry.schema
+        schema: entry.schema,
+        ...(entry.example !== undefined ? { example: entry.example } : {}),
+        ...(entry.default !== undefined ? { default: entry.default } : {})
     };
+}
+
+/** The longest example or default kept from a spec. Longer ones are dropped, not cut. */
+export const MAX_INPUT_HINT = 200;
+
+/** An example or default a field can show: a short string, a finite number, or a boolean. */
+export function isInputHint(value: unknown): value is Primitive {
+    if (typeof value === 'string') return value.length <= MAX_INPUT_HINT;
+    if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0);
+    return typeof value === 'boolean';
 }
 
 function canonicalProvenance(provenance: CapabilityProvenance): CapabilityProvenance {

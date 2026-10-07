@@ -12,7 +12,7 @@ import { triggerIdempotencyKey } from '@/core/capabilities/triggers';
 import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
 import { EffectPill } from '@/components/apis/ApiReview';
-import { argumentsFrom, CapabilityInputs, looksLikeKey, missingInputs } from './CapabilityInputs';
+import { argumentsFrom, CapabilityInputs, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
 
 function readItems(data: unknown): OmniItem[] {
@@ -145,15 +145,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const destination = manifest?.transport.kind === 'http' ? new URL(manifest.transport.baseUrl).host : null;
     const answered = response.present || items.length > 0;
     const showInputs = inputsPinned ?? (!answered || !!block?.error || missing.length > 0);
-    const inputSummary = manifest
-        ? manifest.inputs.flatMap(input => {
-            const value = params[input.name];
-            const empty = value === undefined || value === '';
-            if (empty && !input.required) return []; // an unset optional input is not worth a slot
-            const shown = empty ? '—' : looksLikeKey(input.name) ? '••••' : String(value);
-            return [`${input.name} ${shown}`];
-        }).join(' · ')
-        : '';
+    const inputSummary = manifest ? inputSummaryOf(manifest.inputs, params) : '';
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-2 p-3 text-sm text-[var(--text-primary)]">
