@@ -9,6 +9,7 @@ import { canonicalize, sha256 } from '@/core/capabilities/hash';
 import { resolveHttpPath } from '@/core/capabilities/httpTarget';
 import { redact } from '@/core/capabilities/redact';
 import { validateManifest, type CapabilityManifest } from '@/core/capabilities/manifest';
+import { MAX_SECRET_BYTES } from '@/core/capabilities/secrets';
 import { isBlockedDestination } from './egressBlockList';
 import type { PinnedRequest, PinnedResponse } from './pinnedFetch';
 import type { ServerExecution, ServerLedger } from './capability.ledger';
@@ -258,6 +259,11 @@ function parseBody(body: unknown): {
 } | { error: string } {
     if (!body || typeof body !== 'object') return { error: 'broker body must be an object' };
     const record = body as Record<string, unknown>;
+    // Checked before the manifest: a credential is one header value, and the
+    // 256 KiB body limit alone would let one fill the whole request.
+    if (typeof record.secret === 'string' && Buffer.byteLength(record.secret, 'utf8') > MAX_SECRET_BYTES) {
+        return { error: `broker secret exceeds ${MAX_SECRET_BYTES} bytes` };
+    }
     const validated = validateManifest(record.manifest);
     if (!validated.ok || !validated.manifest) return { error: validated.errors.join('; ') };
     if (!record.input || typeof record.input !== 'object' || Array.isArray(record.input)) {

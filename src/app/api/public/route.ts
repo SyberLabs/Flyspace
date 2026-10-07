@@ -2,8 +2,11 @@
 // KEYLESS PUBLIC PROXY
 // GET /api/public?provider=<id>&...params
 //
-// Only the allowlisted demo APIs. No env vars are read. The upstream body
-// is returned verbatim so client adapters stay unchanged.
+// Only the allowlisted demo APIs. No env vars are read. A 2xx JSON upstream
+// body is returned verbatim so client adapters stay unchanged. The upstream
+// hop is bounded (8 s deadline, 1 MB body, redirects not followed) and any
+// upstream failure is a 502 `{ error: { code, message } }`, never a 200 with
+// empty data. See public.providers.ts.
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    const { status, body } = await fetchPublicProvider(provider, collectParams(request));
+    const { status, body } = await fetchPublicProvider(provider, collectParams(request), request.signal);
     return NextResponse.json(body, {
         status,
         headers: { 'cache-control': 'no-store' }

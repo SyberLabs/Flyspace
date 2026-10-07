@@ -100,8 +100,10 @@ only party that held the key, called the provider and timed it. Leave
 > would hand every visitor your API credits *and* the prompt and answer
 > excerpts in the ledger. The decision on record is that a deployed OmniOS
 > goes on a private network (Tailscale / WireGuard / IP allowlist), not a
-> public one. The dev and start scripts bind `127.0.0.1`. See
-> `DEPLOYMENT.md` for the checklist that has to clear before that changes.
+> public one. The dev and start scripts bind `127.0.0.1`. The one exception
+> is the limited public preview at omni.syberlabs.io, keyless and run with
+> `OMNI_PUBLIC_DEMO=1`; `DEPLOYMENT.md` records it, and the checklist that
+> has to clear before anything more is reachable.
 
 ## Development
 

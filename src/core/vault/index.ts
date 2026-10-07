@@ -3,5 +3,5 @@
 // ============================================
 
 export { vaultStorage } from './vaultStorage';
-export { exportVault, importVault, isVaultExport } from './vaultExport';
-export type { OmniVaultExport } from './vaultExport';
+export { exportVault, importVault, isVaultExport, prepareVaultImport } from './vaultExport';
+export type { OmniVaultExport, VaultImportPlan, VaultImportReport } from './vaultExport';

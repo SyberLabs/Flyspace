@@ -1,5 +1,6 @@
-// Read a JSON request body without trusting its size or its pace. Stops at
-// maxBytes and stops when the signal aborts, then cancels the stream.
+// Read a JSON body (a request's, or an upstream response's) without trusting
+// its size or its pace. Stops at maxBytes and stops when the signal aborts,
+// then cancels the stream.
 
 export class RequestBodyTooLarge extends Error {
     constructor() {
@@ -8,7 +9,7 @@ export class RequestBodyTooLarge extends Error {
     }
 }
 
-export async function readBoundedJson(request: Request, signal: AbortSignal, maxBytes: number): Promise<unknown> {
+export async function readBoundedJson(request: Pick<Body, 'body'>, signal: AbortSignal, maxBytes: number): Promise<unknown> {
     if (!request.body) throw new Error('empty request body');
     const reader = request.body.getReader();
     const chunks: Uint8Array[] = [];

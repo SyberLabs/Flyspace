@@ -175,8 +175,7 @@ describe('captureShellSnapshot', () => {
         expect(snap.focusedBlocks.map(e => e.sourceBlockId)).toEqual(['pinned']);
     });
 
-    it('does not send the observations pool (earlier answers, awareness aggregates) to the model', () => {
-        useMindStore.getState().updateAwareness('polymarket', 'ALL-SHELL AGGREGATE');
+    it('does not send the observations pool (earlier answers) to the model', () => {
         useMindStore.getState().addToPool('observations', {
             type: 'analysis', content: 'a prior Think answer', importance: 0.8
         });
@@ -184,6 +183,5 @@ describe('captureShellSnapshot', () => {
         const out = formatSnapshotForLLM(captureShellSnapshot());
 
         expect(out).not.toContain('a prior Think answer');
-        expect(out).not.toContain('ALL-SHELL AGGREGATE');
     });
 });

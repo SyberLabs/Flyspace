@@ -121,18 +121,6 @@ ${persona.systemPrompt}
 }
 
 // ============================================
-// TYPES
-// ============================================
-
-export interface BlockDataSummary {
-    type: string;
-    title: string;
-    summary: string;
-    keyMetrics?: string[];
-    timestamp?: number;
-}
-
-// ============================================
 // INSIGHT EXTRACTION
 // ============================================
 
