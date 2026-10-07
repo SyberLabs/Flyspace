@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { evaluateWireAdmission, portsCompatible } from './ports';
-import { InteractionEngine, type CanvasMutator } from './engine';
+import { InteractionEngine, type CanvasMutator, type RemovedBlock } from './engine';
 import { resolveReferents } from './referent';
 import { parseSpeech } from './speech';
 import { point } from './coordinates';
@@ -16,10 +16,7 @@ function block(id: string, ports: PortSchema[], shellId = 'root'): BlockInstance
             block_id: id,
             display_name: id,
             category: 'workspace',
-            data_type: 'custom',
-            refresh_rate: 'manual',
             semantic_tags: [],
-            wiring_logic: 'none',
             ports
         },
         status: 'disconnected',
@@ -100,9 +97,9 @@ class MemoryCanvas implements CanvasMutator {
     remove(id: string) {
         const item = this.getInstance(id);
         this.blocks = this.blocks.filter(entry => entry.instance_id !== id);
-        return item;
+        return item ? { block: item, wires: [] } : undefined;
     }
-    restore(entry: BlockInstance) { this.blocks.push(entry); }
+    restore(removed: RemovedBlock) { this.blocks.push(removed.block); }
     connect(sourceId: string, targetId: string) {
         const wireId = `wire_${this.wires.length + 1}`;
         this.wires.push({ id: wireId, source: sourceId, target: targetId });
