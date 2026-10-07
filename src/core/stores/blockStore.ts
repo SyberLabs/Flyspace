@@ -12,6 +12,7 @@ import {
     OmniBlockSchema
 } from '../schemas/block.schema';
 import { vaultStorage } from '../vault';
+import { newId } from '../id';
 import { admitField, admitRecords, type Shape } from '../vault/hydration';
 import { useWireStore } from './wireStore';
 
@@ -106,7 +107,7 @@ export const useBlockStore = create<BlockState>()(
             activeShellId: 'root',
 
             addBlock: (schema, position, shellId) => {
-                const instanceId = `${schema.block_id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const instanceId = `${schema.block_id}_${newId()}`;
 
                 // Persona blocks need more height for chat interface
                 const isPersonaBlock = schema.block_id.startsWith('persona_');

@@ -292,13 +292,38 @@ export async function runComplete(req: ServerLLMRequest): Promise<LLMResponse> {
 }
 
 /**
+ * Whether `runStream` passes this provider's bytes through as they arrive.
+ * Only Ollama streams today. The other adapters complete the whole answer
+ * and hand it over as one chunk, so a ledger row for them must not say
+ * `streamed: true` (INFERENCE_LEDGER.md, "What `streamed` means").
+ *
+ * A capability statement for the ledger only. It never selects a code path:
+ * `runStream` dispatches on the provider itself, so marking a provider
+ * streamable here cannot send it to another provider's endpoint.
+ */
+export function providerStreams(provider: ServerLLMProvider): boolean {
+    return provider === 'local';
+}
+
+/**
  * Streaming is currently supported for local (Ollama). Cloud providers fall
- * back to a single-chunk stream of the completed response.
+ * back to a single-chunk stream of the completed response; see
+ * `providerStreams`.
  */
 export async function runStream(req: ServerLLMRequest): Promise<ReadableStream<Uint8Array>> {
-    if (req.provider === 'local') {
-        return ollamaStream(req);
+    switch (req.provider) {
+        case 'local':
+            return ollamaStream(req);
+        case 'anthropic':
+        case 'google':
+            return bufferedStream(req);
+        default:
+            throw new Error(`Unsupported provider: ${req.provider}`);
     }
+}
+
+/** The completed answer as a one-chunk stream, for adapters with no streaming path. */
+async function bufferedStream(req: ServerLLMRequest): Promise<ReadableStream<Uint8Array>> {
     const result = await runComplete(req);
     const encoder = new TextEncoder();
     return new ReadableStream({

@@ -7,9 +7,10 @@
 
 import { useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Copy, Sparkles, Check } from 'lucide-react';
+import { X, Copy, Sparkles, Check, Eye } from 'lucide-react';
 import { useState } from 'react';
 import { useBlockStore } from '@/core/stores';
+import { spatialSession } from '@/core/interaction/session';
 import { cn } from '@/lib/utils';
 import './ThinkResultModal.css';
 
@@ -17,6 +18,8 @@ interface ThinkResultModalProps {
     isOpen: boolean;
     onClose: () => void;
     response: string;
+    /** False when `response` is an error message, which must not be kept. */
+    ok: boolean;
     personaName?: string;
     personaEmoji?: string;
 }
@@ -25,6 +28,7 @@ export function ThinkResultModal({
     isOpen,
     onClose,
     response,
+    ok,
     personaName = 'The Mind',
     personaEmoji = '🧠'
 }: ThinkResultModalProps) {
@@ -71,6 +75,20 @@ export function ThinkResultModal({
 
         onClose();
     }, [response, personaName, addBlock, onClose]);
+
+    // The only way a Think reply enters the observations pool. The Mind engine
+    // returns the reply and writes nothing; the pool is persisted and a Memory
+    // block can wire it into a persona prompt, so the click goes through the
+    // interaction engine as an admitted, undoable command (AGENTS.md).
+    const handleKeepObservation = useCallback(() => {
+        spatialSession.keep('observations', {
+            type: 'analysis',
+            content: response,
+            importance: 0.8,
+            metadata: { source: personaName, savedAt: Date.now() }
+        });
+        onClose();
+    }, [response, personaName, onClose]);
 
     return (
         <AnimatePresence>
@@ -141,6 +159,15 @@ export function ThinkResultModal({
                                     </>
                                 )}
                             </button>
+                            {ok && (
+                                <button
+                                    className="think-modal-btn think-modal-btn-secondary"
+                                    onClick={handleKeepObservation}
+                                >
+                                    <Eye className="w-4 h-4" />
+                                    Keep as observation
+                                </button>
+                            )}
                             <button
                                 className="think-modal-btn think-modal-btn-primary"
                                 onClick={handleCrystallize}

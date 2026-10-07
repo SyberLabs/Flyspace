@@ -7,6 +7,7 @@ import type { RunPreview } from '@/core/capabilities/execute';
 import { useCapabilityStore } from '@/core/capabilities/store';
 import { claimCreateTrigger, latestExecutionRecord, useExecutionLedger } from '@/core/capabilities/executionLedger';
 import { canonicalize, sha256 } from '@/core/capabilities/hash';
+import { newId } from '@/core/id';
 import { triggerIdempotencyKey } from '@/core/capabilities/triggers';
 import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
@@ -52,7 +53,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const run = (idempotencyKey?: string, confirmedRun?: string) => {
         if (!manifest || running) return;
         if (sideEffect && (manifest.approval !== 'approved' || !confirmedRun)) return;
-        const key = idempotencyKey ?? attemptKey.current ?? `click_${sha256(`${instanceId}|${Date.now()}|${Math.random()}`).slice(0, 24)}`;
+        const key = idempotencyKey ?? attemptKey.current ?? `click_${newId()}`;
         attemptKey.current = key;
         void runInstalledCapability(instanceId, undefined, { idempotencyKey: key, confirmedRun }).then(result => {
             if (result.error?.code !== 'EFFECT_UNCERTAIN') attemptKey.current = null;
