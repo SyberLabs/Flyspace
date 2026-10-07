@@ -176,6 +176,32 @@ describe('spatial command lifecycle', () => {
         expect(engine.snapshot().commands.find(item => item.id === command.id)?.lifecycle).toBe('undone');
     });
 
+    it('places a block on a click as a committed pointer command, and undo removes it', () => {
+        const before = canvas.blocks.length;
+        const command = engine.place('capability_weather', 'Weather timeline', { x: 420, y: 260 }, 4200);
+        expect(command).toMatchObject({ lifecycle: 'committed', action: 'create', modalities: ['pointer'] });
+        const placed = canvas.blocks.at(-1)!;
+        expect(canvas.blocks).toHaveLength(before + 1);
+        expect(command.subjects).toEqual([placed.instance_id]);
+        expect(engine.snapshot().traces.at(-1)).toMatchObject({
+            command: 'CREATE', subject: placed.instance_id, to: { x: 420, y: 260 }, modalities: ['pointer']
+        });
+
+        expect(engine.undo()).toBe(true);
+        expect(canvas.blocks).toHaveLength(before);
+        expect(engine.snapshot().commands.find(item => item.id === command.id)?.lifecycle).toBe('undone');
+    });
+
+    it('refuses to place an empty or unknown block instead of throwing', () => {
+        expect(engine.place('', 'Nothing', { x: 0, y: 0 })).toMatchObject({ lifecycle: 'refused', reason: 'empty-block' });
+
+        const throwing = new MemoryCanvas();
+        throwing.add = () => { throw new Error('Unknown block type: gone'); };
+        const strict = new InteractionEngine(throwing);
+        expect(strict.place('gone', 'Gone', { x: 0, y: 0 })).toMatchObject({ lifecycle: 'refused', reason: 'unknown-block' });
+        expect(throwing.blocks).toHaveLength(0);
+    });
+
     it('previews a delete until confirm, then undo restores the block', () => {
         engine.select(['news']);
         const preview = engine.speak('delete this', 3000);
