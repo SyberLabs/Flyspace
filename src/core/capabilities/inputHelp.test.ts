@@ -59,10 +59,12 @@ describe('what a compiled input keeps from the spec', () => {
 
     it('keeps no sample value for an input that looks like a key', () => {
         const byName = inputs([
-            { name: 'license', in: 'query', required: true, example: 'YOUR-LICENSE-KEY', description: 'Your license API key', schema: { type: 'string' } }
+            { name: 'webhook_secret', in: 'query', example: 'whsec_123', description: 'Shared secret the webhook signs with', schema: { type: 'string' } },
+            { name: 'page_token', in: 'query', example: 'abc123', description: 'Token for the next page of results', schema: { type: 'string' } }
         ]);
-        expect(byName.license.example).toBeUndefined();
-        expect(byName.license.schema.description).toBe('Your license API key');
+        expect(byName.webhook_secret.example).toBeUndefined();
+        expect(byName.webhook_secret.schema.description).toBe('Shared secret the webhook signs with');
+        expect(byName.page_token.example).toBe('abc123'); // a cursor, not a key
     });
 
     it('seals the hints into the manifest, and rejects a hint that is not a primitive', () => {

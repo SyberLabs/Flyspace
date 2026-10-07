@@ -2,7 +2,7 @@
 // This compiler does not install anything. A manifest becomes callable only
 // after validateManifest + installProposal.
 
-import { looksLikeKey } from './credentialName';
+import { isKeyParameter, looksLikeKey } from './credentialName';
 import { canonicalCapabilityId, credentialSlot } from './identity';
 import { fromJsonSchema } from './jsonSchema';
 import {
@@ -13,6 +13,7 @@ import {
     isRecord,
     sealManifest,
     validateManifest,
+    MAX_AUTH_HINT,
     type CapabilityEffect,
     type CapabilityInput,
     type CapabilityManifest,
@@ -168,8 +169,11 @@ function compileOperation(args: {
     const auth = resolveAuth(args.spec, args.operation, args.baseUrl);
     if ('error' in auth) return auth;
 
-    const inputs = collectInputs(args.spec, args.path, args.pathItem, args.operation, args.method);
-    if ('error' in inputs) return inputs;
+    const collected = collectInputs(args.spec, args.path, args.pathItem, args.operation, args.method);
+    if ('error' in collected) return collected;
+    const keyed = auth.auth.kind === 'none' ? keyFromParameter(collected.inputs, args.baseUrl) : null;
+    const inputs = keyed ? { inputs: keyed.inputs } : collected;
+    const authBinding = keyed ? keyed.auth : auth.auth;
 
     const output = collectOutput(args.spec, args.operation);
     if ('error' in output) return output;
@@ -200,7 +204,7 @@ function compileOperation(args: {
         effectSource: effectChoice.source,
         approval: approvalForEffect(effectChoice.effect),
         invocation: 'manual',
-        auth: auth.auth,
+        auth: authBinding,
         transport,
         inputs: inputs.inputs,
         output: output.output
@@ -329,7 +333,7 @@ function collectInputs(
         }
         const name = String(parameter.name);
         const schema = withParameterDescription(converted.schema, parameter.description);
-        const hints = looksLikeKey(name) ? {} : inputHints(parameter, deref(spec, parameter.schema));
+        const hints = looksLikeKey(name, schema.description) ? {} : inputHints(parameter, deref(spec, parameter.schema));
         inputs.push({
             name,
             in: location,
@@ -379,6 +383,29 @@ function inputHints(parameter: Record<string, unknown>, schema: unknown): Pick<C
     return {
         ...(example !== undefined ? { example } : {}),
         ...(fallback !== undefined ? { default: fallback } : {})
+    };
+}
+
+/**
+ * A spec with no security scheme that still takes its key as a parameter
+ * (Interzoid's `license`). That parameter is the API's key: asked for once
+ * at install, kept for the session, and sent only to this API's origin, the
+ * same as a declared key. It stops being a field on the block, where it
+ * would be saved with the canvas. Exactly one such parameter, or none: two
+ * (an app id and a key) stay as inputs.
+ */
+function keyFromParameter(inputs: CapabilityInput[], baseUrl: string): { auth: CapabilityManifest['auth']; inputs: CapabilityInput[] } | null {
+    const keys = inputs.filter(input => isKeyParameter({ name: input.name, in: input.in, description: input.schema.description }));
+    if (keys.length !== 1) return null;
+    const key = keys[0];
+    if (key.in !== 'query' && key.in !== 'header') return null;
+    const placement = { kind: 'apiKey' as const, in: key.in, name: key.name };
+    const text = key.schema.description?.trim();
+    // An unfilled template ("{{apiKeyDescription}}") says nothing; leave it out.
+    const hint = text && !/^\{\{[^}]*\}\}$/.test(text) ? text.slice(0, MAX_AUTH_HINT) : undefined;
+    return {
+        auth: { ...placement, secretRef: credentialSlot(baseUrl, placement), ...(hint ? { hint } : {}) },
+        inputs: inputs.filter(input => input !== key)
     };
 }
 

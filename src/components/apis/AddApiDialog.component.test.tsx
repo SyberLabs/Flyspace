@@ -229,6 +229,31 @@ describe('AddApiDialog: keys and approval', () => {
         expect(screen.queryByText(/travels in the URL/)).toBeNull();
     });
 
+    it('asks for a key the spec passes as a parameter, in its own words', () => {
+        render(<Harness />);
+        paste({
+            openapi: '3.0.0',
+            info: { title: 'Get Weather City', version: '1.0.0' },
+            servers: [{ url: 'https://api.interzoid.com' }],
+            paths: {
+                '/getweather': {
+                    get: {
+                        summary: 'Gets current weather information for a US city and state',
+                        parameters: [
+                            { name: 'license', in: 'query', required: true, description: 'Your Interzoid license API key. Register at www.interzoid.com/register', schema: { type: 'string' } },
+                            { name: 'city', in: 'query', required: true, schema: { type: 'string' } }
+                        ],
+                        responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object' } } } } }
+                    }
+                }
+            }
+        });
+        const field = screen.getByLabelText('Key for https://api.interzoid.com').closest('label')!;
+        expect(field.textContent).toContain('query parameter license');
+        expect(field.textContent).toContain('The API says: Your Interzoid license API key. Register at www.interzoid.com/register');
+        expect(screen.getAllByText(/travels in the URL/).length).toBeGreaterThan(0);
+    });
+
     it('warns when the key will travel in the URL', () => {
         render(<Harness />);
         paste({ ...SPEC, components: { securitySchemes: { boardKey: { type: 'apiKey', in: 'query', name: 'api_key' } } } });

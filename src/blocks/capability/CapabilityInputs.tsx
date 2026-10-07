@@ -125,7 +125,7 @@ export function missingInputs(
 /** `city Seattle · state WA`: what a folded set of inputs was run with. */
 export function inputSummaryOf(inputs: readonly CapabilityInput[], params: Record<string, unknown>): string {
     const shown = (input: CapabilityInput, value: unknown) =>
-        `${input.name} ${!isFilled(value) ? '—' : looksLikeKey(input.name) ? '••••' : String(value)}`;
+        `${input.name} ${!isFilled(value) ? '—' : looksLikeKey(input.name, input.schema.description) ? '••••' : String(value)}`;
     return inputs.flatMap(input => {
         const value = params[input.name];
         const fields = bodyFields(input);
@@ -163,7 +163,7 @@ function Field({ input, idPrefix, value, wiredValue, onChange, disabled }: {
     const helpId = `${id}-help`;
     const draft = draftOf(value);
     const placeholder = placeholderOf(input, wiredValue);
-    const keyLike = looksLikeKey(input.name);
+    const keyLike = looksLikeKey(input.name, input.schema.description);
     const description = input.schema.description?.trim();
     const label = (
         <span className="text-[11px] text-[var(--text-muted)]">
