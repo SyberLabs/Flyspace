@@ -8,7 +8,7 @@ import {
     VAULT_DB_NAME,
     __resetVaultConnection
 } from './vaultStorage';
-import { exportVault, importVault, isVaultExport } from './vaultExport';
+import { exportVault, importVault, isVaultExport, prepareVaultImport } from './vaultExport';
 
 async function wipeVault(): Promise<void> {
     await __resetVaultConnection();
@@ -88,9 +88,76 @@ describe('export / import (apex A2)', () => {
             data: { 'omni-blocks': 'RESTORED', 'omni-settings': 'RESTORED-LS' }
         });
 
-        expect(restored).toBe(2);
+        expect(restored.restored).toBe(2);
+        expect(restored.needsApproval).toEqual([]);
         expect(await getVaultValue('omni-blocks')).toBe('RESTORED');
         expect(localStorage.getItem('omni-settings')).toBe('RESTORED-LS');
+    });
+
+    it('import drops approval from write and destructive capabilities; reads pass unchanged', async () => {
+        const capabilities = JSON.stringify({
+            state: {
+                manifests: [
+                    { id: 'cap_create', title: 'Create post', effect: 'write', approval: 'approved' },
+                    { id: 'cap_delete', title: 'Delete post', effect: 'destructive', approval: 'denied' },
+                    { id: 'cap_list', title: 'List posts', effect: 'read', approval: 'auto' },
+                    { id: 'cap_sum', title: 'Sum', effect: 'compute', approval: 'auto' }
+                ]
+            },
+            version: 1
+        });
+        const exported = {
+            format: 'omni-vault-export' as const,
+            version: 1 as const,
+            exportedAt: Date.now(),
+            data: { 'omni-capabilities': capabilities, 'omni-blocks': 'BLOCKS' }
+        };
+
+        const plan = prepareVaultImport(exported);
+        expect(plan.needsApproval).toEqual([
+            { id: 'cap_create', title: 'Create post', effect: 'write' },
+            { id: 'cap_delete', title: 'Delete post', effect: 'destructive' }
+        ]);
+        // Pure: the export object itself is not rewritten.
+        expect(exported.data['omni-capabilities']).toBe(capabilities);
+
+        const report = await importVault(exported);
+        expect(report.restored).toBe(2);
+        expect(report.needsApproval.map(c => c.id)).toEqual(['cap_create', 'cap_delete']);
+        expect(await getVaultValue('omni-blocks')).toBe('BLOCKS');
+
+        // Neither engine carries the approval any more.
+        for (const stored of [await getVaultValue('omni-capabilities'), localStorage.getItem('omni-capabilities')]) {
+            expect(stored).not.toBeNull();
+            expect(stored).not.toContain('approved');
+            expect(stored).not.toContain('denied');
+            const parsed = JSON.parse(stored as string) as { state: { manifests: Array<Record<string, unknown>> }; version: number };
+            expect(parsed.version).toBe(1);
+            expect(parsed.state.manifests.map(m => m.approval)).toEqual(['pending', 'pending', 'auto', 'auto']);
+            expect(parsed.state.manifests[2]).toEqual({ id: 'cap_list', title: 'List posts', effect: 'read', approval: 'auto' });
+        }
+    });
+
+    it('import writes a capability blob it cannot read as it came, and reports nothing', async () => {
+        const report = await importVault({
+            format: 'omni-vault-export',
+            version: 1,
+            exportedAt: Date.now(),
+            data: { 'omni-capabilities': 'not json' }
+        });
+        expect(report.needsApproval).toEqual([]);
+        expect(await getVaultValue('omni-capabilities')).toBe('not json');
+
+        const pendingOnly = JSON.stringify({ state: { manifests: [{ id: 'cap_x', effect: 'write', approval: 'pending' }] }, version: 1 });
+        const second = await importVault({
+            format: 'omni-vault-export',
+            version: 1,
+            exportedAt: Date.now(),
+            data: { 'omni-capabilities': pendingOnly }
+        });
+        // Already pending: reported (it still needs approval) and written byte for byte.
+        expect(second.needsApproval).toEqual([{ id: 'cap_x', title: 'cap_x', effect: 'write' }]);
+        expect(await getVaultValue('omni-capabilities')).toBe(pendingOnly);
     });
 
     it('isVaultExport rejects malformed/foreign payloads', () => {

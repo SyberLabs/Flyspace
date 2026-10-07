@@ -3,6 +3,7 @@
 
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import type { ContextEntry } from '@/core/schemas/mind.schema';
+import type { DataWire } from '@/core/schemas/wire.schema';
 import { evaluateWireAdmission } from './ports';
 import { defaultSpeechCatalog, parseSpeech, type SpeechCatalog, type SpeechIntent, type SpeechShellKind } from './speech';
 import { describeCommand } from './speechReply';
@@ -18,14 +19,21 @@ import type {
     SpatialCommand
 } from './types';
 
+/** What a delete took off the canvas. Undo hands it back whole. */
+export interface RemovedBlock {
+    block: BlockInstance;
+    wires: DataWire[];
+}
+
 export interface CanvasMutator {
     listBlocks(): CanvasBlockView[];
     getInstance(id: string): BlockInstance | undefined;
     activeShell(): string;
     move(id: string, x: number, y: number): { x: number; y: number };
     add(blockId: string, displayName: string, x: number, y: number): string;
-    remove(id: string): BlockInstance | undefined;
-    restore(block: BlockInstance): void;
+    remove(id: string): RemovedBlock | undefined;
+    /** Re-admits the wires; a wire the canvas would refuse now stays gone. */
+    restore(removed: RemovedBlock): void;
     connect(sourceId: string, targetId: string): { ok: true; wireId: string } | { ok: false; reason: string };
     disconnect(wireId: string): void;
     /** Admit one entry into a Mind pool; returns the entry id so undo can remove it. */

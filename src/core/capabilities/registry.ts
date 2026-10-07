@@ -2,14 +2,16 @@
 // installProposal never honors a side-effect approval that arrived on the
 // proposal. approveCapability is the only transition into `approved`.
 // restoreSnapshot is the persistence path and may keep an approval the
-// user already granted.
+// user already granted. A vault import is not that path: importAdmission.ts
+// resets its write and destructive entries to `pending` before they are
+// written.
 
 import { blockRegistry } from '../registry/BlockRegistry';
 import type { OmniBlockSchema, PortSchema } from '../schemas/block.schema';
 import { useBlockStore } from '../stores/blockStore';
 import { wireService } from '../services/wire.service';
 import { createOmniError } from '../gateway/omnidata.schema';
-import { validateManifest, type CapabilityManifest } from './manifest';
+import { sideEffectPending, validateManifest, type CapabilityManifest } from './manifest';
 import { allCapabilities, capabilityIds, claimHydration, deleteCapability, readCapability, writeCapability } from './state';
 import { bindLocalHandler, executeCapability, previewCapabilityRun, type RunPreview } from './execute';
 import { clearExecutionLedger } from './executionLedger';
@@ -229,12 +231,6 @@ function commit(manifest: CapabilityManifest): void {
     touch();
 }
 
-function sideEffectPending(manifest: CapabilityManifest): CapabilityManifest {
-    if (manifest.effect !== 'write' && manifest.effect !== 'destructive') return manifest;
-    if (manifest.approval === 'pending') return manifest;
-    return { ...manifest, approval: 'pending' };
-}
-
 function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
     const output = manifest.output.schema;
     const ports: PortSchema[] = [];
@@ -262,10 +258,7 @@ function toBlockSchema(manifest: CapabilityManifest): OmniBlockSchema {
         block_id: manifest.id,
         display_name: manifest.title,
         category: 'system',
-        data_type: 'custom',
-        refresh_rate: 'manual',
         semantic_tags: ['capability', manifest.source.kind, manifest.effect],
-        wiring_logic: 'capability',
         ports,
         icon: iconFor(manifest),
         description: manifest.description ?? `${manifest.effect} capability`,

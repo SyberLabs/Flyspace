@@ -48,6 +48,9 @@ interface BlockState {
     /** Remove a block from the canvas */
     removeBlock: (instanceId: string) => void;
 
+    /** Put a removed block back as it was (undo). Its wires are the wire store's job. */
+    restoreBlock: (block: BlockInstance) => void;
+
     /** Update block position */
     updatePosition: (instanceId: string, position: { x: number; y: number }) => void;
 
@@ -117,6 +120,14 @@ export const useBlockStore = create<BlockState>()(
                 // Single wire system: clean up any wires touching this block
                 // (previously orphaned wires lingered forever).
                 useWireStore.getState().removeWiresForBlock(instanceId);
+            },
+
+            restoreBlock: (block) => {
+                set(state => ({
+                    blocks: state.blocks.some(b => b.instance_id === block.instance_id)
+                        ? state.blocks
+                        : [...state.blocks, block]
+                }));
             },
 
             updatePosition: (instanceId, position) => {

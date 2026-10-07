@@ -58,11 +58,8 @@ export function ThinkResultModal({
             block_id: 'text_note',
             display_name: `${personaName}'s Insight`,
             category: 'workspace' as const,
-            data_type: 'text' as const,
             semantic_tags: ['insight', 'mind', 'analysis'],
             icon: 'text',
-            refresh_rate: 'never', // Static content
-            wiring_logic: 'bidirectional' // Can connect in both directions
         };
 
         // Add block at a reasonable position
