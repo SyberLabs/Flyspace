@@ -93,8 +93,9 @@ describe('CapabilityBlockView', () => {
         expect(fetchMock).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
-        expect(await screen.findByText('Hello from the board')).toBeTruthy();
-        expect(screen.getByText(/typed array/)).toBeTruthy();
+        // A list reads as rows; each row's title is the record's own title.
+        expect(await screen.findByText('1 result')).toBeTruthy();
+        expect(screen.getAllByText('Hello from the board')[0].tagName).toBe('SUMMARY');
     });
 
     it('does not run a write capability before approval', () => {

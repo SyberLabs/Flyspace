@@ -150,6 +150,16 @@ export function clearCapabilities(): void {
 }
 
 /** The arguments a run of this block would use: wired values, then block params, then explicit input. */
+/**
+ * Block params the person actually filled in. An emptied field is stored as
+ * undefined or '' and must not count as an argument: block params override
+ * wired values, so an empty box would otherwise blank out a value arriving
+ * on a wire.
+ */
+function filledParams(params: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== ''));
+}
+
 function runParams(instanceId: string, input?: Record<string, unknown>):
     { capabilityId: string; params: Record<string, unknown> } | { error: CapabilityResult } {
     const block = useBlockStore.getState().getBlock(instanceId);
@@ -170,7 +180,7 @@ function runParams(instanceId: string, input?: Record<string, unknown>):
         capabilityId,
         params: {
             ...resolveWiredInputs(instanceId),
-            ...(isPlain(block.params) ? block.params : {}),
+            ...(isPlain(block.params) ? filledParams(block.params) : {}),
             ...(input ?? {})
         }
     };
