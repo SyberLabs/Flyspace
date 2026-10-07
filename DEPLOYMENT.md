@@ -46,8 +46,9 @@ question or send the canvas to the configured Kev endpoint.
 Deploy the preview only after all of these are true:
 
 - Set `OMNI_PUBLIC_DEMO=1` and `NEXT_PUBLIC_OMNI_PUBLIC_DEMO=1`. Verify
-  `/api/llm`, `/api/jev-persona` and `/api/capability-broker` return 503 on
-  the deployed host. Both inference ledger routes must return no runs: on the
+  `/api/llm`, `/api/jev-persona`, `/api/capability-broker` and
+  `/api/registry-intent` return 503 on the deployed host. Do not set
+  `TYPESAFE_API_KEY` on the public Worker. Both inference ledger routes must return no runs: on the
   Worker, production mode with no OIDC issuer answers 503 "Hosted
   authentication is not configured" before the preview check, and without
   hosted auth they answer `configured:false`. Either is acceptable. Do not set `DATABASE_URL`,
