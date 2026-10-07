@@ -3,22 +3,6 @@
 // ============================================
 
 /**
- * Core data types for API Blocks
- */
-export type BlockDataType =
-  | 'probabilistic_stream'  // Truth Blocks (prediction markets)
-  | 'news_feed'             // Pulse Blocks (news/narrative)
-  | 'telemetry'             // Physicality Blocks (location/movement)
-  | 'financial'             // Truth Blocks (market data)
-  | 'custom'
-  // Workspace types
-  | 'text'                  // Rich text/markdown content
-  | 'code'                  // Source code display
-  | 'media'                 // Images, video, audio
-  | 'conversation'          // Mind chat thread
-  | 'embed';                // External iframe content
-
-/**
  * Block categories aligned with the "Senses"
  */
 export type BlockCategory =
@@ -106,17 +90,8 @@ export interface OmniBlockSchema {
   /** Category of the block */
   category: BlockCategory;
 
-  /** Type of data this block provides */
-  data_type: BlockDataType;
-
-  /** Refresh rate (e.g., "1s", "5m", "1h", "manual") */
-  refresh_rate: string;
-
   /** Tags for semantic search and filtering */
   semantic_tags: string[];
-
-  /** Logic for wiring to AI personas */
-  wiring_logic: string;
 
   /** Declared ports. A wire is admitted only when an output is compatible with an input. */
   ports?: PortSchema[];

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { CapabilityInstall } from './CapabilityInstall';
 import { clearCapabilities, listCapabilities } from '@/core/capabilities/registry';
-import { capabilitySecrets } from '@/core/capabilities/secrets';
+import { MAX_SECRET_BYTES, capabilitySecrets } from '@/core/capabilities/secrets';
 import { useCapabilityStore } from '@/core/capabilities/store';
 
 const SPEC = {
@@ -86,6 +86,23 @@ describe('CapabilityInstall', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Install selected' }));
         expect(screen.getByText(/Secret cred_.+ is required/)).toBeTruthy();
         expect(listCapabilities().some(manifest => manifest.source.operationId === 'listPosts')).toBe(false);
+    });
+
+    it('refuses to install a secret over the byte bound and writes nothing to the slot', () => {
+        render(<CapabilityInstall />);
+        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        fireEvent.change(screen.getByLabelText('OpenAPI document'), {
+            target: { value: JSON.stringify(SPEC) }
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Compile' }));
+        const secret = screen.getByLabelText(/^Secret cred_/) as HTMLInputElement;
+        fireEvent.change(secret, { target: { value: 'k'.repeat(MAX_SECRET_BYTES + 1) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Install selected' }));
+        expect(screen.getByText(new RegExp(`Secret cred_.+ exceeds ${MAX_SECRET_BYTES} bytes`))).toBeTruthy();
+        expect(listCapabilities().some(manifest => manifest.source.operationId === 'listPosts')).toBe(false);
+        const ref = (secret.getAttribute('aria-label') ?? '').replace(/^Secret /, '');
+        expect(ref).toMatch(/^cred_/);
+        expect(capabilitySecrets.get(ref)).toBeUndefined();
     });
 
     it('shows the origin and credential placement beside every proposal and secret field', () => {

@@ -20,6 +20,7 @@ import { resolveModel } from '@/core/models.registry';
 import { openRun, MAX_SOURCES, normalizePostgresBigintId, type RunSource, type SourceKind } from '@/core/services/server/inference.ledger';
 import { authenticateApiRequest, hostedAuthRequired } from '@/core/services/server/auth';
 import { readBoundedJson } from '@/core/services/server/boundedJson';
+import { requireSameOrigin } from '@/core/services/server/sameOrigin';
 
 export const runtime = 'nodejs';
 
@@ -205,6 +206,10 @@ export async function POST(request: NextRequest) {
     if (process.env.OMNI_PUBLIC_DEMO === '1') {
         return NextResponse.json({ error: 'AI answers are unavailable in the public preview.' }, { status: 503 });
     }
+    // Only this app's own pages may spend a provider key. Checked before auth
+    // and before any body byte is read, like the capability broker.
+    const refusal = requireSameOrigin(request);
+    if (refusal) return refusal;
     const inferenceAbort = new AbortController();
     const inferenceSignal = AbortSignal.any([
         request.signal,
