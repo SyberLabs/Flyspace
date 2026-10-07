@@ -26,7 +26,10 @@ describe('Polymarket block', () => {
         const View = getBlockView('polymarket_live_odds')!;
         render(<View instanceId={instanceId} />);
 
-        await waitFor(() => expect(screen.getByTestId('block-setup-card').getAttribute('data-kind')).toBe('error'));
-        expect(useBlockStore.getState().getBlock(instanceId)?.status).toBe('error');
+        // The card and the store's status settle separately, so wait for both.
+        await waitFor(() => {
+            expect(screen.getByTestId('block-setup-card').getAttribute('data-kind')).toBe('error');
+            expect(useBlockStore.getState().getBlock(instanceId)?.status).toBe('error');
+        });
     });
 });
