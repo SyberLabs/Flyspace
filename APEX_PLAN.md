@@ -27,8 +27,8 @@ AI personas and seeing which sources informed each response.
 - **Mind-panel Think sees what the canvas shows.** `captureShellSnapshot`
   (used by `think()`) keeps only blocks of the active shell that have a wire in
   or out, or are pinned, plus only the wires between them and the pins on them.
-  It does not read the observations pool, so neither earlier answers nor
-  `useMindShellSync`'s all-shell awareness entries reach the prompt. With
+  It does not read the observations pool, so earlier answers do not reach the
+  prompt. With
   nothing in scope, Think is refused unless the caller passes a question
   (Quick Ask).
 
