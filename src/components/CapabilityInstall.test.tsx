@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { CapabilityInstall } from './CapabilityInstall';
 import { clearCapabilities, listCapabilities } from '@/core/capabilities/registry';
@@ -35,17 +35,27 @@ const SPEC = {
 beforeEach(() => {
     clearCapabilities();
     capabilitySecrets.clear();
+    // The door opens on search, which loads the API index. These tests drive
+    // the paste route, so the index is simply unavailable; nothing goes out.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })));
 });
 
 afterEach(() => {
     clearCapabilities();
     capabilitySecrets.clear();
+    vi.unstubAllGlobals();
 });
+
+/** Open the door and switch to pasting a document. Search is the default view. */
+function openPaste(): void {
+    fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Paste OpenAPI' }));
+}
 
 describe('CapabilityInstall', () => {
     it('rejects a document that is not JSON', () => {
         render(<CapabilityInstall />);
-        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        openPaste();
         fireEvent.change(screen.getByLabelText('OpenAPI document'), { target: { value: '{not json' } });
         fireEvent.click(screen.getByRole('button', { name: 'Compile' }));
         expect(screen.getByText('OpenAPI document must be JSON')).toBeTruthy();
@@ -54,7 +64,7 @@ describe('CapabilityInstall', () => {
 
     it('installs a compiled operation without writing the secret into the store', () => {
         render(<CapabilityInstall />);
-        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        openPaste();
         fireEvent.change(screen.getByLabelText('OpenAPI document'), {
             target: { value: JSON.stringify(SPEC) }
         });
@@ -78,7 +88,7 @@ describe('CapabilityInstall', () => {
 
     it('refuses to install while a required secret slot is empty', () => {
         render(<CapabilityInstall />);
-        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        openPaste();
         fireEvent.change(screen.getByLabelText('OpenAPI document'), {
             target: { value: JSON.stringify(SPEC) }
         });
@@ -90,7 +100,7 @@ describe('CapabilityInstall', () => {
 
     it('refuses to install a secret over the byte bound and writes nothing to the slot', () => {
         render(<CapabilityInstall />);
-        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        openPaste();
         fireEvent.change(screen.getByLabelText('OpenAPI document'), {
             target: { value: JSON.stringify(SPEC) }
         });
@@ -107,7 +117,7 @@ describe('CapabilityInstall', () => {
 
     it('shows the origin and credential placement beside every proposal and secret field', () => {
         render(<CapabilityInstall />);
-        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        openPaste();
         fireEvent.change(screen.getByLabelText('OpenAPI document'), {
             target: { value: JSON.stringify(SPEC) }
         });
@@ -131,7 +141,7 @@ describe('CapabilityInstall', () => {
             components: { securitySchemes: { boardKey: { type: 'apiKey', in: 'query', name: 'api_key' } } }
         };
         render(<CapabilityInstall />);
-        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        openPaste();
         fireEvent.change(screen.getByLabelText('OpenAPI document'), {
             target: { value: JSON.stringify(querySpec) }
         });
@@ -151,7 +161,7 @@ describe('CapabilityInstall', () => {
             components: { securitySchemes: { boardKey: { type: 'http', scheme: 'bearer' } } }
         };
         render(<CapabilityInstall />);
-        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        openPaste();
         fireEvent.change(screen.getByLabelText('OpenAPI document'), {
             target: { value: JSON.stringify(bearerSpec) }
         });
@@ -165,7 +175,7 @@ describe('CapabilityInstall', () => {
 
     it('approves and removes through separate controls', () => {
         render(<CapabilityInstall />);
-        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        openPaste();
         fireEvent.change(screen.getByLabelText('OpenAPI document'), {
             target: { value: JSON.stringify(SPEC) }
         });

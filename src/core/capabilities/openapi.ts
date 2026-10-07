@@ -31,7 +31,17 @@ export interface CompileResult {
     errors: CompileIssue[];
 }
 
-export function compileOpenApi(spec: unknown): CompileResult {
+export interface CompileOptions {
+    /**
+     * Where the document came from, when the host knows better than the
+     * document does: the catalog spec URL for a registry install. Recorded as
+     * the manifest's source locator. A pasted document has no such place, so
+     * its locator stays `title@version` from the document itself.
+     */
+    sourceLocator?: string;
+}
+
+export function compileOpenApi(spec: unknown, options: CompileOptions = {}): CompileResult {
     const errors: CompileIssue[] = [];
     if (!isRecord(spec)) return { manifests: [], errors: [{ message: 'OpenAPI document must be an object' }] };
 
@@ -46,9 +56,10 @@ export function compileOpenApi(spec: unknown): CompileResult {
     const base = resolveBaseUrl(spec);
     if ('error' in base) return { manifests: [], errors: [{ message: base.error }] };
 
-    const locator = isRecord(spec.info) && typeof spec.info.title === 'string'
-        ? `${spec.info.title}${typeof spec.info.version === 'string' ? `@${spec.info.version}` : ''}`
-        : 'openapi';
+    const locator = options.sourceLocator
+        ?? (isRecord(spec.info) && typeof spec.info.title === 'string'
+            ? `${spec.info.title}${typeof spec.info.version === 'string' ? `@${spec.info.version}` : ''}`
+            : 'openapi');
 
     const titles = operationTitles(spec.paths);
     const manifests: CapabilityManifest[] = [];
