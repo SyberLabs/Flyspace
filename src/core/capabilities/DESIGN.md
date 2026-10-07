@@ -67,13 +67,18 @@ does not place blocks or wires. The OpenAPI install panel still calls
 proposal is stored as `pending` even if it arrived marked `approved`.
 `approveCapability` is the only way into `approved`. `restoreSnapshot` may
 keep an approval the user already granted, because that blob came from this
-store, and it is revalidated first.
+store, and it is revalidated first. A vault import is not that blob: a file
+can have come from anywhere, so `prepareVaultImport` (`importAdmission.ts`)
+runs every write and destructive entry of the imported `omni-capabilities`
+blob through the same `sideEffectPending` rule as `installProposal` before
+it is written, the import reports which capabilities need approval again,
+and read and compute entries pass unchanged.
 
 ## Production boundaries
 
 A manifest describes a capability. It does not grant itself authority.
 
-- Credential slots are `origin + scheme + placement`. Two APIs that both name a scheme `ApiKey` do not share a secret, and a proposal cannot point its `secretRef` at another origin's slot. A run cannot supply a header input in the header the credential travels in (`Authorization`, or the apiKey header name, in any case); that is `INPUT_INVALID`.
+- Credential slots are `origin + scheme + placement`. Two APIs that both name a scheme `ApiKey` do not share a secret, and a proposal cannot point its `secretRef` at another origin's slot. A run cannot supply a header input in the header the credential travels in (`Authorization`, or the apiKey header name, in any case); that is `INPUT_INVALID`. Neither the credential nor a header input may be placed in a hop-by-hop, framing or transport header (`Connection`, `Content-Length`, `Host`, `Transfer-Encoding`, `Cookie`, ...: `DENIED_HEADER_NAMES` in `manifest.ts`, matched in any case); that fails validation at compile and install, not at execute. A secret value is at most 4096 bytes (`MAX_SECRET_BYTES`), both where it enters the session slot and where the broker reads it from a request body.
 - HTTP method is an effect floor. `x-omni-effect` and MCP annotations may raise that floor. They cannot turn POST into auto-running compute. Untrusted MCP `readOnlyHint` is not approval.
 - Capability ids are a hash of canonical origin and operation. Speech handlers keep pinned ids. A different origin cannot reuse an existing id.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.

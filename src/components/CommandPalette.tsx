@@ -196,8 +196,8 @@ export function CommandPalette() {
                                 <Command.Group heading="Settings" className="px-2 py-2">
                                     <CommandItem
                                         icon={useMockData ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                                        label={useMockData ? "Using Mock Data" : "Using Live API"}
-                                        description="Toggle between mock and live data"
+                                        label={useMockData ? "Fast refresh (live data, 5–60 s)" : "Normal refresh (live data, 1–60 min)"}
+                                        description="Toggle how often data blocks poll their live sources"
                                         onSelect={handleToggleMock}
                                     />
                                     <CommandItem

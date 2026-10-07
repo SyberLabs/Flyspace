@@ -4,5 +4,5 @@
 
 export { vaultStorage, getVaultHealth, getInitialVaultHealth, subscribeVaultHealth } from './vaultStorage';
 export type { VaultHealth, VaultFailure } from './vaultStorage';
-export { exportVault, importVault, isVaultExport } from './vaultExport';
-export type { OmniVaultExport } from './vaultExport';
+export { exportVault, importVault, isVaultExport, prepareVaultImport } from './vaultExport';
+export type { OmniVaultExport, VaultImportPlan, VaultImportReport } from './vaultExport';

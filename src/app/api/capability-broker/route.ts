@@ -8,6 +8,7 @@ import { admitBrokerCaller, BROKER_DEADLINE_MS, handleCapabilityBroker } from '@
 import { openServerLedger } from '@/core/services/server/capability.ledger';
 import { pinnedFetch } from '@/core/services/server/pinnedFetch';
 import { readBoundedJson, RequestBodyTooLarge } from '@/core/services/server/boundedJson';
+import { requireSameOrigin } from '@/core/services/server/sameOrigin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,15 +35,9 @@ export async function POST(request: NextRequest) {
     if (process.env.OMNI_PUBLIC_DEMO === '1') {
         return reply(503, { error: 'The capability broker is unavailable in the public preview.' });
     }
-    // Only this app's own pages may drive the broker. A cross-site form or
-    // fetch cannot set an application/json content type without a preflight.
-    const origin = request.headers.get('origin');
-    if (!origin || origin !== new URL(request.url).origin) {
-        return reply(403, { error: 'Request must come from this site.' });
-    }
-    if (request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
-        return reply(415, { error: 'Content-Type must be application/json.' });
-    }
+    // Only this app's own pages may drive the broker.
+    const refusal = requireSameOrigin(request);
+    if (refusal) return refusal;
 
     // The caller and global budgets are checked before any body byte is read,
     // so an over-budget caller costs no read and no parse. Like the refusals

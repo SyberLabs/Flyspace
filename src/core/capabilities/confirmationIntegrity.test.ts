@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { compileOpenApi } from './openapi';
 import { canonicalCapabilityId, credentialSlot } from './identity';
-import { sealManifest, validateManifest, type CapabilityInput, type CapabilityManifest } from './manifest';
+import { DENIED_HEADER_NAMES, sealManifest, validateManifest, type CapabilityInput, type CapabilityManifest } from './manifest';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
 import { bindMcpTransport, executeCapability, previewCapabilityRun, unbindMcpTransport } from './execute';
 import { admitProposal } from './admission';
@@ -75,6 +75,60 @@ describe('reserved input names', () => {
         const result = await executeCapability(manifest.id, input);
         expect(result.error?.code).toBe('INPUT_INVALID');
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('transport header names', () => {
+    // Every denied name, in the case a manifest author would most likely write it.
+    const DENIED = [...DENIED_HEADER_NAMES].map(name => name.replace(/(^|-)([a-z])/g, (_m, sep: string, c: string) => `${sep}${c.toUpperCase()}`));
+
+    function apiKeyHeader(name: string): CapabilityManifest {
+        const base = writeWithInputs([]);
+        if (base.transport.kind !== 'http') throw new Error('expected http');
+        const auth = { kind: 'apiKey' as const, in: 'header' as const, name };
+        return sealManifest({ ...base, auth: { ...auth, secretRef: credentialSlot(base.transport.baseUrl, auth) } });
+    }
+
+    it.each(DENIED)('a manifest cannot declare a header input named %s', (name) => {
+        const manifest = writeWithInputs([{ name, in: 'header', required: false, schema: { kind: 'string' } }]);
+        const validated = validateManifest(manifest);
+        expect(validated.ok).toBe(false);
+        expect(validated.errors.join('; ')).toContain(`input name ${name} is a transport header`);
+        expect(installProposal(manifest).ok).toBe(false);
+    });
+
+    it.each(DENIED)('an apiKey header placement cannot be %s', (name) => {
+        const validated = validateManifest(apiKeyHeader(name));
+        expect(validated.ok).toBe(false);
+        expect(validated.errors.join('; ')).toContain(`apiKey auth name ${name} is a transport header`);
+    });
+
+    it('matches in any case, including the lower-case wire form', () => {
+        expect(validateManifest(apiKeyHeader('transfer-encoding')).ok).toBe(false);
+        expect(validateManifest(apiKeyHeader('CONTENT-LENGTH')).ok).toBe(false);
+        expect(validateManifest(writeWithInputs([{ name: 'cOoKiE', in: 'header', required: false, schema: { kind: 'string' } }])).ok).toBe(false);
+    });
+
+    it('still accepts an ordinary credential header and Authorization as an apiKey name', () => {
+        expect(validateManifest(apiKeyHeader('X-Api-Key')).ok).toBe(true);
+        expect(validateManifest(apiKeyHeader('Authorization')).ok).toBe(true);
+    });
+
+    it('the rule is about headers: a query or body input may carry a denied name', () => {
+        expect(validateManifest(writeWithInputs([{ name: 'host', in: 'query', required: false, schema: { kind: 'string' } }])).ok).toBe(true);
+        expect(validateManifest(writeWithInputs([{ name: 'cookie', in: 'body', required: true, schema: { kind: 'object' } }])).ok).toBe(true);
+        expect(validateManifest(writeWithInputs([{ name: 'X-Trace', in: 'header', required: false, schema: { kind: 'string' } }])).ok).toBe(true);
+    });
+
+    it('a denied credential header fails at compile, before any install', () => {
+        const spec = {
+            ...SPEC,
+            components: { securitySchemes: { Cred: { type: 'apiKey', in: 'header', name: 'Transfer-Encoding' } } },
+            security: [{ Cred: [] }]
+        };
+        const compiled = compileOpenApi(spec);
+        expect(compiled.manifests).toHaveLength(0);
+        expect(compiled.errors.map(issue => issue.message).join('; ')).toContain('transport header');
     });
 });
 
