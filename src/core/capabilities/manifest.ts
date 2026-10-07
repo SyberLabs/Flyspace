@@ -5,7 +5,7 @@
 
 import { canonicalize, sha256 } from './hash';
 import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
-import { classifyAddress, isIpLiteral, isLoopbackAddress } from './egress';
+import { destinationUrlErrors } from './egress';
 import { validateValueType, type ValueType } from './valueType';
 
 export const CAPABILITY_MANIFEST_VERSION = 1 as const;
@@ -62,7 +62,8 @@ export type HttpAccess = 'browser_direct' | 'server_broker';
 
 export type CapabilityTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
-    | { kind: 'mcp'; serverId: string; toolName: string }
+    /** `origin` is the server's URL origin: the credential slot and the bound transport are matched to it. */
+    | { kind: 'mcp'; serverId: string; origin: string; toolName: string }
     | { kind: 'local'; handler: string }
     /** A host-bound job runtime: start returns an external run id, poll observes it. */
     | { kind: 'async'; runtimeId: string; operation: string };
@@ -424,40 +425,20 @@ function validateProvenance(provenance: unknown, errors: string[]): void {
     }
 }
 
-const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata.google.com']);
-
+/** The destination rule in `egress.ts`; the MCP client applies the same one to its server URL. */
 function validateHttpUrl(baseUrl: string, errors: string[], hostCreated: boolean): void {
-    let url: URL;
+    for (const reason of destinationUrlErrors(baseUrl, { hostCreated, subject: 'manifest' })) {
+        errors.push(`transport.baseUrl ${reason}`);
+    }
+}
+
+/** A bare http(s) origin, as `new URL(value).origin` would print it. */
+function isHttpOrigin(value: string): boolean {
     try {
-        url = new URL(baseUrl);
+        const url = new URL(value);
+        return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin === value;
     } catch {
-        errors.push('transport.baseUrl is not a URL');
-        return;
-    }
-    if (url.username || url.password) {
-        errors.push('transport.baseUrl must not embed credentials');
-    }
-    // A query or fragment here is never sent (paths are joined onto the base)
-    // and would only be stored and digested.
-    if (url.search || url.hash) {
-        errors.push('transport.baseUrl must not carry a query or fragment');
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-        errors.push('transport.baseUrl must be http or https');
-        return;
-    }
-    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-    const literal = isIpLiteral(host);
-    const loopback = host === 'localhost' || host.endsWith('.localhost') || (literal && isLoopbackAddress(host));
-    if (METADATA_HOSTS.has(host) || host === '169.254.169.254') {
-        errors.push('transport.baseUrl targets a metadata service');
-    } else if (loopback) {
-        if (!hostCreated) errors.push('transport.baseUrl may target loopback only in a host-created manifest');
-    } else if (literal && !classifyAddress(host).ok) {
-        errors.push('transport.baseUrl targets a non-public address');
-    }
-    if (url.protocol === 'http:' && !loopback) {
-        errors.push('transport.baseUrl must be https, except loopback http in a host-created manifest');
+        return false;
     }
 }
 
@@ -596,6 +577,9 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
     } else if (input.transport.kind === 'mcp') {
         if (typeof input.transport.serverId !== 'string' || !/^[A-Za-z0-9_.:-]{1,80}$/.test(input.transport.serverId)) {
             errors.push('transport.serverId is invalid');
+        }
+        if (typeof input.transport.origin !== 'string' || !isHttpOrigin(input.transport.origin)) {
+            errors.push('transport.origin must be an http or https origin');
         }
         if (typeof input.transport.toolName !== 'string' || !NAME_PATTERN.test(input.transport.toolName)) {
             errors.push('transport.toolName is invalid');
@@ -805,7 +789,7 @@ export function canonicalScopes(scopes: readonly string[]): string[] {
 
 function canonicalTransport(transport: CapabilityTransport): CapabilityTransport {
     if (transport.kind === 'mcp') {
-        return { kind: 'mcp', serverId: transport.serverId, toolName: transport.toolName };
+        return { kind: 'mcp', serverId: transport.serverId, origin: transport.origin, toolName: transport.toolName };
     }
     if (transport.kind === 'local') {
         return { kind: 'local', handler: transport.handler };

@@ -63,6 +63,7 @@ const BOARD = {
 const TOOLS: McpToolSchema[] = [
     {
         serverId: 'board',
+        origin: 'https://board.example.test',
         name: 'list',
         annotations: { readOnlyHint: true },
         inputSchema: { type: 'object', properties: { limit: { type: 'integer' } } },
@@ -70,6 +71,7 @@ const TOOLS: McpToolSchema[] = [
     },
     {
         serverId: 'board',
+        origin: 'https://board.example.test',
         name: 'wipe',
         annotations: { destructiveHint: true },
         inputSchema: { type: 'object', properties: {} },
@@ -249,15 +251,21 @@ describe('host admission gate', () => {
         expect(result.errors[0]).toMatch(/^proposal\.auth\.secretRef is not a proposal field/);
     });
 
-    it('binds an MCP credential to the server id, never to an HTTP origin slot', async () => {
+    it('keys an MCP credential to the server origin, never to its label', async () => {
         const auth = { kind: 'apiKey' as const, in: 'header' as const, name: 'x-api-key' };
         const [list] = await proposalsOf(mcpProvider, { serverId: 'board', tools: TOOLS, auth });
         const admitted = admitProposal(list).manifest!;
         expect(admitted.auth.secretRef).toBe(transportCredentialSlot(admitted.transport, admitted.auth));
-        const httpSlot = credentialSlot('https://board.example.test', auth);
-        expect(admitted.auth.secretRef).not.toBe(httpSlot);
+        // The same rule as an http base: origin + scheme + placement.
+        expect(admitted.auth.secretRef).toBe(credentialSlot('https://board.example.test', auth));
+        // The same label at another origin is another slot.
+        const elsewhere = TOOLS.map(tool => ({ ...tool, origin: 'https://other.example.test' }));
+        const [moved] = await proposalsOf(mcpProvider, { serverId: 'board', tools: elsewhere, auth });
+        const otherSlot = admitProposal(moved).manifest!.auth.secretRef!;
+        expect(otherSlot).toBe(credentialSlot('https://other.example.test', auth));
+        expect(otherSlot).not.toBe(admitted.auth.secretRef);
         const { digest: _digest, ...draft } = admitted;
-        const borrowed = sealManifest({ ...draft, auth: { ...admitted.auth, secretRef: httpSlot } });
+        const borrowed = sealManifest({ ...draft, auth: { ...admitted.auth, secretRef: otherSlot } });
         expect(validateManifest(borrowed).errors.some(error => error.startsWith('auth.secretRef must be'))).toBe(true);
         const query = await proposalsOf(mcpProvider, { serverId: 'board', tools: TOOLS, auth: { ...auth, in: 'query' } });
         expect(admitProposal(query[0]).errors).toContain('mcp credentials travel in a header');
