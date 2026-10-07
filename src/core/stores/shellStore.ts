@@ -14,6 +14,7 @@ import { vaultStorage } from '../vault';
 import { useWireStore } from './wireStore';
 import { useBlockStore } from './blockStore';
 import { blockRegistry } from '../registry/BlockRegistry';
+import { newId } from '../id';
 import type { ShellTemplate } from '../shells/templates';
 
 // ============================================
@@ -101,7 +102,7 @@ export const useShellStore = create<ShellState>()(
                 // A new shell starts EMPTY — it is not a copy of the current
                 // canvas. (To snapshot the current canvas, use "Save Current".)
                 const newShell: ShellConfig = {
-                    id: `shell_${now}_${Math.random().toString(36).substr(2, 9)}`,
+                    id: `shell_${newId()}`,
                     type: 'custom',  // User-created shells are 'custom' type
                     name,
                     description,
@@ -262,7 +263,7 @@ export const useShellStore = create<ShellState>()(
                 const source = get().shells.find(s => s.id === sourceShellId);
                 if (!source) return null;
 
-                const newShellId = `shell_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const newShellId = `shell_${newId()}`;
                 const now = Date.now();
 
                 const newShell: ShellConfig = {
@@ -275,9 +276,9 @@ export const useShellStore = create<ShellState>()(
                     // Fresh wire ids + ownership so the copy's wires can't collide
                     // with the source shell's when both are loaded.
                     wires: (source.wires ?? legacyConnectionsToWires(source.connections, newShellId))
-                        .map((w, i) => ({
+                        .map(w => ({
                             ...w,
-                            id: `wire_${now}_${i}_${Math.random().toString(36).substr(2, 6)}`,
+                            id: `wire_${newId()}`,
                             shellId: newShellId
                         })),
                     connections: undefined,
@@ -295,12 +296,12 @@ export const useShellStore = create<ShellState>()(
 
             instantiateTemplate: (template, name) => {
                 const now = Date.now();
-                const newShellId = `shell_${now}_${Math.random().toString(36).substr(2, 9)}`;
+                const newShellId = `shell_${newId()}`;
 
                 // Remap each template block's local `ref` to a fresh unique instance id.
                 const refToInstanceId = new Map<string, string>();
-                const blocks = template.blocks.map((tb, i) => {
-                    const instanceId = `${tb.blockId}_${now}_${i}_${Math.random().toString(36).substr(2, 6)}`;
+                const blocks = template.blocks.map(tb => {
+                    const instanceId = `${tb.blockId}_${newId()}`;
                     refToInstanceId.set(tb.ref, instanceId);
                     const isPersona = tb.blockId.startsWith('persona_');
                     return {
@@ -316,12 +317,12 @@ export const useShellStore = create<ShellState>()(
                 // wire system) so they render AND feed personas. Drop any that
                 // reference a missing block (defensive — validateTemplate covers this).
                 const wires: DataWire[] = template.connections
-                    .map((c, i): DataWire | null => {
+                    .map((c): DataWire | null => {
                         const sourceBlockId = refToInstanceId.get(c.sourceRef);
                         const targetBlockId = refToInstanceId.get(c.targetRef);
                         if (!sourceBlockId || !targetBlockId) return null;
                         return {
-                            id: `wire_${now}_${i}_${Math.random().toString(36).substr(2, 6)}`,
+                            id: `wire_${newId()}`,
                             sourceBlockId,
                             targetBlockId,
                             wireType: 'push' as const,
