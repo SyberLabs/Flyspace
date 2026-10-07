@@ -70,5 +70,8 @@
     "wrangler": "^4.141.0",
     "zod": "4.6.5"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "sharp": "^0.35.5"
+  }
 }
