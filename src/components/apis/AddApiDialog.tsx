@@ -315,6 +315,11 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                                 onChange={event => setSecrets(prev => ({ ...prev, [ref]: event.target.value }))}
                                                                 className="mt-1 w-full rounded-lg border border-[var(--citadel-border)] bg-[var(--citadel-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
                                                             />
+                                                            {manifest.auth.hint ? (
+                                                                <span className="mt-0.5 block text-[11px] text-[var(--text-secondary)] [overflow-wrap:anywhere]">
+                                                                    The API says: {manifest.auth.hint}
+                                                                </span>
+                                                            ) : null}
                                                             <span className="mt-0.5 block text-[10px]">Kept for this session only, never saved with your canvas.</span>
                                                         </label>
                                                     );

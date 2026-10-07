@@ -41,6 +41,11 @@ export interface AuthBinding {
     scopes?: string[];
     /** Slot name. The secret value is never stored on the manifest. */
     secretRef?: string;
+    /**
+     * What the spec says about the key ("Register at ..."), shown where the
+     * key is asked for. Spec text, never a secret.
+     */
+    hint?: string;
 }
 
 export interface CapabilityInput {
@@ -158,6 +163,7 @@ export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_.:-]{0,63}$/;
 
 const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
 const SECRET_REF_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+export const MAX_AUTH_HINT = 300;
 const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,64}$/;
 
 /**
@@ -322,7 +328,7 @@ function validateAuth(auth: unknown, errors: string[]): void {
         errors.push('auth must be an object');
         return;
     }
-    const allowed = new Set(['kind', 'in', 'name', 'prefix', 'secretRef', 'scopes']);
+    const allowed = new Set(['kind', 'in', 'name', 'prefix', 'secretRef', 'scopes', 'hint']);
     for (const key of Object.keys(auth)) {
         if (!allowed.has(key)) errors.push(`auth.${key} is not a manifest field`);
     }
@@ -342,6 +348,10 @@ function validateAuth(auth: unknown, errors: string[]): void {
         }
     } else if (auth.scopes !== undefined) {
         errors.push('only oauth auth carries scopes');
+    }
+    if (auth.hint !== undefined) {
+        if (kind !== 'apiKey' && kind !== 'bearer' && kind !== 'basic') errors.push('only a key, bearer, or basic auth carries a hint');
+        else if (typeof auth.hint !== 'string' || auth.hint.length > MAX_AUTH_HINT) errors.push(`auth.hint must be at most ${MAX_AUTH_HINT} characters`);
     }
     if (kind === 'none') {
         if (auth.secretRef || auth.name || auth.prefix || auth.in) {
@@ -800,7 +810,8 @@ function canonicalAuth(auth: AuthBinding): AuthBinding {
         ...(auth.name ? { name: auth.name } : {}),
         ...(auth.prefix ? { prefix: auth.prefix } : {}),
         ...(auth.scopes ? { scopes: canonicalScopes(auth.scopes) } : {}),
-        ...(auth.secretRef ? { secretRef: auth.secretRef } : {})
+        ...(auth.secretRef ? { secretRef: auth.secretRef } : {}),
+        ...(auth.hint ? { hint: auth.hint } : {})
     };
 }
 
