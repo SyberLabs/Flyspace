@@ -11,7 +11,7 @@ const attackerUrl = 'http://169.254.169.254/latest/meta-data';
 function request(body: Record<string, unknown>): NextRequest {
     return new NextRequest('http://localhost:3000/api/llm', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { Origin: 'http://localhost:3000', 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...body, baseUrl: attackerUrl })
     });
 }

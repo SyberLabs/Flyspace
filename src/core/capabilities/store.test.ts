@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { migrateCapabilityStore, useCapabilityStore } from './store';
 import { installProposal, clearCapabilities, listCapabilities } from './registry';
 import { compileOpenApi } from './openapi';
+import { CAPABILITY_STORE_KEY, dropImportedApprovals } from './importAdmission';
 import { vaultStorage, __resetVaultConnection } from '../vault/vaultStorage';
 
 /**
@@ -88,5 +89,20 @@ describe('a v1 vault record survives rehydrate', () => {
 
         useCapabilityStore.getState().forgetStale(LEGACY_MCP.id);
         expect(useCapabilityStore.getState().stale).toEqual([]);
+    });
+
+    it('composes with the vault import: an imported v1 blob lands the legacy MCP manifest as stale, approval dropped', async () => {
+        // The import rewrites the blob (write entries → pending) but keeps its
+        // version, so the persist migration still runs on the next rehydrate.
+        const exported = JSON.stringify({ state: { manifests: [LEGACY_MCP] }, version: 1 });
+        const imported = dropImportedApprovals(exported);
+        expect(imported.needsApproval).toEqual([{ id: LEGACY_MCP.id, title: 'Search board', effect: 'write' }]);
+        await vaultStorage.setItem(CAPABILITY_STORE_KEY, imported.blob);
+        await useCapabilityStore.persist.rehydrate();
+
+        const [stale] = useCapabilityStore.getState().stale;
+        expect(stale).toMatchObject({ id: LEGACY_MCP.id, title: 'Search board' });
+        expect((stale.manifest as { approval: string }).approval).toBe('pending');
+        expect(listCapabilities().some(manifest => manifest.id === LEGACY_MCP.id)).toBe(false);
     });
 });

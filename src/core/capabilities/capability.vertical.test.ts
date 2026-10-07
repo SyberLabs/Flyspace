@@ -5,7 +5,9 @@ import { compileOpenApi } from './openapi';
 import { compileMcpTools } from './mcp';
 import { compileBring } from './bring';
 import { validateManifest } from './manifest';
+import { dropImportedApprovals } from './importAdmission';
 import {
+    type CapabilitySnapshot,
     approveCapability,
     clearCapabilities,
     exportSnapshot,
@@ -371,6 +373,40 @@ describe('capability compiler', () => {
         expect(installProposal(second).ok).toBe(true);
         expect(getCapability(first.id)?.transport).toMatchObject({ origin: 'https://board.example.test' });
         expect(getCapability(second.id)?.transport).toMatchObject({ origin: 'https://other.example.test' });
+    });
+
+    it('an imported capability blob lands writes pending; the same blob through rehydrate keeps approval', () => {
+        const create = byOp('createPost');
+        const list = byOp('listPosts');
+        installProposal(create);
+        installProposal(list);
+        approveCapability(create.id);
+        const snapshot = exportSnapshot();
+        // The persisted envelope the capability store writes to the vault.
+        const persisted = JSON.stringify({ state: snapshot, version: 1 });
+
+        // Import path: approval is dropped, nothing else changes, so the digest
+        // still validates and the read capability is untouched.
+        const imported = dropImportedApprovals(persisted);
+        expect(imported.needsApproval).toEqual([{ id: create.id, title: create.title, effect: 'write' }]);
+        const admitted = JSON.parse(imported.blob) as { state: CapabilitySnapshot; version: number };
+        expect(admitted.version).toBe(1);
+        expect(admitted.state.manifests.find(m => m.id === list.id)).toEqual(snapshot.manifests.find(m => m.id === list.id));
+
+        clearCapabilities();
+        const fromImport = restoreSnapshot(admitted.state);
+        expect(fromImport.installed).toEqual(expect.arrayContaining([create.id, list.id]));
+        expect(fromImport.rejected).toEqual([]);
+        expect(getCapability(create.id)?.approval).toBe('pending');
+        expect(getCapability(create.id)?.digest).toBe(create.digest);
+        expect(getCapability(list.id)?.approval).toBe('auto');
+        // Pending is the same state installProposal leaves; approval is the only way out.
+        expect(getCapability(create.id)).toEqual(installProposal({ ...create, approval: 'approved' }).manifest);
+
+        // Rehydrate path (the browser's own blob): the granted approval survives.
+        clearCapabilities();
+        restoreSnapshot(snapshot);
+        expect(getCapability(create.id)?.approval).toBe('approved');
     });
 
     it('compiles MCP tools and Bring descriptions through the same gate', async () => {

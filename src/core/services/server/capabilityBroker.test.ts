@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { compileOpenApi } from '@/core/capabilities/openapi';
 import { sealManifest } from '@/core/capabilities/manifest';
+import { MAX_SECRET_BYTES } from '@/core/capabilities/secrets';
 import { canonicalCapabilityId } from '@/core/capabilities/identity';
 import { admitBrokerCaller, createBrokerRateLimiter, handleCapabilityBroker, type BrokerDeps, type BrokerRateLimiter } from './capabilityBroker';
 import { memoryLedger } from './capability.ledger';
@@ -336,6 +337,102 @@ describe('broker idempotency', () => {
         expect((again.body as { replayed?: boolean }).replayed).toBe(true);
         expect(urls).toHaveLength(1);
     });
+});
+
+describe('broker credential bounds', () => {
+    function keyedManifest(headerName: string) {
+        const compiled = compileOpenApi({
+            openapi: '3.0.3',
+            info: { title: 'Board', version: '1' },
+            servers: [{ url: 'https://board.example.test/v1' }],
+            components: { securitySchemes: { Key: { type: 'apiKey', in: 'header', name: 'X-Api-Key' } } },
+            security: [{ Key: [] }],
+            paths: {
+                '/items': {
+                    get: {
+                        operationId: 'list',
+                        responses: { '200': { description: 'items', content: { 'application/json': { schema: { type: 'object' } } } } }
+                    }
+                }
+            }
+        }).manifests[0];
+        if (compiled.transport.kind !== 'http' || compiled.auth.kind !== 'apiKey') throw new Error('expected http apiKey');
+        // Sealed directly: the compiler would refuse the denied name, a client could still send it.
+        return sealManifest({
+            ...compiled,
+            auth: { ...compiled.auth, name: headerName },
+            transport: { ...compiled.transport, access: 'server_broker' }
+        });
+    }
+
+    function deps(sent: Record<string, string>[], resolved: { count: number }): BrokerDeps {
+        return {
+            ledger: memoryLedger(),
+            resolve: async () => {
+                resolved.count += 1;
+                return ['1.1.1.1'];
+            },
+            fetch: async (request) => {
+                sent.push(request.headers);
+                return { status: 200, headers: {}, text: '{}' };
+            }
+        };
+    }
+
+    it(`accepts a secret of exactly ${MAX_SECRET_BYTES} bytes and sends it in the credential header`, async () => {
+        const sent: Record<string, string>[] = [];
+        const secret = 'k'.repeat(MAX_SECRET_BYTES);
+        const result = await broker({ manifest: keyedManifest('X-Api-Key'), input: {}, idempotencyKey: 'broker-key-max', secret }, deps(sent, { count: 0 }));
+        expect(result.status).toBe(200);
+        expect(sent).toHaveLength(1);
+        expect(sent[0]['X-Api-Key']).toBe(secret);
+    });
+
+    it(`refuses a secret of ${MAX_SECRET_BYTES + 1} bytes before resolving or fetching`, async () => {
+        const sent: Record<string, string>[] = [];
+        const resolved = { count: 0 };
+        const result = await broker({
+            manifest: keyedManifest('X-Api-Key'),
+            input: {},
+            idempotencyKey: 'broker-key-over',
+            secret: 'k'.repeat(MAX_SECRET_BYTES + 1)
+        }, deps(sent, resolved));
+        expect(result.status).toBe(400);
+        expect((result.body as { error: string }).error).toBe(`broker secret exceeds ${MAX_SECRET_BYTES} bytes`);
+        expect(sent).toHaveLength(0);
+        expect(resolved.count).toBe(0);
+    });
+
+    it('counts bytes, not characters: a multi-byte secret over the bound is refused', async () => {
+        const sent: Record<string, string>[] = [];
+        // 2049 two-byte characters: 2049 code units, 4098 bytes.
+        const result = await broker({
+            manifest: keyedManifest('X-Api-Key'),
+            input: {},
+            idempotencyKey: 'broker-key-wide',
+            secret: 'é'.repeat(MAX_SECRET_BYTES / 2 + 1)
+        }, deps(sent, { count: 0 }));
+        expect(result.status).toBe(400);
+        expect(sent).toHaveLength(0);
+    });
+
+    it.each(['transfer-encoding', 'Content-Length', 'Host', 'Connection', 'Cookie', 'Upgrade'])(
+        'refuses a manifest whose credential header is %s before resolving or fetching',
+        async (name) => {
+            const sent: Record<string, string>[] = [];
+            const resolved = { count: 0 };
+            const result = await broker({
+                manifest: keyedManifest(name),
+                input: {},
+                idempotencyKey: 'broker-key-hop',
+                secret: 'fixture-key'
+            }, deps(sent, resolved));
+            expect(result.status).toBe(400);
+            expect((result.body as { error: string }).error).toContain('transport header');
+            expect(sent).toHaveLength(0);
+            expect(resolved.count).toBe(0);
+        }
+    );
 });
 
 describe('memory ledger', () => {

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { compileOpenApi } from '@/core/capabilities/openapi';
-import { capabilitySecrets } from '@/core/capabilities/secrets';
+import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/capabilities/secrets';
 import { installProposal, approveCapability, denyCapability, uninstallCapability } from '@/core/capabilities/registry';
 import { useCapabilityStore } from '@/core/capabilities/store';
 import type { CapabilityManifest } from '@/core/capabilities/manifest';
@@ -49,6 +49,11 @@ export function CapabilityInstall() {
         const missing = secretRefs.filter(ref => !secrets[ref]?.trim() && !capabilitySecrets.get(ref));
         if (missing.length > 0) {
             setIssues(missing.map(ref => `Secret ${ref} is required`));
+            return;
+        }
+        const oversized = secretRefs.filter(ref => secretByteLength(secrets[ref]?.trim() ?? '') > MAX_SECRET_BYTES);
+        if (oversized.length > 0) {
+            setIssues(oversized.map(ref => `Secret ${ref} exceeds ${MAX_SECRET_BYTES} bytes`));
             return;
         }
         for (const ref of secretRefs) {

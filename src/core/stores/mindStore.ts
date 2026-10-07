@@ -11,7 +11,6 @@ import {
     LLMConfig,
     LLMProvider,
     LLM_DEFAULTS,
-    KnowledgeNode,
     PersonaConfig,
     ContextEntry,
     createInitialMindState
@@ -36,11 +35,6 @@ interface MindStore extends MindState {
     setProvider: (provider: LLMProvider) => void;
 
     // ==================
-    // Knowledge Graph
-    // ==================
-    addNode: (node: Omit<KnowledgeNode, 'id' | 'createdAt' | 'updatedAt'>) => string;
-
-    // ==================
     // Personas
     // ==================
     setActivePersona: (personaId: string) => void;
@@ -63,12 +57,6 @@ interface MindStore extends MindState {
     clearFocus: () => void;
     saveToMemory: (blockId: string, blockType: string, data: unknown) => void;
     clearEphemeralContext: () => void;
-
-    // ==================
-    // Mind-Shell Sync
-    // ==================
-    extractBlockEntities: (blockId: string, blockType: string, data: unknown) => void;
-    updateAwareness: (blockType: string, summary: string) => void;
 }
 
 // ============================================
@@ -173,30 +161,6 @@ export const useMindStore = create<MindStore>()(
                 // Cloud provider keys live server-side (process.env); nothing
                 // secret is stored here. Selecting a provider just swaps defaults.
                 set({ llmConfig: { ...LLM_DEFAULTS[provider] } });
-            },
-
-            // ==================
-            // Knowledge Graph
-            // ==================
-            addNode: (node) => {
-                const id = generateId('node');
-                const now = Date.now();
-                const newNode: KnowledgeNode = {
-                    ...node,
-                    id,
-                    createdAt: now,
-                    updatedAt: now
-                };
-
-                set(state => ({
-                    graph: {
-                        ...state.graph,
-                        nodes: [...state.graph.nodes, newNode],
-                        lastUpdated: now
-                    }
-                }));
-
-                return id;
             },
 
             // ==================
@@ -348,64 +312,6 @@ export const useMindStore = create<MindStore>()(
                     sourceBlockId: blockId,
                     metadata: { blockType, savedAt: Date.now() }
                 });
-            },
-
-            // ==================
-            // Mind-Shell Sync
-            // ==================
-            extractBlockEntities: (blockId, blockType, data) => {
-                const { addNode } = get();
-
-                // Extract entities for knowledge graph
-                const entities = extractEntities(blockType, data);
-                for (const entity of entities) {
-                    addNode({
-                        type: 'entity',
-                        label: entity.label,
-                        description: entity.description,
-                        properties: entity.properties,
-                        sourceBlockId: blockId,
-                        confidence: entity.confidence || 0.8
-                    });
-                }
-            },
-
-            updateAwareness: (blockType, summary) => {
-                set(state => {
-                    const poolIndex = state.contextPools.findIndex(p => p.id === 'observations');
-                    if (poolIndex === -1) return {};
-
-                    const pool = state.contextPools[poolIndex];
-                    const existingEntryIndex = pool.entries.findIndex(e =>
-                        e.metadata?.isAwareness === true && e.metadata?.blockType === blockType
-                    );
-
-                    const newEntries = [...pool.entries];
-
-                    if (existingEntryIndex >= 0) {
-                        // Update existing awareness entry
-                        newEntries[existingEntryIndex] = {
-                            ...newEntries[existingEntryIndex],
-                            content: summary,
-                            timestamp: Date.now()
-                        };
-                    } else {
-                        // Create new awareness entry
-                        newEntries.push({
-                            id: crypto.randomUUID(),
-                            type: 'observation',
-                            content: summary,
-                            importance: 0.3, // Lower importance for background awareness
-                            timestamp: Date.now(),
-                            metadata: { isAwareness: true, blockType }
-                        });
-                    }
-
-                    const newPools = [...state.contextPools];
-                    newPools[poolIndex] = { ...pool, entries: newEntries };
-
-                    return { contextPools: newPools };
-                });
             }
         }),
         {
@@ -473,77 +379,6 @@ export const useMindStore = create<MindStore>()(
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
-
-/**
- * Summarize block data for context pool
- */
-/**
- * Summarize block data for context pool
- */
-export function summarizeBlockData(blockType: string, data: unknown): string {
-    if (!data) return `[${blockType}] No data available`;
-
-    switch (blockType) {
-        case 'polymarket':
-            const markets = data as Array<{ question: string; outcomes: Array<{ name: string; probability: number }> }>;
-            if (!markets.length) return '[Polymarket] No markets loaded';
-            return `[Polymarket] ${markets.length} markets tracked. Top: "${markets[0]?.question}" - ${markets[0]?.outcomes[0]?.name}: ${(markets[0]?.outcomes[0]?.probability * 100).toFixed(1)}%`;
-
-        case 'newsapi':
-            const articles = data as Array<{ title: string; source: { name: string } }>;
-            if (!articles.length) return '[News] No articles loaded';
-            return `[News] ${articles.length} articles. Latest: "${articles[0]?.title}" (${articles[0]?.source?.name})`;
-
-        default:
-            return `[${blockType}] Data updated`;
-    }
-}
-
-/**
- * Extract entities from block data for knowledge graph
- */
-function extractEntities(
-    blockType: string,
-    data: unknown
-): Array<{ label: string; description?: string; properties: Record<string, unknown>; confidence?: number }> {
-    const entities: Array<{ label: string; description?: string; properties: Record<string, unknown>; confidence?: number }> = [];
-
-    switch (blockType) {
-        case 'polymarket':
-            const markets = data as Array<{ id: string; question: string; category?: string }>;
-            for (const market of markets.slice(0, 5)) {
-                entities.push({
-                    label: market.question.slice(0, 50),
-                    description: market.question,
-                    properties: {
-                        marketId: market.id,
-                        category: market.category,
-                        type: 'prediction_market'
-                    },
-                    confidence: 0.9
-                });
-            }
-            break;
-
-        case 'newsapi':
-            const articles = data as Array<{ title: string; source: { name: string }; url: string }>;
-            for (const article of articles.slice(0, 5)) {
-                entities.push({
-                    label: article.title.slice(0, 50),
-                    description: article.title,
-                    properties: {
-                        source: article.source?.name,
-                        url: article.url,
-                        type: 'news_article'
-                    },
-                    confidence: 0.85
-                });
-            }
-            break;
-    }
-
-    return entities;
-}
 
 /**
  * Format full block data for focus pool (deep analysis)

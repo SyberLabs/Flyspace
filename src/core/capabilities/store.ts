@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { vaultStorage } from '../vault';
+import { CAPABILITY_STORE_KEY } from './importAdmission';
 import type { CapabilityManifest } from './manifest';
 
 /**
@@ -89,7 +90,7 @@ export const useCapabilityStore = create<CapabilityStoreState>()(
             forgetStale: (id) => set(state => ({ stale: state.stale.filter(entry => entry.id !== id) }))
         }),
         {
-            name: 'omni-capabilities',
+            name: CAPABILITY_STORE_KEY,
             version: 2,
             storage: createJSONStorage(() => vaultStorage),
             partialize: (state) => ({ manifests: state.manifests, stale: state.stale }),
