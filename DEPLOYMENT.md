@@ -118,6 +118,20 @@ account and keeps the canvas available offline. Local `npm run dev` and
 `npm start` bind to `127.0.0.1`; container listeners must remain private unless
 all other API surfaces are separately protected.
 
+Per-caller rate budgets (today only `/api/capability-broker`, 30 requests a
+minute per caller under a global 120) key on `clientKey()` in
+`src/core/services/server/clientKey.ts`. It reads a client address from a
+header only under the ingress `OMNI_TRUSTED_PROXY` declares:
+`cloudflare` trusts `cf-connecting-ip` (the edge sets and overwrites it);
+`proxy`, or the older `1`, trusts `x-real-ip`, else the last
+`x-forwarded-for` hop. No header is trusted outside its declared ingress,
+and with the variable unset every caller shares one `direct` bucket, so a
+client-written header cannot buy a fresh budget; the global cap is the
+backstop. Set `cloudflare` on the Worker (in `wrangler.jsonc` `vars`) once
+the broker is enabled there, and `proxy` only behind your own reverse proxy
+that overwrites, not appends to, the headers it forwards. A bare `next dev`,
+`next start` or `wrangler dev` has no owning ingress; leave it unset.
+
 Hosted inference also requires `DATABASE_URL` and migration 003. Each paid
 request carries `Idempotency-Key`; the ledger stores owner, key, and digest
 with the `running` attempt before provider dispatch. Reusing a key with the
