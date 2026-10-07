@@ -64,8 +64,8 @@ read ports or projections.
 `addWire` sets `useWireStore.getState().lastAdmissionRefusal`. It is a sentence
 from `admitConnection` (for example `wires stay inside one shell`), a code from
 `evaluateWireAdmission` (`incompatible-type`, `no-output`, `no-input`). Spoken and pointer input read it and answer "I can't wire
-those." `wireService.createWire` returns `''` on an `admitConnection` refusal
-without setting it.
+those." `wireService.createWire` returns `''` on a refusal; `addWire`, which it
+calls, has already set it.
 
 ## Restore and templates
 

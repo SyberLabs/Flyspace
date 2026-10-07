@@ -192,8 +192,8 @@ Whatever the target, these carry over:
   files in `schema_migrations`, so a re-run is a no-op.
 - **`DATABASE_URL` is a deploy secret**, never baked into an image. It is in
   `SECRET_ENV_VARS`, so the bundle scan already covers it.
-- **The image needs `output: 'standalone'`** in `next.config.ts` - not set
-  today, because nothing needs it yet.
+- **The image needs `output: 'standalone'`** in a Next config file at the
+  repo root. There is none today, because nothing needs one yet.
 - **Ollama reachability decides the target.** `provider: 'local'` is
   first-class in this app and needs to reach `localhost:11434`. A serverless
   deploy silently breaks it; a container on a host that can see Ollama does

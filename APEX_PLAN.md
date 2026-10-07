@@ -32,18 +32,21 @@ AI personas and seeing which sources informed each response.
   nothing in scope, Think is refused unless the caller passes a question
   (Quick Ask).
 
-## 3. Remaining work
+## 3. Done (merged 2026-10-01)
 
-1. **Fix the block accessibility tree.** A draggable BlockCard can be exposed as
-   a button around its own controls. Keep drag semantics on the handle and give
-   nested controls independent names. See `FINDINGS.md`.
-2. **Expose recorded inference lineage.** The server can return the runs behind a
-   persona answer; the canvas does not yet show that tree from a source chip.
-3. **Re-validate persisted wires on load.** Shell restore and templates
-   re-run only `admitConnection`, via `replaceWiresForShell`; they skip the
-   `dataType` check in `evaluateWireAdmission`, and wires loaded from storage
-   are not re-validated at all. A wire the live canvas would refuse can
-   therefore reappear after a reload. Separate work package; not fixed here.
+1. **Block accessibility tree** (#75). dnd-kit's `attributes` and `listeners`
+   are spread on the grip only (`src/components/blocks/BlockCard.tsx`), so a
+   card is no longer a `role="button"` around its own controls. See
+   `FINDINGS.md`.
+2. **Recorded inference lineage** (#72). `src/blocks/persona/RunLineage.tsx`
+   reads the runs behind a persona answer through
+   `GET /api/inference-runs/:id/lineage` and draws the tree from a toggle
+   under the answer.
+3. **Persisted wires re-validated on load** (#74). Every load path runs the
+   same `admitWire` as the live canvas: shell restore and templates through
+   `replaceWiresForShell`, vault-hydrated wires through
+   `revalidatePersistedWires` (`src/core/stores/wireStore.ts`). A refused wire
+   is dropped with one `console.warn`. See `TYPED_PORT_SYSTEM.md`.
 
 ## 4. Cuts
 
