@@ -10,7 +10,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useShellStore, useBlockStore } from '@/core/stores';
 import { ShellConfig } from '@/core/schemas/shell.schema';
 import { SHELL_TEMPLATES, keyedProvidersForTemplate, type ShellTemplate } from '@/core/shells/templates';
-import { newId } from '@/core/id';
 
 interface ShellPanelProps {
     isOpen: boolean;
@@ -31,6 +30,8 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
     } = useShellStore();
 
     const { activeShellId: currentActiveShell } = useBlockStore();
+    // The root canvas is not a shell record, so there is nothing to save it into.
+    const activeShell = shells.find(s => s.id === currentActiveShell);
 
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -79,15 +80,22 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
         setShowCreateDialog(false);
     };
 
-    // Handle saving current shell state
-    const handleSaveCurrentShell = () => {
-        if (!saveShellName.trim()) return;
+    // "Save Current" snapshots the canvas the user sees into the shell they
+    // are on. The dialog opens with that shell's name, so Save without edits
+    // keeps it.
+    const openSaveDialog = () => {
+        if (!activeShell) return;
+        setSaveShellName(activeShell.name);
+        setSaveShellDescription(activeShell.description ?? '');
+        setShowSaveDialog(true);
+    };
 
-        const shellId = `shell_${newId()}`;
-        saveShell(shellId, {
+    const handleSaveCurrentShell = () => {
+        if (!activeShell || !saveShellName.trim()) return;
+
+        saveShell(activeShell.id, {
             name: saveShellName,
-            description: saveShellDescription,
-            type: 'custom'
+            description: saveShellDescription
         });
 
         setSaveShellName('');
@@ -205,8 +213,10 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                                     New Shell
                                 </button>
                                 <button
-                                    onClick={() => setShowSaveDialog(true)}
-                                    className="flex-1 px-3 py-2 bg-[var(--mind-aqua-surface)] text-[var(--citadel-void)] rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
+                                    onClick={openSaveDialog}
+                                    disabled={!activeShell}
+                                    title={activeShell ? undefined : 'The root canvas is not a shell. Create or open a shell to save it.'}
+                                    className="flex-1 px-3 py-2 bg-[var(--mind-aqua-surface)] text-[var(--citadel-void)] rounded-md hover:opacity-90 transition-opacity text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Save Current
                                 </button>
@@ -219,7 +229,7 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
                             <div className="bg-[var(--citadel-void)] border border-[var(--citadel-primary)] rounded-lg p-3">
                                 <div className="text-xs text-[var(--text-muted)] mb-1">Currently Active</div>
                                 <div className="text-sm font-medium text-[var(--citadel-primary)]">
-                                    {shells.find(s => s.id === currentActiveShell)?.name || 'Root Shell'}
+                                    {activeShell?.name || 'Root Shell'}
                                 </div>
                             </div>
 
