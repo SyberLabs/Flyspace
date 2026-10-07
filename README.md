@@ -1,6 +1,6 @@
-<img src="docs/assets/flyspace-logo.jpg" width="120" alt="Logo: five layered white strokes sweeping like a wing, on black">
+<p align="center"><img src="docs/assets/flyspace-logo.jpg" width="120" alt="Logo: five layered white strokes sweeping like a wing, on black"></p>
 
-# OmniOS
+<h1 align="center">OmniOS</h1>
 
 A canvas for thinking with AI over live data. Drop **blocks** that pull real
 numbers - prediction markets, economic series, crypto, news, research - wire
