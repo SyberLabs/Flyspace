@@ -101,7 +101,7 @@ function mcpFixture(): Fixture {
         externalIdentity: { operationId: 'post', sourceLocator: 'fixture://mcp/board' },
         title: 'Post',
         auth: { kind: 'none' },
-        transport: { kind: 'mcp', serverId: 'board', toolName: 'post' },
+        transport: { kind: 'mcp', serverId: 'board', origin: 'https://board.example.test', toolName: 'post' },
         inputs: [PAYLOAD],
         output: { schema: { kind: 'null' }, presentation: 'raw' },
         execution: { kind: 'sync' },
@@ -112,7 +112,7 @@ function mcpFixture(): Fixture {
     const manifest = approveCapability(installed.manifest!.id).manifest!;
     expect(manifest.effect).toBe('write');
     const received: unknown[] = [];
-    bindMcpTransport('board', { call: async (_server, _tool, args) => { received.push(args); return null; } });
+    bindMcpTransport('board', { origin: 'https://board.example.test', call: async (_server, _tool, args) => { received.push(args); return null; } });
     return {
         id: manifest.id,
         received,

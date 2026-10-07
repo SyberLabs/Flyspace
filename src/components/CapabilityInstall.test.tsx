@@ -196,4 +196,16 @@ describe('CapabilityInstall', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Remove Create post' }));
         expect(listCapabilities().some(manifest => manifest.source.operationId === 'createPost')).toBe(false);
     });
+
+    it('names a persisted capability the current rule could not restore instead of hiding it', () => {
+        useCapabilityStore.setState({
+            stale: [{ id: 'cap_legacy', title: 'Search board', reason: 'MCP manifests now carry the server origin.', manifest: {} }]
+        });
+        render(<CapabilityInstall />);
+        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        expect(screen.getByText(/needs re-install: MCP manifests now carry the server origin/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Forget Search board' }));
+        expect(screen.queryByText(/needs re-install/)).toBeNull();
+        expect(useCapabilityStore.getState().stale).toEqual([]);
+    });
 });

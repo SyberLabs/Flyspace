@@ -24,11 +24,12 @@ export interface ProposalSource {
 
 export function proposalFromManifest(manifest: CapabilityManifest, source: ProposalSource): CapabilityProposalV1 {
     const transport = proposedTransport(manifest);
+    const origin = originOf(manifest);
     return {
         version: 1,
         provider: { id: source.providerId, kind: source.providerKind },
         externalIdentity: {
-            ...(transport.kind === 'http' ? { origin: new URL(transport.baseUrl).origin } : {}),
+            ...(origin ? { origin } : {}),
             operationId: source.externalId.slice(0, 120),
             sourceLocator: source.sourceLocator.slice(0, 200),
             ...(source.sourceRevision ? { sourceRevision: source.sourceRevision.slice(0, 120) } : {})
@@ -54,6 +55,7 @@ export function candidateFromManifest(
     source: ProposalSource,
     lifecycleHint: LifecycleHint = 'sync'
 ): CapabilityCandidateV1 {
+    const origin = originOf(manifest);
     return {
         version: 1,
         providerId: source.providerId,
@@ -61,7 +63,7 @@ export function candidateFromManifest(
         title: manifest.title,
         ...(manifest.description ? { description: manifest.description } : {}),
         sourceKind: manifest.source.kind,
-        ...(manifest.transport.kind === 'http' ? { origin: new URL(manifest.transport.baseUrl).origin } : {}),
+        ...(origin ? { origin } : {}),
         ...(source.effectHint ? { effectHint: source.effectHint } : {}),
         authHint: manifest.auth.kind,
         lifecycleHint,
@@ -73,13 +75,21 @@ export function candidateFromManifest(
     };
 }
 
+/** The URL origin a credential would be sent to, when the transport has one. */
+function originOf(manifest: CapabilityManifest): string | undefined {
+    const transport = manifest.transport;
+    if (transport.kind === 'http') return new URL(transport.baseUrl).origin;
+    if (transport.kind === 'mcp') return transport.origin;
+    return undefined;
+}
+
 function proposedTransport(manifest: CapabilityManifest): ProposedTransport {
     const transport = manifest.transport;
     if (transport.kind === 'http') {
         return { kind: 'http', access: transport.access, baseUrl: transport.baseUrl, method: transport.method, path: transport.path };
     }
     if (transport.kind === 'mcp') {
-        return { kind: 'mcp', serverId: transport.serverId, toolName: transport.toolName };
+        return { kind: 'mcp', serverId: transport.serverId, origin: transport.origin, toolName: transport.toolName };
     }
     if (transport.kind === 'async') {
         return { kind: 'async', runtimeId: transport.runtimeId, operation: transport.operation };
