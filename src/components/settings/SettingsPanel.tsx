@@ -130,24 +130,24 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
                         {/* Content */}
                         <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-100px)]">
-                            {/* Mock Data Toggle */}
+                            {/* Refresh-rate toggle (persisted as useMockData; no mock data exists) */}
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2">
                                     <Database className="w-4 h-4 text-[var(--citadel-primary)]" />
                                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                                        Data Source Mode
+                                        Refresh Rate
                                     </h3>
                                 </div>
 
                                 <div className="flex items-center justify-between p-4 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
                                     <div>
                                         <p className="text-sm font-medium text-[var(--text-primary)]">
-                                            Use Mock Data
+                                            Fast refresh
                                         </p>
                                         <p className="text-xs text-[var(--text-muted)] mt-1">
                                             {useMockData
-                                                ? 'Currently using demo data (no API calls)'
-                                                : 'Live API mode enabled'}
+                                                ? 'Live data, polled every 5–60 s (no mock data exists)'
+                                                : 'Live data, polled every 1–60 min'}
                                         </p>
                                     </div>
                                     <button
@@ -284,8 +284,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             {/* Info Box */}
                             <div className="p-4 bg-[var(--citadel-primary)]/5 border border-[var(--citadel-primary)]/20 rounded-lg">
                                 <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                                    <strong className="text-[var(--citadel-primary)]">Tip:</strong> Twelve demo APIs need no key.
-                                    Toggle &quot;Use Mock Data&quot; to explore without live calls.
+                                    <strong className="text-[var(--citadel-primary)]">Tip:</strong> Twelve public data sources need no key.
+                                    Every block polls live data; &quot;Fast refresh&quot; only shortens the interval.
                                 </p>
                             </div>
                         </div>
