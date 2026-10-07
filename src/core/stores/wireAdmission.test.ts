@@ -21,10 +21,7 @@ function schema(id: string, ports: PortSchema[]): OmniBlockSchema {
         block_id: id,
         display_name: id,
         category: 'workspace',
-        data_type: 'custom',
-        refresh_rate: 'manual',
         semantic_tags: [],
-        wiring_logic: 'none',
         ports
     };
 }
