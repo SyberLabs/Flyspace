@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useShellStore, useBlockStore } from '@/core/stores';
 import { ShellConfig } from '@/core/schemas/shell.schema';
 import { SHELL_TEMPLATES, keyedProvidersForTemplate, type ShellTemplate } from '@/core/shells/templates';
+import { newId } from '@/core/id';
 
 interface ShellPanelProps {
     isOpen: boolean;
@@ -82,7 +83,7 @@ export function ShellPanel({ isOpen, onClose }: ShellPanelProps) {
     const handleSaveCurrentShell = () => {
         if (!saveShellName.trim()) return;
 
-        const shellId = `shell_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const shellId = `shell_${newId()}`;
         saveShell(shellId, {
             name: saveShellName,
             description: saveShellDescription,

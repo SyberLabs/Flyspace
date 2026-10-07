@@ -12,6 +12,11 @@
 //   localStorage copy is left in place for one release as a fallback.
 // - SSR/node-safe: every method no-ops when IndexedDB is unavailable
 //   (server render, unit tests without fake-indexeddb).
+// - DURABILITY IS VISIBLE: the first open asks the browser for persistent
+//   storage once, a failed write is recorded instead of swallowed, and a
+//   version change from another connection (a newer tab's upgrade, or a
+//   deleteDatabase) closes this connection so it is never blocked. The page is
+//   never reloaded under the user. `getVaultHealth` exposes all three.
 // ============================================
 
 import { openDB, type IDBPDatabase } from 'idb';
@@ -25,15 +30,99 @@ function idbAvailable(): boolean {
     return typeof indexedDB !== 'undefined';
 }
 
+/** The last vault operation that failed, by DOMException name (or a vault code). */
+export interface VaultFailure {
+    code: string;
+    at: number;
+}
+
+export interface VaultHealth {
+    /**
+     * Result of the one `navigator.storage.persist()` request: `true` means the
+     * browser promised not to evict the vault under storage pressure, `false`
+     * means it declined, `'unsupported'` means the API is missing, `null` means
+     * the vault has not opened yet.
+     */
+    persisted: boolean | 'unsupported' | null;
+    lastFailure: VaultFailure | null;
+}
+
+const INITIAL_HEALTH: VaultHealth = { persisted: null, lastFailure: null };
+let health: VaultHealth = INITIAL_HEALTH;
+const healthListeners = new Set<() => void>();
+
+function setHealth(patch: Partial<VaultHealth>): void {
+    health = { ...health, ...patch };
+    healthListeners.forEach(listener => listener());
+}
+
+/** Current durability state. Stable reference until it changes (useSyncExternalStore-safe). */
+export function getVaultHealth(): VaultHealth {
+    return health;
+}
+
+/** State before the vault opens; also the server snapshot. */
+export function getInitialVaultHealth(): VaultHealth {
+    return INITIAL_HEALTH;
+}
+
+export function subscribeVaultHealth(listener: () => void): () => void {
+    healthListeners.add(listener);
+    return () => { healthListeners.delete(listener); };
+}
+
+function recordFailure(error: unknown, fallback: string): void {
+    const code = error instanceof Error && error.name ? error.name : fallback;
+    setHealth({ lastFailure: { code, at: Date.now() } });
+}
+
+let persistRequested = false;
+
+/** Ask once for persistent storage; the answer lands in `health.persisted`. */
+function requestPersistence(): void {
+    if (persistRequested) return;
+    persistRequested = true;
+    const storage = typeof navigator !== 'undefined' ? navigator.storage : undefined;
+    if (!storage || typeof storage.persist !== 'function') {
+        setHealth({ persisted: 'unsupported' });
+        return;
+    }
+    storage.persist().then(
+        granted => setHealth({ persisted: granted }),
+        () => setHealth({ persisted: false })
+    );
+}
+
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
 function getDb(): Promise<IDBPDatabase> {
     if (!dbPromise) {
+        requestPersistence();
         dbPromise = openDB(VAULT_DB_NAME, VAULT_DB_VERSION, {
             upgrade(db) {
                 if (!db.objectStoreNames.contains(VAULT_STORE_NAME)) {
                     db.createObjectStore(VAULT_STORE_NAME);
                 }
+            },
+            // Another tab holds an older connection open, so our upgrade waits.
+            blocked() {
+                setHealth({ lastFailure: { code: 'VersionBlocked', at: Date.now() } });
+            },
+            // onversionchange: another connection wants to upgrade or delete
+            // this database. Close so it is not blocked and drop the cached
+            // handle; the next access reopens lazily. After a delete that
+            // recreates the vault. After an upgrade the reopen fails with
+            // VersionError, which recordFailure surfaces: this tab's code does
+            // not know the new schema, and a page reload here would abort any
+            // put still in flight and hydrate older state (Codex review on
+            // #92; it also tore down the e2e freshStart helper mid-evaluate).
+            blocking(_currentVersion, _blockedVersion, event) {
+                (event.target as IDBDatabase | null)?.close();
+                dbPromise = null;
+            },
+            // The browser closed the connection (e.g. storage cleared); reopen next time.
+            terminated() {
+                dbPromise = null;
             }
         });
     }
@@ -54,6 +143,8 @@ export async function __resetVaultConnection(): Promise<void> {
         }
     }
     dbPromise = null;
+    persistRequested = false;
+    health = INITIAL_HEALTH;
 }
 
 /**
@@ -90,8 +181,10 @@ export const vaultStorage: StateStorage = {
         try {
             const db = await getDb();
             await db.put(VAULT_STORE_NAME, value, name);
-        } catch {
-            // Swallow: a failed write is preferable to a crashed canvas.
+        } catch (error) {
+            // Never throw into the app, but never hide it either: the Settings
+            // panel shows the last failure so the user can export in time.
+            recordFailure(error, 'WriteFailed');
         }
     },
 
@@ -100,8 +193,8 @@ export const vaultStorage: StateStorage = {
         try {
             const db = await getDb();
             await db.delete(VAULT_STORE_NAME, name);
-        } catch {
-            // Swallow (see setItem).
+        } catch (error) {
+            recordFailure(error, 'WriteFailed');
         }
     }
 };

@@ -3,7 +3,8 @@
 //
 // Persona turns do not go through here (those are personaTurn.service).
 // This still has to fail closed, never leave status stuck on processing,
-// and write the answer into observations rather than a hidden prompt path.
+// and return the answer without writing it anywhere: the observations pool
+// is persisted and wireable into prompts, so a reply enters it by click only.
 // ============================================
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -101,8 +102,9 @@ describe('MindEngine.think', () => {
         expect(second.success).toBe(true);
     });
 
-    it('writes a successful answer into the observations pool', async () => {
+    it('returns a successful answer and writes it into no pool without confirmation', async () => {
         seedBlock();
+        const before = useMindStore.getState().contextPools.map(p => p.entries.length);
         vi.mocked(runTurn).mockResolvedValue({
             success: true,
             content: 'Rates look steady.',
@@ -114,8 +116,9 @@ describe('MindEngine.think', () => {
 
         expect(result.success).toBe(true);
         expect(result.response).toBe('Rates look steady.');
-        const observations = useMindStore.getState().contextPools.find(p => p.id === 'observations');
-        expect(observations?.entries.some(e => e.content === 'Rates look steady.')).toBe(true);
+        const pools = useMindStore.getState().contextPools;
+        expect(pools.map(p => p.entries.length)).toEqual(before);
+        expect(pools.some(p => p.entries.some(e => e.content.includes('Rates look steady.')))).toBe(false);
         expect(useMindStore.getState().status).toBe('ready');
     });
 

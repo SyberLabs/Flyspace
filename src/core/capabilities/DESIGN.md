@@ -160,8 +160,12 @@ changes when the capability runs. Approval stays outside the digest.
 
 The Armory hosts the only product door into `installProposal`: paste an
 OpenAPI document, compile it, review effect and auth slots, and install the
-checked operations. Secret values are written only to the in-memory session
-slot and cleared from the form. The panel never calls `restoreSnapshot` and
+checked operations. Beside every proposal row and every secret field the panel
+shows the origin of `transport.baseUrl` and the auth kind and placement
+(`auth.kind`, `auth.in`, `auth.name`), and warns when a key is placed in the
+query string, because a pasted document chooses the title and the destination
+and the title alone must not stand for where a credential goes. Secret values
+are written only to the in-memory session slot and cleared from the form. The panel never calls `restoreSnapshot` and
 never marks a proposal approved. Approve and Deny are separate controls on
 installed write and destructive capabilities.
 

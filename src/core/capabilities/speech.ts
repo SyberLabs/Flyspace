@@ -2,7 +2,7 @@
 // same manifest gate as OpenAPI — manual invocation, no secret, no network.
 // The browser engine is replaceable so tests never touch a real microphone.
 
-import { sha256 } from './hash';
+import { newId } from '../id';
 import { sealManifest, validateManifest, type CapabilityManifest } from './manifest';
 import type { LocalCall } from './execute';
 
@@ -31,7 +31,7 @@ export interface SpeechEngine {
 let activeSpeakId: string | null = null;
 
 export function openSpeechSession(kind: 'speak' | 'listen'): SpeechSession {
-    const id = `${kind}_${sha256(`${Date.now()}|${Math.random()}`).slice(0, 12)}`;
+    const id = `${kind}_${newId()}`;
     const controller = new AbortController();
     return {
         id,

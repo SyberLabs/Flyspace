@@ -14,6 +14,7 @@ import { evaluateWireAdmission } from '../interaction/ports';
 import { useBlockStore } from './blockStore';
 import { admitConnection, type ConnectionAdmission } from '../capabilities/compatibility';
 import { vaultStorage } from '../vault';
+import { newId } from '../id';
 
 /**
  * The one admission rule for a wire, whatever path it arrives on: the live
@@ -137,7 +138,7 @@ export const useWireStore = create<WireStoreState>()(
                     return existing?.id || '';
                 }
 
-                const wireId = `wire_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const wireId = `wire_${newId()}`;
                 const newWire: DataWire = {
                     id: wireId,
                     sourceBlockId,

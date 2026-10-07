@@ -409,3 +409,29 @@ describe('regeneratePersonaTurn', () => {
         expect(lastAssistant()?.content).toBe('Reply two.');
     });
 });
+
+describe('runPersonaTurn — message ids are unique within a millisecond', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('two chat turns in the same millisecond keep four distinct messages', async () => {
+        // Freeze the clock and the PRNG so an id that leans on either collides.
+        vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+        vi.spyOn(Math, 'random').mockReturnValue(0.123456789);
+
+        mockStream({ sources: [], chunks: ['First answer.'] });
+        await runPersonaTurn(PERSONA, 'First question?');
+        mockStream({ sources: [], chunks: ['Second answer.'] });
+        await runPersonaTurn(PERSONA, 'Second question?');
+
+        const messages = personaData().messages;
+        expect(messages.map(m => m.content)).toEqual([
+            'First question?',
+            'First answer.',
+            'Second question?',
+            'Second answer.'
+        ]);
+        expect(new Set(messages.map(m => m.id)).size).toBe(4);
+    });
+});

@@ -7,6 +7,7 @@
 
 import { LLMConfig } from '@/core/schemas/mind.schema';
 import type { ContextSource } from '@/core/schemas/wire.schema';
+import { newId } from '@/core/id';
 
 // ============================================
 // TYPES (public interface preserved for callers)
@@ -57,7 +58,7 @@ const LLM_ENDPOINT = '/api/llm';
 export const RUN_ID_HEADER = 'X-Omni-Run-Id';
 
 function idempotencyKey(value?: string): string {
-    return value ?? globalThis.crypto.randomUUID();
+    return value ?? newId();
 }
 
 async function throwIfReplayed(res: Response, onRunId?: (runId: string) => void): Promise<void> {
