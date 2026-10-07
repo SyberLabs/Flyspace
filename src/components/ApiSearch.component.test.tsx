@@ -92,7 +92,7 @@ describe('ApiSearch', () => {
         serve();
         render(<ApiSearch onSpec={() => {}} />);
         await search('sms');
-        expect(screen.getByText('Swagger 2.0, not supported yet')).toBeTruthy();
+        expect(screen.getByText(/Swagger 2\.0, not supported yet/)).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Use The SMS Works API' })).toBeNull();
         expect(screen.getByRole('button', { name: 'Use SMS API' })).toBeTruthy();
     });
@@ -179,7 +179,41 @@ describe('ApiSearch', () => {
     });
 });
 
+// The real Visual Crossing spec gives three operations the same summary; the
+// browser smoke on 2026-10-07 showed them as three identical checkboxes.
+const SAME_TITLES_SPEC = {
+    openapi: '3.0.0',
+    info: { title: 'Weather', version: '1' },
+    servers: [{ url: 'https://weather.visualcrossing.com/rest' }],
+    paths: {
+        '/timeline/{location}': { get: { operationId: 'timeline', summary: 'Weather API', parameters: [{ name: 'location', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } } },
+        '/forecast': { get: { operationId: 'forecast', summary: 'Weather API', responses: { '200': { description: 'ok' } } } }
+    }
+};
+
 describe('CapabilityInstall with search', () => {
+    it('tells same-titled operations apart by method and path', async () => {
+        serve({ spec: SAME_TITLES_SPEC });
+        render(<CapabilityInstall />);
+        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        await search('weather');
+        fireEvent.click(screen.getByRole('button', { name: 'Use Visual Crossing Weather API' }));
+
+        expect(await screen.findByLabelText('Weather API (GET /timeline/{location})')).toBeTruthy();
+        expect(screen.getByLabelText('Weather API (GET /forecast)')).toBeTruthy();
+        expect(screen.getByText('GET /timeline/{location}')).toBeTruthy();
+    });
+
+    it('moves focus to the review after a pick, so it is not left below the results', async () => {
+        serve();
+        render(<CapabilityInstall />);
+        fireEvent.click(screen.getByRole('button', { name: 'Bring an API' }));
+        await search('weather');
+        fireEvent.click(screen.getByRole('button', { name: 'Use Visual Crossing Weather API' }));
+        const review = await screen.findByText(/^Review Visual Crossing Weather API before installing/);
+        await waitFor(() => expect(document.activeElement).toBe(review));
+    });
+
     it('goes from a search to the review to an installed capability, recording where the spec came from', async () => {
         serve();
         render(<CapabilityInstall />);

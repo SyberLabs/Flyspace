@@ -156,12 +156,20 @@ export function ApiSearch({ onSpec }: ApiSearchProps) {
                         <li key={entry.id} className="rounded border border-[var(--citadel-border)] p-1.5 text-xs">
                             <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
-                                    <div className="font-medium text-[var(--text-primary)]">{entry.title}</div>
+                                    {/* Directory titles include unbroken identifiers
+                                        ("ApiManagementClient"); let them wrap rather
+                                        than run under the button. */}
+                                    <div className="font-medium text-[var(--text-primary)] [overflow-wrap:anywhere]">{entry.title}</div>
                                     <div className="truncate text-[10px] text-[var(--text-muted)]">
                                         {entry.id}
                                         {entry.categories.length > 0 ? ` · ${entry.categories.join(', ')}` : ''}
-                                        {` · ${specDate(entry)}`}
+                                    </div>
+                                    {/* The date is the staleness signal, so it gets a
+                                        line of its own instead of being truncated away. */}
+                                    <div className="text-[10px] text-[var(--text-muted)]">
+                                        {specDate(entry)}
                                         {source === 'intent' && intent ? ` · matches “${intentLabel(intent)}”` : ''}
+                                        {entry.supported ? '' : ` · Swagger ${entry.openapiVersion}, not supported yet`}
                                     </div>
                                 </div>
                                 {entry.supported ? (
@@ -174,11 +182,7 @@ export function ApiSearch({ onSpec }: ApiSearchProps) {
                                     >
                                         {fetching === entry.id ? 'Fetching…' : 'Use'}
                                     </button>
-                                ) : (
-                                    <span className="shrink-0 text-[10px] text-[var(--text-muted)]">
-                                        Swagger {entry.openapiVersion}, not supported yet
-                                    </span>
-                                )}
+                                ) : null}
                             </div>
                         </li>
                     ))}
