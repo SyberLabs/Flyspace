@@ -178,7 +178,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                     <div className="space-y-1 rounded-md border border-[var(--truth-amber)]/40 p-2">
                         <p className="text-xs text-[var(--text-primary)]">This API needs its key.</p>
                         <p className="text-[10px] text-[var(--text-muted)]">Keys are kept for this session only, so enter it again after a reload.</p>
-                        <KeyField manifest={manifest} />
+                        <KeyField manifest={manifest} compact />
                     </div>
                 ) : null}
 
@@ -194,7 +194,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                     </p>
                 ) : null}
                 {changingKey && manifest && hasKey ? (
-                    <KeyField manifest={manifest} autoFocus onSaved={() => setChangingKey(false)} onCancel={() => setChangingKey(false)} />
+                    <KeyField manifest={manifest} compact autoFocus onSaved={() => setChangingKey(false)} onCancel={() => setChangingKey(false)} />
                 ) : null}
 
                 {response.present ? (

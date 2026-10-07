@@ -27,13 +27,15 @@ export interface KeyFieldProps {
     onSaved?: () => void;
     onCancel?: () => void;
     autoFocus?: boolean;
+    /** Inside a block, whose header already names the host: drop the visible origin line. */
+    compact?: boolean;
 }
 
 /**
  * Enter or replace one API's key. It goes into the session's secret slot,
  * never into the canvas or the manifest, and is gone after a reload.
  */
-export function KeyField({ manifest, onSaved, onCancel, autoFocus }: KeyFieldProps) {
+export function KeyField({ manifest, onSaved, onCancel, autoFocus, compact }: KeyFieldProps) {
     const [value, setValue] = useState('');
     const [error, setError] = useState<string | null>(null);
     const ref = keySlotOf(manifest);
@@ -66,8 +68,12 @@ export function KeyField({ manifest, onSaved, onCancel, autoFocus }: KeyFieldPro
             }}
         >
             <label className="block text-[11px] text-[var(--text-muted)]">
-                Key for <span className="font-mono text-[var(--text-secondary)]">{destination?.origin}</span>
-                {destination?.credential ? <span> · {destination.credential}</span> : null}
+                {compact ? null : (
+                    <>
+                        Key for <span className="font-mono text-[var(--text-secondary)]">{destination?.origin}</span>
+                        {destination?.credential ? <span> · {destination.credential}</span> : null}
+                    </>
+                )}
                 <input
                     type="password"
                     aria-label={`Key for ${destination?.origin ?? ref}`}
@@ -90,7 +96,7 @@ export function KeyField({ manifest, onSaved, onCancel, autoFocus }: KeyFieldPro
                 {onCancel ? (
                     <button type="button" onClick={onCancel} className="text-[11px] text-[var(--text-muted)] underline">Cancel</button>
                 ) : null}
-                <span className="text-[10px] text-[var(--text-muted)]">Kept for this session only.</span>
+                {compact ? null : <span className="text-[10px] text-[var(--text-muted)]">Kept for this session only.</span>}
             </div>
         </form>
     );
