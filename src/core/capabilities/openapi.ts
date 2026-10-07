@@ -50,6 +50,7 @@ export function compileOpenApi(spec: unknown): CompileResult {
         ? `${spec.info.title}${typeof spec.info.version === 'string' ? `@${spec.info.version}` : ''}`
         : 'openapi';
 
+    const titles = operationTitles(spec.paths);
     const manifests: CapabilityManifest[] = [];
     let count = 0;
 
@@ -73,6 +74,7 @@ export function compileOpenApi(spec: unknown): CompileResult {
                 operation,
                 operationId,
                 label,
+                title: titles.get(`${method} ${path}`) ?? label.slice(0, MAX_TITLE),
                 baseUrl: base.url,
                 locator
             });
@@ -84,6 +86,56 @@ export function compileOpenApi(spec: unknown): CompileResult {
     return { manifests, errors };
 }
 
+const MAX_TITLE = 120;
+
+/**
+ * Every operation's title, decided for the whole document so two operations
+ * never share one. A title is the summary, else `operationId`, else
+ * `METHOD /path`. Real specs reuse summaries: Visual Crossing's directory spec
+ * gives three timeline paths the same summary and no operationId, which
+ * installed as three indistinguishable blocks. Where titles collide, each gets
+ * the part of its path where the group differs ("· {location}/{startdate}"),
+ * and the method if that still is not enough.
+ */
+function operationTitles(paths: Record<string, unknown>): Map<string, string> {
+    const ops: Array<{ key: string; method: HttpMethod; path: string; title: string }> = [];
+    for (const [path, pathItem] of Object.entries(paths)) {
+        if (!path.startsWith('/') || !isRecord(pathItem)) continue;
+        for (const method of METHODS) {
+            const operation = pathItem[method.toLowerCase()];
+            if (!isRecord(operation)) continue;
+            const summary = typeof operation.summary === 'string' ? operation.summary.trim() : '';
+            const operationId = typeof operation.operationId === 'string' ? operation.operationId : '';
+            ops.push({ key: `${method} ${path}`, method, path, title: summary || operationId || `${method} ${path}` });
+        }
+    }
+
+    const groups = new Map<string, typeof ops>();
+    for (const op of ops) groups.set(op.title, [...(groups.get(op.title) ?? []), op]);
+
+    const titles = new Map<string, string>();
+    for (const [base, group] of groups) {
+        if (group.length === 1) {
+            titles.set(group[0].key, base.slice(0, MAX_TITLE));
+            continue;
+        }
+        const segments = group.map(op => op.path.split('/').filter(Boolean));
+        let shared = 0;
+        // Only literal segments count as shared: a path parameter is part of
+        // what the caller must supply, so it stays in every suffix.
+        while (segments.every(s => shared < s.length && s[shared] === segments[0][shared] && !s[shared].startsWith('{'))) shared++;
+        const suffixes = group.map((op, i) => segments[i].slice(shared).join('/') || segments[i].at(-1) || '/');
+        const suffixCounts = new Map<string, number>();
+        for (const suffix of suffixes) suffixCounts.set(suffix, (suffixCounts.get(suffix) ?? 0) + 1);
+        group.forEach((op, i) => {
+            const tail = suffixCounts.get(suffixes[i])! > 1 ? `${op.method} ${suffixes[i]}` : suffixes[i];
+            const room = MAX_TITLE - tail.length - 3;
+            titles.set(op.key, `${base.slice(0, Math.max(1, room))} · ${tail}`.slice(0, MAX_TITLE));
+        });
+    }
+    return titles;
+}
+
 function compileOperation(args: {
     spec: Record<string, unknown>;
     path: string;
@@ -92,6 +144,8 @@ function compileOperation(args: {
     operation: Record<string, unknown>;
     operationId?: string;
     label: string;
+    /** Decided for the whole spec at once, so same-summary operations get distinct titles. */
+    title: string;
     baseUrl: string;
     locator: string;
 }): { manifest: CapabilityManifest } | { error: string } {
@@ -114,9 +168,7 @@ function compileOperation(args: {
         method: args.method,
         path: args.path
     };
-    const title = typeof args.operation.summary === 'string' && args.operation.summary.trim()
-        ? args.operation.summary.trim().slice(0, 120)
-        : args.label.slice(0, 120);
+    const title = args.title;
     const description = typeof args.operation.description === 'string'
         ? args.operation.description.slice(0, 2000)
         : undefined;
