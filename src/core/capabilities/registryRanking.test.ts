@@ -164,3 +164,15 @@ describe('INTENT_QUESTIONS', () => {
         }
     });
 });
+
+describe('a curated API that compiles to nothing', () => {
+    it('is not offered as the answer to its intent, but keyword search still finds it', () => {
+        const catalog = [
+            entry('dead-weather.example', 'Weather Service', { operations: 0 }),
+            entry('live-weather.example', 'Forecast Service', { description: 'weather forecasts', operations: 3 })
+        ];
+        const intents: RegistryIntent[] = [{ id: 'weather', criteria: 'weather forecasts', terms: 'forecast', apis: ['dead-weather.example'] }];
+        const results = rankResults('weather service', createApiSearcher(catalog), new Map(catalog.map(e => [e.id, e])), [{ id: 'weather', p: 0.95 }], { intents });
+        expect(results.map(r => `${r.source}:${r.entry.id}`)).toEqual(['intent:live-weather.example', 'keyword:dead-weather.example']);
+    });
+});

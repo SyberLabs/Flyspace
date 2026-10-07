@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ApiIndex, ApiIndexEntry } from '@/core/capabilities/apiIndex';
+import { isUsableEntry, MAX_INDEXED_OPERATIONS, type ApiIndex, type ApiIndexEntry } from '@/core/capabilities/apiIndex';
 import { createApiSearcher, loadApiIndex } from '@/core/capabilities/registrySearch';
 import { fetchIntentScores, rankResults, routedIntents, type IntentScore } from '@/core/capabilities/registryRanking';
 
@@ -23,6 +23,11 @@ function intentLabel(id: string): string {
 }
 
 /** `2023-03` — enough to tell a fresh spec from a stale one at a glance. */
+/** `12 operations`, or `100+ operations` at the compiler's cap. */
+function operationCount(count: number): string {
+    return `${count}${count >= MAX_INDEXED_OPERATIONS ? '+' : ''} operation${count === 1 ? '' : 's'}`;
+}
+
 function shortDate(updated: string): string {
     return updated ? updated.slice(0, 7) : 'date unknown';
 }
@@ -141,13 +146,17 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                     <ul aria-label="API search results" className="space-y-1">
                         {results.map(({ entry, source, intent }) => {
                             const selected = entry.id === selectedId;
+                            const usable = isUsableEntry(entry);
+                            const label = !entry.supported
+                                ? `${entry.title} (not supported)`
+                                : usable ? `Review ${entry.title}` : `${entry.title} (nothing usable yet)`;
                             return (
                                 <li key={entry.id}>
                                     <button
                                         type="button"
-                                        aria-label={entry.supported ? `Review ${entry.title}` : `${entry.title} (not supported)`}
+                                        aria-label={label}
                                         aria-pressed={selected}
-                                        disabled={!entry.supported}
+                                        disabled={!usable}
                                         onClick={() => onSelect(entry)}
                                         className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${selected
                                             ? 'border-[var(--citadel-primary)] bg-[var(--citadel-elevated)]'
@@ -162,7 +171,13 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                                             <span>· spec {shortDate(entry.updated)}</span>
                                             {source === 'intent' && intent ? <span>· matches “{intentLabel(intent)}”</span> : null}
                                             {entry.supported ? null : <span>· Swagger {entry.openapiVersion}, not supported yet</span>}
+                                            {entry.operations ? <span>· {operationCount(entry.operations)}</span> : null}
                                         </span>
+                                        {entry.supported && entry.operations === 0 ? (
+                                            <span className="mt-0.5 block text-[11px] text-[var(--truth-amber)] [overflow-wrap:anywhere]">
+                                                Nothing usable yet{entry.blocker ? `: ${entry.blocker}` : ''}
+                                            </span>
+                                        ) : null}
                                     </button>
                                 </li>
                             );

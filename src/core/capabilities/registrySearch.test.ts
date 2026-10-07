@@ -98,6 +98,24 @@ function response(body: string, init: { status?: number; headers?: Record<string
 
 const WEATHER = CATALOG[0];
 
+describe('APIs that compile to nothing', () => {
+    it('rank after a usable API that matches as well, and still show', () => {
+        const catalog = [
+            entry('dead.example', 'Weather API', { operations: 0, blocker: 'It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)' }),
+            entry('live.example', 'Weather API', { operations: 5 })
+        ];
+        expect(searchApiIndex(catalog, 'weather').map(hit => hit.entry.id)).toEqual(['live.example', 'dead.example']);
+    });
+
+    it('still lead when they match far better', () => {
+        const catalog = [
+            entry('gmail.example', 'Gmail API', { description: 'gmail mail inbox', operations: 0 }),
+            entry('mailer.example', 'Bulk Sender', { description: 'mail', operations: 5 })
+        ];
+        expect(searchApiIndex(catalog, 'gmail inbox')[0].entry.id).toBe('gmail.example');
+    });
+});
+
 describe('fetchCatalogSpec', () => {
     it('fetches the spec with no credentials, no referrer and no redirects', async () => {
         const fetchImpl = vi.fn(async () => response('{"openapi":"3.0.0"}'));

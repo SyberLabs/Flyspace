@@ -9,7 +9,7 @@
 // result is plain keyword search: routing can add results, never hide them.
 // ============================================
 
-import type { ApiIndexEntry } from './apiIndex';
+import { isUsableEntry, type ApiIndexEntry } from './apiIndex';
 import { DEFAULT_RESULT_LIMIT, type ApiSearcher } from './registrySearch';
 import { OTHER_INTENT, REGISTRY_INTENTS, type RegistryIntent } from './registryIntents';
 
@@ -71,7 +71,11 @@ export function rankResults(
         const intent = catalog.get(score.id);
         // An id JEV returned that is not in the host's list is ignored, not trusted.
         if (!intent) continue;
-        for (const id of intent.apis) add(byId.get(id), 'intent', intent.id);
+        // A curated API that compiles to nothing is not offered as the answer; keyword search still finds it.
+        for (const id of intent.apis) {
+            const entry = byId.get(id);
+            if (entry && isUsableEntry(entry)) add(entry, 'intent', intent.id);
+        }
         for (const hit of searcher.search(intent.terms, TERMS_PER_INTENT)) add(hit.entry, 'intent', intent.id);
     }
     for (const hit of searcher.search(query, limit)) add(hit.entry, 'keyword');
