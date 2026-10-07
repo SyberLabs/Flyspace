@@ -26,10 +26,10 @@ describe('Polymarket block', () => {
         const View = getBlockView('polymarket_live_odds')!;
         render(<View instanceId={instanceId} />);
 
-        // The card and the store's status settle separately, so wait for both.
-        await waitFor(() => {
-            expect(screen.getByTestId('block-setup-card').getAttribute('data-kind')).toBe('error');
-            expect(useBlockStore.getState().getBlock(instanceId)?.status).toBe('error');
-        });
+        // The card reads the hook's error state and paints on commit; the store's
+        // status is written by a passive effect that flushes after that commit.
+        // Each is its own observable, so each is waited for.
+        await waitFor(() => expect(screen.getByTestId('block-setup-card').getAttribute('data-kind')).toBe('error'));
+        await waitFor(() => expect(useBlockStore.getState().getBlock(instanceId)?.status).toBe('error'));
     });
 });
