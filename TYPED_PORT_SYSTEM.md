@@ -73,6 +73,8 @@ Every load path runs the same `admitWire` as `addWire`:
 
 - shell restore and template instantiation write wires through
   `replaceWiresForShell`;
+- undoing a delete (`src/core/interaction/session.ts`) hands the block's wires
+  back through `replaceWiresForShell`;
 - wires hydrated from the vault are re-admitted by `revalidatePersistedWires`
   once both the block store and the wire store have hydrated.
 
@@ -85,7 +87,8 @@ there too; the warning is the record of it.
 ## Tests
 
 `src/core/interaction/interaction.test.ts` (typed wire admission, refusal in the
-store), `src/core/capabilities/boundary.test.ts` (`join_titles` projection,
+store), `src/core/interaction/session.test.ts` (undo of a delete restores the
+wires once, by id, and drops one the canvas now refuses), `src/core/capabilities/boundary.test.ts` (`join_titles` projection,
 typed mismatch refused), and `src/core/stores/wireAdmission.test.ts` (hydrate
 and shell restore drop an incompatible wire; every built-in template's wires
 pass `admitWire`).
