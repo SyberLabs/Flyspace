@@ -38,6 +38,53 @@ export interface ApiIndexEntry {
     supported: boolean;
     /** `YYYY-MM-DD` the spec last changed upstream, or '' when the directory does not say. */
     updated: string;
+    /**
+     * How many operations the compiler made from the spec when the index was
+     * built, up to its cap of MAX_INDEXED_OPERATIONS. Absent when not checked
+     * (Swagger 2.0, or the spec could not be fetched at build time).
+     */
+    operations?: number;
+    /** Why nothing compiled, in plain words. Only when `operations` is 0. */
+    blocker?: string;
+}
+
+/** The compiler stops after this many operations, so the index counts no higher. */
+export const MAX_INDEXED_OPERATIONS = 100;
+const MAX_BLOCKER_CHARS = 160;
+
+/** Whether choosing this entry can give you anything to place. Unknown counts as yes. */
+export function isUsableEntry(entry: ApiIndexEntry): boolean {
+    return entry.supported && entry.operations !== 0;
+}
+
+/**
+ * The reason most operations of a spec did not compile, said so a person can
+ * tell what is missing. The compiler's own words are kept for the rest.
+ */
+export function describeCompileBlocker(messages: readonly string[]): string {
+    if (messages.length === 0) return 'No operations it describes can be used yet';
+    const reasons = messages.map(message => {
+        if (/combine several schemes|no supported security scheme|unsupported scheme|oauth/i.test(message)) {
+            return 'It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)';
+        }
+        if (/baseUrl must be https|server url|relative server|concrete server/i.test(message)) {
+            return 'Its server address is not a fixed https URL';
+        }
+        if (/compound .* parameters|parameter style|cookie parameters/i.test(message)) {
+            return 'It takes parameters in a form OmniOS does not support yet';
+        }
+        if (/oneOf|anyOf|allOf|cyclic|does not declare a type|not a single ValueType/i.test(message)) {
+            return 'Its data shapes are ones OmniOS cannot type yet';
+        }
+        if (/responses are in the supported subset|response schema is required|no success response|requestBody must be application/i.test(message)) {
+            return 'It does not send and receive plain JSON';
+        }
+        if (/only OpenAPI 3/i.test(message)) return 'Only OpenAPI 3.x can be installed';
+        return oneLine(message.replace(/^[^:]{1,80}: /, ''), MAX_BLOCKER_CHARS);
+    });
+    const counts = new Map<string, number>();
+    for (const reason of reasons) counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    return [...counts].sort((a, b) => b[1] - a[1])[0][0];
 }
 
 export interface ApiIndex {
@@ -129,6 +176,16 @@ export function buildApiIndexEntries(raw: unknown): { entries: ApiIndexEntry[]; 
     return { entries, issues };
 }
 
+/** `operations` is a count the builder can have made; `blocker` only explains a zero. */
+function validCompileStatus(entry: Record<string, unknown>): boolean {
+    const { operations, blocker } = entry;
+    if (operations === undefined) return blocker === undefined;
+    if (entry.supported !== true) return false;
+    if (typeof operations !== 'number' || !Number.isInteger(operations) || operations < 0 || operations > MAX_INDEXED_OPERATIONS) return false;
+    if (blocker === undefined) return true;
+    return operations === 0 && typeof blocker === 'string' && blocker.length <= MAX_BLOCKER_CHARS;
+}
+
 /**
  * Validate an index as it arrives in the browser. A static asset is still
  * input: a stale deploy, a proxy or a bad build could serve anything, and an
@@ -148,7 +205,8 @@ export function parseApiIndex(value: unknown): ApiIndex | null {
             || typeof entry.openapiVersion !== 'string'
             || typeof entry.supported !== 'boolean'
             || entry.supported !== entry.openapiVersion.startsWith('3.')
-            || typeof entry.updated !== 'string') {
+            || typeof entry.updated !== 'string'
+            || !validCompileStatus(entry)) {
             return null;
         }
         seen.add(entry.id);

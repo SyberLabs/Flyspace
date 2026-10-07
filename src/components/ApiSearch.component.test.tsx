@@ -21,7 +21,9 @@ const INDEX: ApiIndex = {
         entry('visualcrossing.com:weather', 'Visual Crossing Weather API', { description: 'Weather forecast', categories: ['location'] }),
         entry('nexmo.com:sms', 'SMS API', { description: 'Send SMS messages', categories: ['telecom'] }),
         entry('thesmsworks.co.uk', 'The SMS Works API', { openapiVersion: '2.0', supported: false }),
-        entry('nytimes.com:archive', 'Archive API', { description: 'is it going to rain tomorrow headlines' })
+        entry('nytimes.com:archive', 'Archive API', { description: 'is it going to rain tomorrow headlines' }),
+        entry('googleapis.com:calendar', 'Calendar API', { description: 'calendar events', operations: 0, blocker: 'It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)' }),
+        entry('1password.com:events', 'Events API', { description: 'calendar events audit', operations: 3 })
     ]
 };
 
@@ -95,6 +97,20 @@ describe('ApiSearch', () => {
         expect(unsupported.disabled).toBe(true);
         expect(screen.getByText(/Swagger 2\.0, not supported yet/)).toBeTruthy();
         fireEvent.click(unsupported);
+        expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('says how much an API gives, and disables one that gives nothing, with the reason', async () => {
+        serve();
+        const onSelect = vi.fn();
+        render(<ApiSearch onSelect={onSelect} />);
+        await search('calendar events');
+        expect(resultNames()).toEqual(['Review Events API', 'Calendar API (nothing usable yet)']);
+        expect(screen.getByText('· 3 operations')).toBeTruthy();
+        expect(screen.getByText('Nothing usable yet: It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)')).toBeTruthy();
+        const dead = screen.getByRole('button', { name: 'Calendar API (nothing usable yet)' }) as HTMLButtonElement;
+        expect(dead.disabled).toBe(true);
+        fireEvent.click(dead);
         expect(onSelect).not.toHaveBeenCalled();
     });
 

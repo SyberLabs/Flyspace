@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildApiIndexEntries,
+    describeCompileBlocker,
     isCatalogSpecUrl,
+    isUsableEntry,
     MAX_DESCRIPTION_CHARS,
     parseApiIndex,
     type ApiIndex
@@ -140,5 +142,51 @@ describe('parseApiIndex', () => {
         expect(parseApiIndex({ ...(index([entry]) as object), format: 'something-else' })).toBeNull();
         expect(parseApiIndex({ ...(index([entry]) as object), version: 2 })).toBeNull();
         expect(parseApiIndex(null)).toBeNull();
+    });
+});
+
+describe('compile status', () => {
+    function index(entries: unknown[]): unknown {
+        return {
+            format: 'omni-api-index',
+            version: 1,
+            source: { url: 'https://api.apis.guru/v2/list.json', license: 'CC0-1.0', etag: null, lastModified: null },
+            builtAt: '2026-10-07T00:00:00.000Z',
+            entries
+        };
+    }
+    const good = buildApiIndexEntries(Object.fromEntries([GOOD])).entries[0];
+    const swagger = buildApiIndexEntries(Object.fromEntries([SWAGGER2])).entries[0];
+
+    it('accepts a count, and a reason only beside a zero', () => {
+        expect(parseApiIndex(index([{ ...good, operations: 12 }]))).not.toBeNull();
+        expect(parseApiIndex(index([{ ...good, operations: 0, blocker: 'Its server address is not a fixed https URL' }]))).not.toBeNull();
+        expect(parseApiIndex(index([{ ...good, operations: 3, blocker: 'why?' }]))).toBeNull();
+        expect(parseApiIndex(index([{ ...good, blocker: 'no count' }]))).toBeNull();
+    });
+
+    it('refuses a count the builder could not have made', () => {
+        for (const operations of [-1, 1.5, 101, '3']) {
+            expect(parseApiIndex(index([{ ...good, operations }])), String(operations)).toBeNull();
+        }
+        expect(parseApiIndex(index([{ ...swagger, operations: 0 }]))).toBeNull(); // Swagger 2.0 is never compiled
+    });
+
+    it('treats an unchecked entry as usable, and a zero as not', () => {
+        expect(isUsableEntry(good)).toBe(true);
+        expect(isUsableEntry({ ...good, operations: 4 })).toBe(true);
+        expect(isUsableEntry({ ...good, operations: 0 })).toBe(false);
+        expect(isUsableEntry(swagger)).toBe(false);
+    });
+
+    it('names the commonest blocker in plain words', () => {
+        expect(describeCompileBlocker([
+            'requirements that combine several schemes are unsupported',
+            'GET /a: transport.baseUrl must be https, except loopback http in a host-created manifest',
+            'requirements that combine several schemes are unsupported'
+        ])).toBe('It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)');
+        expect(describeCompileBlocker(['transport.baseUrl must be https'])).toBe('Its server address is not a fixed https URL');
+        expect(describeCompileBlocker(['getThing: something new went wrong'])).toBe('something new went wrong');
+        expect(describeCompileBlocker([])).toBe('No operations it describes can be used yet');
     });
 });

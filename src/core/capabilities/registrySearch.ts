@@ -13,7 +13,7 @@
 // effect policy and the install review are unchanged.
 // ============================================
 
-import { isCatalogSpecUrl, parseApiIndex, type ApiIndex, type ApiIndexEntry } from './apiIndex';
+import { isCatalogSpecUrl, isUsableEntry, parseApiIndex, type ApiIndex, type ApiIndexEntry } from './apiIndex';
 
 /** Results kept per search; also the candidate set a re-rank may reorder. */
 export const DEFAULT_RESULT_LIMIT = 24;
@@ -82,6 +82,9 @@ export interface ApiSearcher {
  * Index the entries once. Tokenizing 2.5k entries per keystroke would cost
  * ~18 ms a query; the searcher keeps the word sets and only scores.
  */
+/** How much an entry that gives nothing to place counts against one that does. */
+const UNUSABLE_WEIGHT = 0.5;
+
 export function createApiSearcher(entries: readonly ApiIndexEntry[]): ApiSearcher {
     const fields = entries.map(fieldsOf);
 
@@ -126,12 +129,15 @@ export function createApiSearcher(entries: readonly ApiIndexEntry[]): ApiSearche
                 // An entry that matches every query word beats one that
                 // matches a single word strongly.
                 score *= matched / tokens.length;
+                // One you cannot install still shows, with its reason, but a
+                // usable API that matches about as well comes first.
+                if (!isUsableEntry(entry)) score *= UNUSABLE_WEIGHT;
                 results.push({ entry, score });
             });
 
             results.sort((a, b) =>
                 b.score - a.score
-                || Number(b.entry.supported) - Number(a.entry.supported)
+                || Number(isUsableEntry(b.entry)) - Number(isUsableEntry(a.entry))
                 || (a.entry.id < b.entry.id ? -1 : a.entry.id > b.entry.id ? 1 : 0));
             return results.slice(0, Math.max(0, limit));
         }
