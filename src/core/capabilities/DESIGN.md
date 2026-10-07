@@ -6,9 +6,13 @@ block registry that already exists. No new block file is required.
 
 ## What stays the same
 
-`API_CATALOG` and its normalizers are untouched. Wires between blocks that do
-not declare a `ValueType` are still accepted. Ports without a schema remain
-visual hints.
+`API_CATALOG` and its normalizers are untouched. Wires between blocks that
+declare no ports are still accepted: both sides default to `any`. A declared
+port is a runtime contract, not a visual hint. Its `dataType` is enforced by
+`evaluateWireAdmission` (`src/core/interaction/ports.ts`) whether or not the
+port carries a `schema`; only the `ValueType` projection check in
+`src/core/capabilities/compatibility.ts` needs a schema on both ports. See
+`TYPED_PORT_SYSTEM.md`.
 
 ## What a manifest is
 

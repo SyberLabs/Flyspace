@@ -5,7 +5,7 @@
 // Unified Mind Interface - Shell | Systems | Projects
 // ============================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMindStore } from '@/core/stores';
 import { getMindEngine } from '@/core/services/mind.engine';
 import { LLMProvider, PersonaConfig, ContextPool, ContextEntry } from '@/core/schemas/mind.schema';
@@ -81,11 +81,35 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
         }
     };
 
+    // Initial focus lands on the dialog itself when it opens.
+    const panelRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (isOpen) panelRef.current?.focus();
+    }, [isOpen]);
+
+    // Escape closes the panel unless a nested modal (Think result, context
+    // capture) is open; those own the key while they are up.
+    const handlePanelKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key !== 'Escape') return;
+        if (thinkResult || selectionModalOpen) return;
+        onClose();
+    };
+
     if (!isOpen) return null;
 
     return (
         <div className="mind-panel-overlay" onClick={onClose} onMouseUp={handleMouseUp}>
-            <div className={`mind-panel ${activeTool === 'highlighter' ? 'cursor-text' : ''}`} onClick={e => e.stopPropagation()}>
+            {/* Modal: the overlay covers the canvas and a click on it closes */}
+            <div
+                ref={panelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="mind-panel-title"
+                tabIndex={-1}
+                onKeyDown={handlePanelKeyDown}
+                className={`mind-panel ${activeTool === 'highlighter' ? 'cursor-text' : ''}`}
+                onClick={e => e.stopPropagation()}
+            >
                 {/* Glossy highlight overlay */}
                 <div className="mind-panel-highlight" />
 
@@ -101,9 +125,9 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                 {/* Header */}
                 <header className="mind-panel-header">
                     <div className="mind-title">
-                        <span className="mind-icon">🧠</span>
+                        <span className="mind-icon" aria-hidden="true">🧠</span>
                         <div>
-                            <h2>The Mind</h2>
+                            <h2 id="mind-panel-title">The Mind</h2>
                             <span className="mind-subtitle">Cognitive Substrate v2.0</span>
                         </div>
                     </div>
@@ -114,6 +138,8 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                             className={`p-1.5 rounded text-sm transition-colors ${activeTool === 'cursor' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`}
                             onClick={() => setActiveTool('cursor')}
                             title="Cursor Mode"
+                            aria-label="Cursor Mode"
+                            aria-pressed={activeTool === 'cursor'}
                         >
                             🖱️
                         </button>
@@ -121,6 +147,8 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                             className={`p-1.5 rounded text-sm transition-colors ${activeTool === 'highlighter' ? 'bg-[var(--cyan-glow)]/20 text-[var(--cyan-glow)]' : 'text-white/50 hover:text-white'}`}
                             onClick={() => setActiveTool('highlighter')}
                             title="Context Highlighter"
+                            aria-label="Context Highlighter"
+                            aria-pressed={activeTool === 'highlighter'}
                         >
                             🖊️
                         </button>
@@ -130,7 +158,7 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                         <span className={`status-dot status-${status}`} />
                         <span className="status-text">{status}</span>
                     </div>
-                    <button className="mind-close" onClick={onClose}>✕</button>
+                    <button className="mind-close" onClick={onClose} aria-label="Close The Mind">✕</button>
                 </header>
 
                 {/* Shell Mind Content */}
@@ -400,7 +428,10 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
     const observationsPool = pools.find(p => p.id === 'observations');
 
     return (
-        <div className="context-pools">
+        <div
+            className="context-pools"
+            onKeyDown={e => { if (e.key === 'Escape' && memoryModalOpen) e.stopPropagation(); }}
+        >
             {/* Header Actions */}
             <div className="flex justify-between items-center mb-4 px-2">
                 <h3 className="text-sm font-medium text-white/50 uppercase tracking-wider">Context Memory</h3>
@@ -449,6 +480,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                                                 onClick={() => handleCrystallizeAndSave(entry)}
                                                 disabled={isCrystallizing}
                                                 title="Crystallize to Memory"
+                                                aria-label="Crystallize to Memory"
                                             >
                                                 {isCrystallizing ? '⏳' : '🧠'}
                                             </button>
@@ -456,6 +488,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                                                 className="focus-unpin-btn"
                                                 onClick={() => entry.sourceBlockId && unpinBlock(entry.sourceBlockId)}
                                                 title="Unpin"
+                                                aria-label="Unpin"
                                             >
                                                 ✕
                                             </button>
@@ -537,6 +570,7 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                                                     onClick={() => handleCrystallizeAndSave(entry)}
                                                     disabled={isCrystallizing}
                                                     title="Save to Memory"
+                                                    aria-label="Save to Memory"
                                                 >
                                                     <span className="sr-only">Save</span>
                                                     {isCrystallizing ? '⏳' : '🧠'}
