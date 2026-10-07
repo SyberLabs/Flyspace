@@ -18,7 +18,8 @@
 // without a download. `--no-compile` skips this step.
 // ============================================
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
     buildApiIndexEntries,
@@ -57,11 +58,22 @@ async function readBounded(response: Response, max = MAX_LIST_BYTES): Promise<st
     return Buffer.concat(chunks).toString('utf8');
 }
 
-/** The previous index's counts, keyed by id, for specs that have not changed since. */
-async function previousCounts(): Promise<Map<string, ApiIndexEntry>> {
+const CAPABILITIES_DIR = path.join(process.cwd(), 'src', 'core', 'capabilities');
+
+/** A hash of the compiler's source (every non-test module it can import), so a change to it recounts. */
+async function compilerFingerprint(): Promise<string> {
+    const files = (await readdir(CAPABILITIES_DIR)).filter(name => name.endsWith('.ts') && !name.includes('.test.') && !name.includes('.eval.')).sort();
+    const hash = createHash('sha256');
+    for (const name of files) hash.update(name).update('\0').update(await readFile(path.join(CAPABILITIES_DIR, name)));
+    return hash.digest('hex').slice(0, 32);
+}
+
+/** The previous index's counts, keyed by id, when the same compiler made them. */
+async function previousCounts(compiler: string): Promise<Map<string, ApiIndexEntry>> {
     try {
         const previous = parseApiIndex(JSON.parse(await readFile(OUTPUT, 'utf8')));
-        return new Map((previous?.entries ?? []).filter(entry => entry.operations !== undefined).map(entry => [entry.id, entry]));
+        if (!previous || previous.compiler !== compiler) return new Map();
+        return new Map(previous.entries.filter(entry => entry.operations !== undefined).map(entry => [entry.id, entry]));
     } catch {
         return new Map();
     }
@@ -80,8 +92,8 @@ async function compileStatus(entry: ApiIndexEntry): Promise<Pick<ApiIndexEntry, 
 }
 
 /** Fill in `operations` for every OpenAPI 3.x entry. A spec that cannot be fetched stays unknown. */
-async function addCompileStatus(entries: ApiIndexEntry[]): Promise<{ checked: number; reused: number; failed: string[] }> {
-    const previous = await previousCounts();
+async function addCompileStatus(entries: ApiIndexEntry[], compiler: string): Promise<{ checked: number; reused: number; failed: string[] }> {
+    const previous = await previousCounts(compiler);
     const todo: ApiIndexEntry[] = [];
     let reused = 0;
     for (const entry of entries) {
@@ -126,7 +138,8 @@ async function main(): Promise<void> {
 
     const { entries, issues } = buildApiIndexEntries(JSON.parse(await readBounded(response)));
     if (entries.length === 0) throw new Error('no usable entries; refusing to overwrite the index');
-    const status = compile ? await addCompileStatus(entries) : null;
+    const compiler = compile ? await compilerFingerprint() : undefined;
+    const status = compiler ? await addCompileStatus(entries, compiler) : null;
 
     const index: ApiIndex = {
         format: 'omni-api-index',
@@ -138,6 +151,7 @@ async function main(): Promise<void> {
             lastModified: response.headers.get('last-modified')
         },
         builtAt: new Date().toISOString(),
+        ...(compiler ? { compiler } : {}),
         entries
     };
     await writeFile(OUTPUT, `${JSON.stringify(index)}\n`, 'utf8');

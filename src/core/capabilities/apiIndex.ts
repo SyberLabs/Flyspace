@@ -64,6 +64,9 @@ export function isUsableEntry(entry: ApiIndexEntry): boolean {
 export function describeCompileBlocker(messages: readonly string[]): string {
     if (messages.length === 0) return 'No operations it describes can be used yet';
     const reasons = messages.map(message => {
+        if (/must be signed/i.test(message)) {
+            return 'Every request must be signed (as with AWS), which OmniOS does not do';
+        }
         if (/combine several schemes|no supported security scheme|unsupported scheme|oauth/i.test(message)) {
             return 'It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)';
         }
@@ -98,6 +101,12 @@ export interface ApiIndex {
         lastModified: string | null;
     };
     builtAt: string;
+    /**
+     * Fingerprint of the compiler source that made the `operations` counts.
+     * A rebuild reuses a count only when this matches, so a compiler change
+     * recounts everything.
+     */
+    compiler?: string;
     entries: ApiIndexEntry[];
 }
 
@@ -194,6 +203,7 @@ function validCompileStatus(entry: Record<string, unknown>): boolean {
 export function parseApiIndex(value: unknown): ApiIndex | null {
     if (!isRecord(value) || value.format !== 'omni-api-index' || value.version !== 1) return null;
     if (!isRecord(value.source) || !Array.isArray(value.entries)) return null;
+    if (value.compiler !== undefined && (typeof value.compiler !== 'string' || !/^[0-9a-f]{16,64}$/.test(value.compiler))) return null;
     const seen = new Set<string>();
     for (const entry of value.entries) {
         if (!isRecord(entry)

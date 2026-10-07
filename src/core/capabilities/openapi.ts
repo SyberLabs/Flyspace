@@ -232,11 +232,38 @@ function chooseEffect(
     return { effect: extension, source: 'extension' };
 }
 
+/**
+ * The spec's server, as a concrete https URL. Specs often list http before
+ * https, or a templated host; the first server that works is taken, with any
+ * `{variable}` filled from the default the spec must give it. http stays out.
+ */
 function resolveBaseUrl(spec: Record<string, unknown>): { url: string } | { error: string } {
-    const servers = Array.isArray(spec.servers) ? spec.servers : [];
-    const first = servers.find(isRecord);
-    const raw = first && typeof first.url === 'string' ? first.url : '';
-    if (!raw || raw.includes('{')) return { error: 'provide a concrete server URL' };
+    const servers = (Array.isArray(spec.servers) ? spec.servers : []).filter(isRecord);
+    if (servers.length === 0) return { error: 'provide a concrete server URL' };
+    const tried = servers.map(server => concreteServer(server));
+    const https = tried.find((result): result is { url: string } => 'url' in result && result.url.startsWith('https://'));
+    if (https) return https;
+    // Nothing usable: report what is wrong with the first, as before.
+    return tried.find(result => 'url' in result) ?? tried[0];
+}
+
+function concreteServer(server: Record<string, unknown>): { url: string } | { error: string } {
+    let raw = typeof server.url === 'string' ? server.url : '';
+    if (raw.includes('{')) {
+        const variables = isRecord(server.variables) ? server.variables : {};
+        let missing = false;
+        raw = raw.replace(/\{([^{}]+)\}/g, (_match, name: string) => {
+            const variable = variables[name];
+            const fallback = isRecord(variable) ? variable.default : undefined;
+            if (typeof fallback !== 'string' || fallback === '' || /[/?#{}\s]/.test(fallback)) {
+                missing = true;
+                return '';
+            }
+            return fallback;
+        });
+        if (missing) return { error: 'provide a concrete server URL' };
+    }
+    if (!raw) return { error: 'provide a concrete server URL' };
     if (raw.startsWith('/')) return { error: 'relative server URLs are not supported' };
     try {
         const parsed = new URL(raw);
@@ -263,6 +290,7 @@ function resolveAuth(
         ? spec.components.securitySchemes
         : {};
 
+    let refused: string | undefined;
     for (const requirement of requirements) {
         if (!isRecord(requirement)) continue;
         const names = Object.keys(requirement);
@@ -271,16 +299,26 @@ function resolveAuth(
         const scheme = schemes[name];
         if (!isRecord(scheme)) return { error: `security scheme ${name} is not defined` };
         const binding = schemeToAuth(baseUrl, name, scheme);
-        if ('error' in binding) continue;
+        if ('error' in binding) {
+            refused ??= binding.error;
+            continue;
+        }
         return binding;
     }
-    return { error: 'no supported security scheme (apiKey, http bearer, http basic)' };
+    // A scheme refused for a stated reason says more than "none supported".
+    return { error: refused && /must be signed/.test(refused) ? refused : 'no supported security scheme (apiKey, http bearer, http basic)' };
 }
 
 function schemeToAuth(baseUrl: string, name: string, scheme: Record<string, unknown>): { auth: CapabilityManifest['auth'] } | { error: string } {
     const secretRef = (auth: { kind: 'apiKey' | 'bearer' | 'basic'; in?: 'header' | 'query'; name?: string }) =>
         credentialSlot(baseUrl, auth);
     const placement = scheme.in === 'header' ? 'header' as const : scheme.in === 'query' ? 'query' as const : undefined;
+    // AWS declares Signature v4 as an "apiKey" in Authorization. Each request
+    // has to be signed; a pasted key there can never work.
+    if (scheme['x-amazon-apigateway-authtype'] !== undefined
+        || (scheme.type === 'apiKey' && typeof scheme.description === 'string' && /\bsignature\b/i.test(scheme.description))) {
+        return { error: `unsupported scheme ${name}: every request must be signed` };
+    }
     if (scheme.type === 'apiKey' && placement && typeof scheme.name === 'string') {
         const auth = { kind: 'apiKey' as const, in: placement, name: scheme.name };
         return { auth: { ...auth, secretRef: secretRef(auth) } };
