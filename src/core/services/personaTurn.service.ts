@@ -17,6 +17,7 @@ import { useBlockStore } from '@/core/stores/blockStore';
 import { useWireStore } from '@/core/stores/wireStore';
 import { useUIStore } from '@/core/stores/uiStore';
 import { streamPersonaTurn } from './persona.engine';
+import { newId } from '@/core/id';
 import type { PersonaBlockData, ContextSource, PersonaChatMessage } from '@/core/schemas/wire.schema';
 
 /**
@@ -92,7 +93,7 @@ export async function runPersonaTurn(
         ? [
             ...current.messages,
             {
-                id: `msg-${Date.now()}`,
+                id: `msg-${newId()}`,
                 role: 'user' as const,
                 content: userMessage!,
                 timestamp: Date.now()
@@ -106,7 +107,7 @@ export async function runPersonaTurn(
 
     store.updateData(instanceId, { ...current, messages: baseMessages, isThinking: true });
 
-    const assistantId = `msg-${Date.now()}-a`;
+    const assistantId = `msg-${newId()}`;
     let acc = '';
     let turnSources: ContextSource[] = [];
     // Ledger row id for this turn. Stored on the committed answer so that when

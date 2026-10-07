@@ -17,6 +17,7 @@ import {
 } from '../schemas/mind.schema';
 import { resolveModel } from '../models.registry';
 import { vaultStorage } from '../vault';
+import { newId } from '../id';
 
 // ============================================
 // STORE INTERFACE
@@ -64,7 +65,7 @@ interface MindStore extends MindState {
 // ============================================
 
 function generateId(prefix: string): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `${prefix}_${newId()}`;
 }
 
 /**

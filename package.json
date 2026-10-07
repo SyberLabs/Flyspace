@@ -20,7 +20,9 @@
     "dev:vinext": "vinext dev --port 3001",
     "build:vinext": "vinext build",
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
-    "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json"
+    "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
+    "catalog:build": "tsx scripts/build-api-index.ts",
+    "eval:registry-jev": "tsx --conditions=react-server --env-file=.env scripts/eval-registry-jev.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -38,6 +38,7 @@ import {
 import type { CapabilityExecutionProfile, CapabilityManifest } from './manifest';
 import { isRecord, validateValue } from './valueType';
 import { toJsonValue } from './jsonValue';
+import { newId } from '../id';
 
 const MAX_BODY_CHARS = 1_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -229,7 +230,8 @@ function credentialHeaderName(manifest: CapabilityManifest): string | undefined 
     return 'authorization';
 }
 
-function credentialPlacement(manifest: CapabilityManifest): string | undefined {
+/** Where the credential travels, in the words the run preview uses. The install door shows the same words. */
+export function credentialPlacement(manifest: CapabilityManifest): string | undefined {
     const auth = manifest.auth;
     if (auth.kind === 'none') return undefined;
     if (auth.kind === 'apiKey') return auth.in === 'query' ? `query parameter ${auth.name}` : `header ${auth.name}`;
@@ -532,7 +534,7 @@ export async function executeCapability(
         return finish(failure(capabilityId, 'INPUT_INVALID', 'idempotency key is invalid', false));
     }
     const idempotencyKey = options.idempotencyKey
-        ?? `once_${sha256(`${manifest.digest}|${Date.now()}|${Math.random()}`).slice(0, 32)}`;
+        ?? `once_${newId()}`;
     const profile = manifest.execution?.kind === 'async_poll' ? manifest.execution : undefined;
     const clock = options.clock ?? systemClock;
     const admission = admitExecution({

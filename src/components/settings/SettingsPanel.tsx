@@ -23,6 +23,7 @@ import { testPolymarketConnection } from '@/core/services/api.service';
 import { exportVault, importVault, isVaultExport, prepareVaultImport } from '@/core/vault';
 import { getKeylessApis } from '@/core/schemas/api.schema';
 import { cn } from '@/lib/utils';
+import { useVaultHealth } from '@/core/hooks';
 
 interface SettingsPanelProps {
     isOpen: boolean;
@@ -36,6 +37,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
     const [polymarketTestResult, setPolymarketTestResult] = useState<{ success: boolean; message: string } | null>(null);
     const [dataResult, setDataResult] = useState<{ success: boolean; message: string } | null>(null);
+    const vaultHealth = useVaultHealth();
+    const persistenceLabel = vaultHealth.persisted === true
+        ? 'Persistent storage granted: the browser will not evict this data under storage pressure.'
+        : vaultHealth.persisted === false
+            ? 'Persistent storage declined: the browser may evict this data under storage pressure. Keep an export.'
+            : vaultHealth.persisted === 'unsupported'
+                ? 'This browser cannot promise persistent storage. Keep an export.'
+                : 'Persistent storage not yet requested.';
 
     const handleExportData = async () => {
         try {
@@ -251,6 +260,21 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                         Shells, wires, and Mind state live locally (IndexedDB via OmniVault).
                                         Export a portable backup, or restore one.
                                     </p>
+                                    <p className="text-xs text-[var(--text-muted)] leading-relaxed" data-testid="vault-persistence">
+                                        {persistenceLabel}
+                                    </p>
+                                    {vaultHealth.lastFailure && (
+                                        <p
+                                            className="flex items-center gap-2 text-xs text-[var(--truth-red)] leading-relaxed"
+                                            data-testid="vault-last-failure"
+                                        >
+                                            <AlertCircle className="w-4 h-4 shrink-0" />
+                                            <span>
+                                                Last save failed ({vaultHealth.lastFailure.code}) at{' '}
+                                                {new Date(vaultHealth.lastFailure.at).toLocaleTimeString()}. Export now; later saves may be lost.
+                                            </span>
+                                        </p>
+                                    )}
                                     <div className="flex gap-2">
                                         <button
                                             onClick={handleExportData}
