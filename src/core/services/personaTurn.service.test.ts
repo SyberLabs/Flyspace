@@ -6,7 +6,13 @@
 // that provenance is honest, not decorative.
 // ============================================
 
+// fake-indexeddb gives the persisted stores a real (in-memory) vault, so the
+// write-count tests below see the IndexedDB puts the app would make.
+import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { vaultStorage } from '@/core/vault/vaultStorage';
 import { useBlockStore } from '@/core/stores/blockStore';
 import { useWireStore } from '@/core/stores/wireStore';
 import { useUIStore } from '@/core/stores/uiStore';
@@ -168,15 +174,20 @@ describe('runPersonaTurn — streaming commits', () => {
         vi.restoreAllMocks();
     });
 
-    it('throttles mid-stream commits and always lands the final answer', async () => {
+    it('throttles mid-stream drafts to the UI store and commits only the final answer', async () => {
         let now = 0;
         vi.spyOn(Date, 'now').mockImplementation(() => now);
 
         const drafts: string[] = [];
-        const unsub = useBlockStore.subscribe((state) => {
+        const unsubDrafts = useUIStore.subscribe((state) => {
+            const draft = state.drafts[PERSONA];
+            if (draft) drafts.push(draft);
+        });
+        const committed: string[] = [];
+        const unsubBlocks = useBlockStore.subscribe((state) => {
             const data = state.getBlock(PERSONA)?.data as PersonaBlockData | undefined;
             const last = data?.messages.filter(m => m.role === 'assistant').at(-1);
-            if (last) drafts.push(last.content);
+            if (last) committed.push(last.content);
         });
 
         vi.mocked(streamPersonaTurn).mockImplementation(async function* (input: PersonaTurnInput) {
@@ -198,12 +209,73 @@ describe('runPersonaTurn — streaming commits', () => {
         });
 
         await runPersonaTurn(PERSONA);
-        unsub();
+        unsubDrafts();
+        unsubBlocks();
 
         expect(drafts).toContain('ABC');
         expect(drafts.filter(c => c === 'AB')).toHaveLength(0);
+        // The persisted block never saw a draft: one assistant message, the answer.
+        expect(committed).toEqual(['ABCD']);
         expect(lastAssistant()?.content).toBe('ABCD');
         expect(personaData().isThinking).toBe(false);
+        expect(useUIStore.getState().drafts[PERSONA]).toBeUndefined();
+    });
+});
+
+describe('runPersonaTurn — persisted writes during a stream (O4)', () => {
+    /** A 2 s stream: one chunk every STREAM_COMMIT_MS. */
+    const CHUNKS = 2000 / STREAM_COMMIT_MS; // 25
+
+    /** IndexedDB requests are issued after the persist adapter awaits its connection. */
+    const settle = () => new Promise(r => setTimeout(r, 30));
+
+    function putsFor(spy: { mock: { calls: unknown[][] } }, key: string): number {
+        return spy.mock.calls.filter(call => call[1] === key).length;
+    }
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('before: a store that commits every draft puts its whole blob once per commit', async () => {
+        const committing = create<{ messages: string[] }>()(
+            persist(() => ({ messages: [] as string[] }), {
+                name: 'omni-bench-drafts',
+                storage: createJSONStorage(() => vaultStorage)
+            })
+        );
+        await settle(); // hydration write
+        const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+
+        let draft = '';
+        for (let i = 0; i < CHUNKS; i++) {
+            draft += `token${i} `;
+            committing.setState({ messages: [draft] });
+        }
+        await settle();
+
+        expect(putsFor(put, 'omni-bench-drafts')).toBeGreaterThanOrEqual(CHUNKS);
+    });
+
+    it('after: a 2 s persona stream puts the blocks blob at turn start and turn end only', async () => {
+        let now = 0;
+        vi.spyOn(Date, 'now').mockImplementation(() => now);
+        vi.mocked(streamPersonaTurn).mockImplementation(async function* (input: PersonaTurnInput) {
+            input.onPrepared?.([]);
+            for (let i = 0; i < CHUNKS; i++) {
+                now += STREAM_COMMIT_MS;
+                yield `token${i} `;
+            }
+            return { success: true, content: 'answer', sourceIds: [], sources: [] };
+        });
+        await settle(); // beforeEach's setState lands before counting starts
+        const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+
+        await runPersonaTurn(PERSONA);
+        await settle();
+
+        expect(putsFor(put, 'omni-blocks')).toBeLessThanOrEqual(2);
+        expect(lastAssistant()?.content).toBe('answer');
     });
 });
 

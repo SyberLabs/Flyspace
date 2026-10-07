@@ -35,6 +35,7 @@ import { POST } from './route';
 const SITE = 'http://localhost:3000';
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const originalDemo = process.env.OMNI_PUBLIC_DEMO;
+const originalTrustedProxy = process.env.OMNI_TRUSTED_PROXY;
 
 function brokerRequest(body: string, headers: Record<string, string>): NextRequest {
     return new NextRequest(`${SITE}/api/capability-broker`, { method: 'POST', headers, body });
@@ -43,6 +44,7 @@ function brokerRequest(body: string, headers: Record<string, string>): NextReque
 beforeEach(() => {
     delete process.env.DATABASE_URL;
     delete process.env.OMNI_PUBLIC_DEMO;
+    delete process.env.OMNI_TRUSTED_PROXY;
     handler.mockClear();
     validate.mockClear();
     readBody.mockClear();
@@ -53,6 +55,8 @@ afterEach(() => {
     else process.env.DATABASE_URL = originalDatabaseUrl;
     if (originalDemo === undefined) delete process.env.OMNI_PUBLIC_DEMO;
     else process.env.OMNI_PUBLIC_DEMO = originalDemo;
+    if (originalTrustedProxy === undefined) delete process.env.OMNI_TRUSTED_PROXY;
+    else process.env.OMNI_TRUSTED_PROXY = originalTrustedProxy;
 });
 
 describe('/api/capability-broker request admission', () => {
@@ -90,18 +94,29 @@ describe('/api/capability-broker request admission', () => {
         expect(deps.signal).toBeInstanceOf(AbortSignal);
     });
 
-    it('keys the caller by the nearest forwarded address', async () => {
+    it('puts a forged x-forwarded-for in the same bucket as no header unless a proxy is trusted', async () => {
+        const json = { origin: SITE, 'content-type': 'application/json' };
+        await POST(brokerRequest('{}', { ...json, 'x-forwarded-for': '192.0.2.1, 198.51.100.9' }));
+        await POST(brokerRequest('{}', { ...json, 'x-forwarded-for': '203.0.113.5' }));
+        await POST(brokerRequest('{}', json));
+        const callers = handler.mock.calls.map(call => (call[1] as { caller?: string }).caller);
+        expect(callers).toEqual(['direct', 'direct', 'direct']);
+    });
+
+    it('keys the caller by the nearest forwarded address when a trusted proxy is declared', async () => {
+        process.env.OMNI_TRUSTED_PROXY = '1';
         await POST(brokerRequest('{}', {
             origin: SITE,
             'content-type': 'application/json',
             'x-forwarded-for': '192.0.2.1, 198.51.100.9'
         }));
-        await POST(brokerRequest('{}', { origin: SITE, 'content-type': 'application/json' }));
         expect((handler.mock.calls[0][1] as { caller?: string }).caller).toBe('198.51.100.9');
-        expect((handler.mock.calls[1][1] as { caller?: string }).caller).toBe('local');
     });
 
     it('refuses an over-budget caller with 429 before reading or parsing the body', async () => {
+        // A trusted proxy's address isolates this test's budget from the other
+        // tests in this file, which all share the process limiter's 'direct' bucket.
+        process.env.OMNI_TRUSTED_PROXY = '1';
         const headers = { origin: SITE, 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.77' };
         for (let i = 0; i < 30; i++) {
             expect((await POST(brokerRequest('{}', headers))).status).toBe(200);

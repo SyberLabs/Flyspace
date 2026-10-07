@@ -7,8 +7,10 @@
 // here, where it is addressed by block id and needs no React at all.
 //
 // Layering: persona.engine assembles the prompt and streams it (pure); this
-// owns the block-store side effects — draft messages, thinking state,
-// provenance, throttled commits, abort, regenerate.
+// owns the side effects — thinking state, provenance, abort, regenerate, and
+// the committed message. The streaming draft goes to the UI store only: the
+// block store is persisted on every change, and writing the whole canvas to
+// IndexedDB per token is what MasterMind's 2026-10-05 critique (O4) found.
 // ============================================
 
 import { useBlockStore } from '@/core/stores/blockStore';
@@ -19,8 +21,8 @@ import { newId } from '@/core/id';
 import type { PersonaBlockData, ContextSource, PersonaChatMessage } from '@/core/schemas/wire.schema';
 
 /**
- * How often a streaming answer is published to the store. Fast enough to read
- * as live typing, slow enough that the canvas is not re-rendered per token.
+ * How often a streaming draft is published to the UI store. Fast enough to
+ * read as live typing, slow enough that the persona is not re-rendered per token.
  */
 export const STREAM_COMMIT_MS = 80;
 
@@ -113,16 +115,16 @@ export async function runPersonaTurn(
     // than just the block — see INFERENCE_LEDGER.md, "Lineage".
     let turnRunId: string | undefined;
 
-    const commit = (content: string, isThinking: boolean, extra?: { stopped?: boolean }) => {
+    // The one write of the answer into the block store: the turn is over.
+    const commit = (content: string, extra?: { stopped?: boolean }) => {
         const latest =
             (useBlockStore.getState().getBlock(instanceId)?.data as PersonaBlockData) || current;
-        const withoutDraft = latest.messages.filter(m => m.id !== assistantId);
         useBlockStore.getState().updateData(instanceId, {
             ...latest,
-            isThinking,
+            isThinking: false,
             lastContextUpdate: Date.now(),
             messages: [
-                ...withoutDraft,
+                ...latest.messages,
                 {
                     id: assistantId,
                     role: 'assistant' as const,
@@ -164,7 +166,7 @@ export async function runPersonaTurn(
             const now = Date.now();
             if (now - lastCommit >= STREAM_COMMIT_MS) {
                 lastCommit = now;
-                commit(acc, true);
+                useUIStore.getState().setDraft(instanceId, acc);
             }
             result = await gen.next();
         }
@@ -175,15 +177,11 @@ export async function runPersonaTurn(
 
         if (final.stopped) {
             if (acc.trim() || final.content?.trim()) {
-                commit(acc || final.content || '', false, { stopped: true });
+                commit(acc || final.content || '', { stopped: true });
             } else {
                 const latest =
                     (useBlockStore.getState().getBlock(instanceId)?.data as PersonaBlockData) || current;
-                useBlockStore.getState().updateData(instanceId, {
-                    ...latest,
-                    isThinking: false,
-                    messages: latest.messages.filter(m => m.id !== assistantId)
-                });
+                useBlockStore.getState().updateData(instanceId, { ...latest, isThinking: false });
             }
             return { ran: true, success: true, stopped: true };
         }
@@ -191,32 +189,29 @@ export async function runPersonaTurn(
         if (!final.success) {
             // No answer was produced, so no source informed one (FINDINGS.md).
             turnSources = [];
-            commit(`⚠️ ${final.error}`, false);
+            commit(`⚠️ ${final.error}`);
             return { ran: true, success: false, error: final.error };
         }
 
-        commit(final.content || acc, false);
+        commit(final.content || acc);
         return { ran: true, success: true };
     } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
             if (acc.trim()) {
-                commit(acc, false, { stopped: true });
+                commit(acc, { stopped: true });
             } else {
                 const latest =
                     (useBlockStore.getState().getBlock(instanceId)?.data as PersonaBlockData) || current;
-                useBlockStore.getState().updateData(instanceId, {
-                    ...latest,
-                    isThinking: false,
-                    messages: latest.messages.filter(m => m.id !== assistantId)
-                });
+                useBlockStore.getState().updateData(instanceId, { ...latest, isThinking: false });
             }
             return { ran: true, success: true, stopped: true };
         }
         const message = err instanceof Error ? err.message : 'Something went wrong.';
-        commit(`⚠️ ${message}`, false);
+        commit(`⚠️ ${message}`);
         return { ran: true, success: false, error: message };
     } finally {
         inflight.delete(instanceId);
         useUIStore.getState().setReadingWires([]);
+        useUIStore.getState().setDraft(instanceId, null);
     }
 }
