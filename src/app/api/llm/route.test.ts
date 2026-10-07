@@ -70,7 +70,7 @@ describe('/api/llm total request deadline', () => {
         const abort = new AbortController();
         const body = new ReadableStream<Uint8Array>({ start() { /* remains open */ } });
         const request = new Request('http://localhost/api/llm', {
-            method: 'POST', headers: { 'content-type': 'application/json' }, body,
+            method: 'POST', headers: { origin: 'http://localhost', 'content-type': 'application/json' }, body,
             signal: abort.signal, duplex: 'half'
         } as RequestInit & { duplex: 'half' });
         const pending = POST(request as never);
@@ -90,7 +90,7 @@ describe('/api/llm total request deadline', () => {
         const abort = new AbortController();
         const request = new Request('http://localhost/api/llm', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { origin: 'http://localhost', 'content-type': 'application/json' },
             body: JSON.stringify({ provider: 'anthropic', model: 'claude', messages: [{ role: 'user', content: 'hi' }] }),
             signal: abort.signal
         });
@@ -111,7 +111,7 @@ describe('/api/llm total request deadline', () => {
         mocks.runComplete.mockRejectedValue(new TypeError('connection refused'));
         const response = await POST(new Request('http://localhost/api/llm', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { origin: 'http://localhost', 'content-type': 'application/json' },
             body: JSON.stringify({ provider: 'anthropic', model: 'claude', messages: [{ role: 'user', content: 'hi' }] })
         }) as never);
         expect(response.status).toBe(502);
@@ -129,7 +129,7 @@ describe('/api/llm total request deadline', () => {
         const { ProviderResponseError } = await import('@/core/services/server/llm.adapters');
         mocks.runComplete.mockRejectedValue(new ProviderResponseError(`HTTP ${status}`, status));
         const response = await POST(new Request('http://localhost/api/llm', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
+            method: 'POST', headers: { origin: 'http://localhost', 'content-type': 'application/json' },
             body: JSON.stringify({ provider: 'anthropic', model: 'claude', messages: [{ role: 'user', content: 'hi' }] })
         }) as never);
         expect(response.status).toBe(502);
@@ -146,7 +146,7 @@ describe('/api/llm total request deadline', () => {
         const { ProviderResponseError } = await import('@/core/services/server/llm.adapters');
         mocks.runComplete.mockRejectedValue(new ProviderResponseError(`HTTP ${status}`, status));
         const response = await POST(new Request('http://localhost/api/llm', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
+            method: 'POST', headers: { origin: 'http://localhost', 'content-type': 'application/json' },
             body: JSON.stringify({ provider: 'anthropic', model: 'claude', messages: [{ role: 'user', content: 'hi' }] })
         }) as never);
         expect(response.status).toBe(502);
@@ -161,7 +161,7 @@ describe('/api/llm total request deadline', () => {
         mocks.openRun.mockResolvedValue({ id: null }); // no database, failed open, or active cooldown
         const response = await POST(new Request('http://localhost/api/llm', {
             method: 'POST',
-            headers: { 'content-type': 'application/json', 'idempotency-key': 'op-1' },
+            headers: { origin: 'http://localhost', 'content-type': 'application/json', 'idempotency-key': 'op-1' },
             body: JSON.stringify({ provider: 'anthropic', model: 'claude', messages: [{ role: 'user', content: 'hi' }] })
         }) as never);
         expect(response.status).toBe(503);
@@ -169,3 +169,71 @@ describe('/api/llm total request deadline', () => {
         expect(mocks.runStream).not.toHaveBeenCalled();
     });
 });
+
+describe('/api/llm request admission', () => {
+    const body = JSON.stringify({ provider: 'anthropic', model: 'claude', messages: [{ role: 'user', content: 'hi' }] });
+    const llmRequest = (headers: Record<string, string>) =>
+        new Request('http://localhost/api/llm', { method: 'POST', headers, body });
+
+    it('refuses a cross-site Origin before auth or any body read', async () => {
+        const response = await POST(llmRequest({ origin: 'https://evil.example', 'content-type': 'application/json' }) as never);
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({ error: 'Request must come from this site.' });
+        expect(response.headers.get('cache-control')).toBe('no-store');
+        expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+        expect(mocks.openRun).not.toHaveBeenCalled();
+        expect(mocks.runComplete).not.toHaveBeenCalled();
+    });
+
+    it('refuses a request with no Origin, as the broker does', async () => {
+        const response = await POST(llmRequest({ 'content-type': 'application/json' }) as never);
+        expect(response.status).toBe(403);
+        expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+        expect(mocks.runComplete).not.toHaveBeenCalled();
+    });
+
+    it('refuses a same-site request whose body is not application/json', async () => {
+        const response = await POST(llmRequest({ origin: 'http://localhost', 'content-type': 'text/plain' }) as never);
+        expect(response.status).toBe(415);
+        expect(await response.json()).toEqual({ error: 'Content-Type must be application/json.' });
+        expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+        expect(mocks.runComplete).not.toHaveBeenCalled();
+    });
+
+    it('passes a same-site JSON request on to authentication', async () => {
+        mocks.authenticateApiRequest.mockResolvedValue({
+            response: NextResponseLike(401, { error: 'Authentication required' })
+        });
+        const response = await POST(llmRequest({ origin: 'http://localhost', 'content-type': 'application/json; charset=utf-8' }) as never);
+        expect(mocks.authenticateApiRequest).toHaveBeenCalledOnce();
+        expect(response.status).toBe(401);
+        expect(mocks.runComplete).not.toHaveBeenCalled();
+    });
+
+    it('keeps the public-demo gate ahead of the origin check', async () => {
+        const saved = process.env.OMNI_PUBLIC_DEMO;
+        process.env.OMNI_PUBLIC_DEMO = '1';
+        try {
+            const response = await POST(llmRequest({}) as never);
+            expect(response.status).toBe(503);
+        } finally {
+            if (saved === undefined) delete process.env.OMNI_PUBLIC_DEMO;
+            else process.env.OMNI_PUBLIC_DEMO = saved;
+        }
+    });
+
+    it('still serves the e2e double to a same-site request', async () => {
+        process.env.OMNI_E2E = '1';
+        process.env.OMNI_DEPLOYMENT_MODE = 'local';
+        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: null } });
+        mocks.hostedAuthRequired.mockReturnValue(false);
+        const response = await POST(llmRequest({ origin: 'http://localhost', 'content-type': 'application/json' }) as never);
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ content: expect.stringContaining('E2E MOCK RESPONSE') });
+        expect(mocks.runComplete).not.toHaveBeenCalled();
+    });
+});
+
+function NextResponseLike(status: number, body: unknown): Response {
+    return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
