@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import {
     runComplete,
     runStream,
+    providerStreams,
     ProviderResponseError,
     isProviderConfigured,
     checkProviderAvailable,
@@ -288,7 +289,10 @@ export async function POST(request: NextRequest) {
     const openingRun = openRun({
         provider,
         model: model || provider,
-        streamed: Boolean(stream),
+        // True only when the provider's bytes will pass through as they
+        // arrive. A buffered adapter answering a stream request is one chunk,
+        // not a stream, and the row says so.
+        streamed: Boolean(stream) && providerStreams(provider),
         messageCount: messages.length,
         promptChars: messages.reduce((n, m) => n + m.content.length, 0),
         prompt: messages.findLast(m => m.role === 'user')?.content,

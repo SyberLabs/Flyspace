@@ -24,6 +24,7 @@ vi.mock('@/core/services/server/llm.adapters', () => ({
     },
     runComplete: mocks.runComplete,
     runStream: mocks.runStream,
+    providerStreams: (provider: string) => provider === 'local',
     checkProviderAvailable: mocks.checkProviderAvailable,
     isProviderConfigured: mocks.isProviderConfigured
 }));
@@ -49,6 +50,7 @@ function runHandle() {
                 async pull(controller) {
                     const reader = stream.getReader();
                     const { done, value } = await reader.read();
+                    reader.releaseLock();
                     if (done) controller.close(); else controller.enqueue(value);
                 },
                 async cancel(reason) { onCancel?.(reason); await stream.cancel(reason).catch(() => undefined); }
@@ -167,6 +169,46 @@ describe('/api/llm total request deadline', () => {
         expect(response.status).toBe(503);
         expect(mocks.runComplete).not.toHaveBeenCalled();
         expect(mocks.runStream).not.toHaveBeenCalled();
+    });
+});
+
+describe('/api/llm records whether the answer actually streamed', () => {
+    function streamRequest(provider: string) {
+        return new Request('http://localhost/api/llm', {
+            method: 'POST', headers: { origin: 'http://localhost', 'content-type': 'application/json' },
+            body: JSON.stringify({ provider, model: 'm', stream: true, messages: [{ role: 'user', content: 'hi' }] })
+        });
+    }
+
+    function oneChunk(text: string) {
+        return new ReadableStream<Uint8Array>({
+            start(controller) { controller.enqueue(new TextEncoder().encode(text)); controller.close(); }
+        });
+    }
+
+    it('records streamed: true for the local provider, whose bytes pass through', async () => {
+        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: null } });
+        mocks.hostedAuthRequired.mockReturnValue(false);
+        mocks.isProviderConfigured.mockReturnValue(true);
+        mocks.openRun.mockResolvedValue(runHandle());
+        mocks.runStream.mockResolvedValue(oneChunk('ok'));
+        const response = await POST(streamRequest('local') as never);
+        expect(response.status).toBe(200);
+        expect(await response.text()).toBe('ok');
+        expect(mocks.openRun).toHaveBeenCalledWith(expect.objectContaining({ provider: 'local', streamed: true }));
+    });
+
+    it.each(['anthropic', 'google'])('records streamed: false for %s, which is buffered into one chunk', async provider => {
+        mocks.authenticateApiRequest.mockResolvedValue({ identity: { ownerId: null } });
+        mocks.hostedAuthRequired.mockReturnValue(false);
+        mocks.isProviderConfigured.mockReturnValue(true);
+        mocks.openRun.mockResolvedValue(runHandle());
+        mocks.runStream.mockResolvedValue(oneChunk('ok'));
+        const response = await POST(streamRequest(provider) as never);
+        expect(response.status).toBe(200);
+        expect(await response.text()).toBe('ok');
+        expect(mocks.runStream).toHaveBeenCalledOnce();
+        expect(mocks.openRun).toHaveBeenCalledWith(expect.objectContaining({ provider, streamed: false }));
     });
 });
 
