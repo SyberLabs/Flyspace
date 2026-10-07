@@ -83,6 +83,13 @@ interface BlockState {
     clearShell: (shellId: string) => void;
 }
 
+/** Header, run button and a few result rows, plus about one field row per input. */
+function capabilityHeight(schema: OmniBlockSchema): number {
+    const inbound = schema.ports?.find(port => port.direction === 'input')?.schema;
+    const inputs = inbound?.properties ? Object.keys(inbound.properties).length : 0;
+    return Math.min(560, Math.max(280, 220 + inputs * 52));
+}
+
 export const useBlockStore = create<BlockState>()(
     persist(
         (set, get) => ({
@@ -92,9 +99,10 @@ export const useBlockStore = create<BlockState>()(
             addBlock: (schema, position, shellId) => {
                 const instanceId = `${schema.block_id}_${newId()}`;
 
-                // Persona blocks need more height for chat interface
+                // Persona blocks need more height for chat interface; an API
+                // block needs room for one field per input plus its result.
                 const isPersonaBlock = schema.block_id.startsWith('persona_');
-                const defaultHeight = isPersonaBlock ? 400 : 240;
+                const defaultHeight = isPersonaBlock ? 400 : schema.capabilityId ? capabilityHeight(schema) : 240;
 
                 const newBlock: BlockInstance = {
                     instance_id: instanceId,
