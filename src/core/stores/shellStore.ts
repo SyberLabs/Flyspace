@@ -163,17 +163,21 @@ export const useShellStore = create<ShellState>()(
                 const blockStore = useBlockStore.getState();
                 const wireStore = useWireStore.getState();
 
-                // Get shell-specific blocks and wires
+                // Snapshot the shell's LIVE blocks and wires. Fields the caller
+                // does not pass come from the shell's existing record, so a
+                // re-save keeps its identity (createdAt, hotkey, tags).
                 const shellBlocks = blockStore.getBlocksByShell(shellId);
                 const shellWires = wireStore.getWiresByShell(shellId);
+                const existing = get().shells.find(s => s.id === shellId);
+                const meta: Partial<ShellConfig> = { ...existing, ...metadata };
 
                 const now = Date.now();
                 const shellConfig: ShellConfig = {
                     id: shellId,
-                    type: metadata?.type || 'custom',
-                    name: metadata?.name || `Shell ${now}`,
-                    description: metadata?.description,
-                    systemType: metadata?.systemType,
+                    type: meta.type || 'custom',
+                    name: meta.name || `Shell ${now}`,
+                    description: meta.description,
+                    systemType: meta.systemType,
                     blocks: shellBlocks.map(b => ({
                         blockId: b.schema.block_id,
                         instanceId: b.instance_id,
@@ -183,12 +187,12 @@ export const useShellStore = create<ShellState>()(
                         ...(b.params ? { params: b.params } : {})
                     })),
                     wires: shellWires,
-                    persona: metadata?.persona || get().currentPersona,
-                    aesthetic: metadata?.aesthetic || get().currentAesthetic,
-                    hotkeySlot: metadata?.hotkeySlot,
-                    isTemplate: metadata?.isTemplate,
-                    templateTags: metadata?.templateTags,
-                    createdAt: metadata?.createdAt || now,
+                    persona: meta.persona || get().currentPersona,
+                    aesthetic: meta.aesthetic || get().currentAesthetic,
+                    hotkeySlot: meta.hotkeySlot,
+                    isTemplate: meta.isTemplate,
+                    templateTags: meta.templateTags,
+                    createdAt: meta.createdAt || now,
                     updatedAt: now,
                     lastAccessedAt: now
                 };
@@ -206,45 +210,46 @@ export const useShellStore = create<ShellState>()(
 
                 const blockStore = useBlockStore.getState();
 
-                // Clear existing blocks in target shell (if any)
-                blockStore.clearShell(shellId);
+                // Blocks and wires live in their stores keyed by shellId, and
+                // stay there when the canvas shows another shell. A shell that
+                // already has live blocks is only activated: its conversation,
+                // fetched data and positions are what the user left. The saved
+                // snapshot seeds the canvas only when nothing is live yet (a
+                // fresh template, a shell restored from a file).
+                if (blockStore.getBlocksByShell(shellId).length === 0) {
+                    const recreatedBlocks: BlockInstance[] = [];
+                    shell.blocks.forEach(savedBlock => {
+                        const schema = blockRegistry.get(savedBlock.blockId);
+                        if (!schema) {
+                            console.warn(`Block schema not found for ${savedBlock.blockId}, skipping`);
+                            return;
+                        }
 
-                // Build new blocks array from saved shell state
-                const recreatedBlocks: BlockInstance[] = [];
-                shell.blocks.forEach(savedBlock => {
-                    // Get the block schema from registry
-                    const schema = blockRegistry.get(savedBlock.blockId);
-                    if (!schema) {
-                        console.warn(`Block schema not found for ${savedBlock.blockId}, skipping`);
-                        return;
-                    }
-
-                    // Create block instance with saved state
-                    recreatedBlocks.push({
-                        instance_id: savedBlock.instanceId,
-                        schema,
-                        status: 'disconnected',
-                        last_updated: null,
-                        data: savedBlock.config?.data || null,
-                        position: savedBlock.position,
-                        dimensions: savedBlock.dimensions,
-                        shellId: shellId,
-                        ...(savedBlock.params ? { params: savedBlock.params } : {})
+                        recreatedBlocks.push({
+                            instance_id: savedBlock.instanceId,
+                            schema,
+                            status: 'disconnected',
+                            last_updated: null,
+                            data: savedBlock.config?.data || null,
+                            position: savedBlock.position,
+                            dimensions: savedBlock.dimensions,
+                            shellId: shellId,
+                            ...(savedBlock.params ? { params: savedBlock.params } : {})
+                        });
                     });
-                });
 
-                // Add recreated blocks to the block store using proper Zustand mutation
-                const currentBlocks = blockStore.blocks.filter(b => b.shellId !== shellId);
-                useBlockStore.setState({
-                    blocks: [...currentBlocks, ...recreatedBlocks],
-                    activeShellId: shellId
-                });
+                    useBlockStore.setState(state => ({
+                        blocks: [...state.blocks, ...recreatedBlocks]
+                    }));
 
-                // Restore the shell's wires into the single wire system so they
-                // both render (WireRenderer) and feed personas (aggregateWireContext).
-                // Legacy shells saved BlockConnection[]; convert on the way in.
-                const savedWires = shell.wires ?? legacyConnectionsToWires(shell.connections, shellId);
-                useWireStore.getState().replaceWiresForShell(shellId, savedWires);
+                    // Restore the shell's wires into the single wire system so they
+                    // both render (WireRenderer) and feed personas (aggregateWireContext).
+                    // Legacy shells saved BlockConnection[]; convert on the way in.
+                    const savedWires = shell.wires ?? legacyConnectionsToWires(shell.connections, shellId);
+                    useWireStore.getState().replaceWiresForShell(shellId, savedWires);
+                }
+
+                blockStore.setActiveShell(shellId);
 
                 // Update shell store metadata
                 set(state => ({
