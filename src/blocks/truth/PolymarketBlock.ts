@@ -64,7 +64,7 @@ export function usePolymarketBlock(instanceId: string) {
         fromCache
     } = useOmniData('polymarket', instanceId, {
         immediate: true,
-        refreshInterval: useMockData ? 5000 : 60000  // Faster in mock mode
+        refreshInterval: useMockData ? 5000 : 60000
     });
 
     debug('[PolymarketBlock] 📥 useOmniData returned:', {
