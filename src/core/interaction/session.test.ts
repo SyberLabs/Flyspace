@@ -19,10 +19,7 @@ function block(id: string, ports: PortSchema[]): BlockInstance {
             block_id: `test_${id}`,
             display_name: id,
             category: 'workspace',
-            data_type: 'custom',
-            refresh_rate: 'manual',
             semantic_tags: [],
-            wiring_logic: 'none',
             ports
         },
         status: 'disconnected',
