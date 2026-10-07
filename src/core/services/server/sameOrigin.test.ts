@@ -7,7 +7,7 @@
 // ============================================
 
 import { describe, it, expect } from 'vitest';
-import { requireSameOrigin } from './sameOrigin';
+import { isOwnOrigin, requireSameOrigin } from './sameOrigin';
 
 const SITE = 'http://127.0.0.1:3000';
 
@@ -86,5 +86,42 @@ describe('reads nothing', () => {
         requireSameOrigin(refused);
         expect(admitted.bodyUsed).toBe(false);
         expect(refused.bodyUsed).toBe(false);
+    });
+});
+
+describe('loopback aliases (next dev reports its origin as localhost)', () => {
+    // What `next dev -H 127.0.0.1` hands a route handler as request.url.
+    const DEV_URL = 'http://localhost:3000/api/llm';
+    const json = { 'content-type': 'application/json' };
+
+    it.each(['http://127.0.0.1:3000', 'http://localhost:3000', 'http://[::1]:3000'])(
+        'admits the page at %s',
+        origin => {
+            expect(requireSameOrigin(post({ origin, ...json }, DEV_URL))).toBeNull();
+        }
+    );
+
+    it.each([
+        ['DNS rebinding: an attacker name resolving to 127.0.0.1', 'http://evil.example:3000'],
+        ['another local server on another port', 'http://127.0.0.1:5173'],
+        ['the same host over https', 'https://127.0.0.1:3000'],
+        ['a loopback lookalike', 'http://127.0.0.1.evil.example:3000'],
+        ['an origin carrying a path', 'http://127.0.0.1:3000/']
+    ])('refuses %s', (_label, origin) => {
+        expect(requireSameOrigin(post({ origin, ...json }, DEV_URL))?.status).toBe(403);
+    });
+
+    it('does not widen a server that is not on loopback', () => {
+        const PUBLIC_URL = 'https://omni.example.test/api/llm';
+        expect(requireSameOrigin(post({ origin: 'https://omni.example.test', ...json }, PUBLIC_URL))).toBeNull();
+        expect(requireSameOrigin(post({ origin: 'http://localhost', ...json }, PUBLIC_URL))?.status).toBe(403);
+    });
+});
+
+describe('isOwnOrigin', () => {
+    it('refuses a missing or malformed origin', () => {
+        expect(isOwnOrigin(null, 'http://localhost:3000/x')).toBe(false);
+        expect(isOwnOrigin('not a url', 'http://localhost:3000/x')).toBe(false);
+        expect(isOwnOrigin('null', 'http://localhost:3000/x')).toBe(false);
     });
 });

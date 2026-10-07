@@ -23,6 +23,8 @@ export interface McpToolAnnotations {
 
 export interface McpToolSchema {
     serverId: string;
+    /** URL origin of the server that listed the tool. `mcpClient.ts` stamps it from the URL it connected to. */
+    origin: string;
     name: string;
     description?: string;
     inputSchema?: unknown;
@@ -53,8 +55,8 @@ export function compileMcpTools(tools: readonly McpToolSchema[], options: Compil
 }
 
 function compileOne(tool: McpToolSchema, trustedAnnotations: boolean): { manifest: CapabilityManifest } | { error: string } {
-    if (!isRecord(tool) || typeof tool.serverId !== 'string' || typeof tool.name !== 'string') {
-        return { error: 'MCP tool needs a serverId and name' };
+    if (!isRecord(tool) || typeof tool.serverId !== 'string' || typeof tool.origin !== 'string' || typeof tool.name !== 'string') {
+        return { error: 'MCP tool needs a serverId, origin and name' };
     }
     if (!/^[A-Za-z0-9_.:-]{1,80}$/.test(tool.serverId)) return { error: 'serverId is invalid' };
     if (!/^[A-Za-z_][A-Za-z0-9_-]{0,64}$/.test(tool.name)) return { error: 'tool name is invalid' };
@@ -65,7 +67,7 @@ function compileOne(tool: McpToolSchema, trustedAnnotations: boolean): { manifes
     const output = compileOutput(tool.outputSchema);
     if ('error' in output) return output;
 
-    const transport = { kind: 'mcp' as const, serverId: tool.serverId, toolName: tool.name };
+    const transport = { kind: 'mcp' as const, serverId: tool.serverId, origin: tool.origin, toolName: tool.name };
     const sealed = sealManifest({
         version: 1,
         id: canonicalCapabilityId(transport),

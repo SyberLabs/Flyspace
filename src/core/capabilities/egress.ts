@@ -1,4 +1,8 @@
-// Egress policy for the server fetch broker.
+// Egress policy. `destinationUrlErrors` is the one rule for a URL a
+// capability names, applied before any request: an http manifest's
+// transport.baseUrl and the MCP client's server URL go through the same
+// function. `assessEgress` is the server fetch broker's decision, made after
+// DNS.
 // A manifest may name a public HTTPS origin. It may not aim the server at
 // loopback, link-local, private, or metadata addresses. One private answer
 // from DNS rejects the name: a mixed result is how rebinding hides.
@@ -9,11 +13,63 @@ export interface ResolvedAddress {
 
 export type EgressDecision = { ok: true } | { ok: false; reason: string };
 
+const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata.google.com']);
+
 const BLOCKED_HOSTS = new Set([
     'localhost',
-    'metadata.google.internal',
-    'metadata.google.com'
+    ...METADATA_HOSTS
 ]);
+
+export interface DestinationUrlOptions {
+    /**
+     * The host itself built the thing that names this URL (not a compiler,
+     * provider, model or stored snapshot). Only then may it target loopback.
+     */
+    hostCreated: boolean;
+    /** What the host built, for the reason text: `manifest` or `config`. */
+    subject: string;
+}
+
+/**
+ * Why a capability may not send to this URL, as reason fragments for the
+ * caller to prefix with its field name. Empty means the URL is allowed.
+ */
+export function destinationUrlErrors(input: string, options: DestinationUrlOptions): string[] {
+    const errors: string[] = [];
+    let url: URL;
+    try {
+        url = new URL(input);
+    } catch {
+        return ['is not a URL'];
+    }
+    if (url.username || url.password) {
+        errors.push('must not embed credentials');
+    }
+    // An http base never sends its query or fragment (paths are joined onto
+    // it), so one would only be stored and digested. An MCP server URL is
+    // sent as is, and a token in its query would be a credential outside a slot.
+    if (url.search || url.hash) {
+        errors.push('must not carry a query or fragment');
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        errors.push('must be http or https');
+        return errors;
+    }
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    const literal = isIpLiteral(host);
+    const loopback = host === 'localhost' || host.endsWith('.localhost') || (literal && isLoopbackAddress(host));
+    if (METADATA_HOSTS.has(host) || host === '169.254.169.254') {
+        errors.push('targets a metadata service');
+    } else if (loopback) {
+        if (!options.hostCreated) errors.push(`may target loopback only in a host-created ${options.subject}`);
+    } else if (literal && !classifyAddress(host).ok) {
+        errors.push('targets a non-public address');
+    }
+    if (url.protocol === 'http:' && !loopback) {
+        errors.push(`must be https, except loopback http in a host-created ${options.subject}`);
+    }
+    return errors;
+}
 
 export function assessEgress(url: URL, addresses: ResolvedAddress[]): EgressDecision {
     if (url.protocol !== 'https:') return { ok: false, reason: 'broker fetches require https' };

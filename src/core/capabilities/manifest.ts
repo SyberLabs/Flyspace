@@ -5,8 +5,8 @@
 
 import { canonicalize, sha256 } from './hash';
 import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
-import { classifyAddress, isIpLiteral, isLoopbackAddress } from './egress';
-import { validateValueType, type ValueType } from './valueType';
+import { destinationUrlErrors } from './egress';
+import { validateValueType, type Primitive, type ValueType } from './valueType';
 
 export const CAPABILITY_MANIFEST_VERSION = 1 as const;
 
@@ -41,6 +41,11 @@ export interface AuthBinding {
     scopes?: string[];
     /** Slot name. The secret value is never stored on the manifest. */
     secretRef?: string;
+    /**
+     * What the spec says about the key ("Register at ..."), shown where the
+     * key is asked for. Spec text, never a secret.
+     */
+    hint?: string;
 }
 
 export interface CapabilityInput {
@@ -48,6 +53,10 @@ export interface CapabilityInput {
     in: InputLocation;
     required: boolean;
     schema: ValueType;
+    /** A sample value from the spec, shown as a placeholder. Never sent on its own. */
+    example?: Primitive;
+    /** The value the API uses when this is left out, as the spec states it. Shown, not sent. */
+    default?: Primitive;
 }
 
 export interface CapabilityOutput {
@@ -62,7 +71,8 @@ export type HttpAccess = 'browser_direct' | 'server_broker';
 
 export type CapabilityTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
-    | { kind: 'mcp'; serverId: string; toolName: string }
+    /** `origin` is the server's URL origin: the credential slot and the bound transport are matched to it. */
+    | { kind: 'mcp'; serverId: string; origin: string; toolName: string }
     | { kind: 'local'; handler: string }
     /** A host-bound job runtime: start returns an external run id, poll observes it. */
     | { kind: 'async'; runtimeId: string; operation: string };
@@ -153,6 +163,7 @@ export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_.:-]{0,63}$/;
 
 const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
 const SECRET_REF_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+export const MAX_AUTH_HINT = 300;
 const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,64}$/;
 
 /**
@@ -317,7 +328,7 @@ function validateAuth(auth: unknown, errors: string[]): void {
         errors.push('auth must be an object');
         return;
     }
-    const allowed = new Set(['kind', 'in', 'name', 'prefix', 'secretRef', 'scopes']);
+    const allowed = new Set(['kind', 'in', 'name', 'prefix', 'secretRef', 'scopes', 'hint']);
     for (const key of Object.keys(auth)) {
         if (!allowed.has(key)) errors.push(`auth.${key} is not a manifest field`);
     }
@@ -337,6 +348,10 @@ function validateAuth(auth: unknown, errors: string[]): void {
         }
     } else if (auth.scopes !== undefined) {
         errors.push('only oauth auth carries scopes');
+    }
+    if (auth.hint !== undefined) {
+        if (kind !== 'apiKey' && kind !== 'bearer' && kind !== 'basic') errors.push('only a key, bearer, or basic auth carries a hint');
+        else if (typeof auth.hint !== 'string' || auth.hint.length > MAX_AUTH_HINT) errors.push(`auth.hint must be at most ${MAX_AUTH_HINT} characters`);
     }
     if (kind === 'none') {
         if (auth.secretRef || auth.name || auth.prefix || auth.in) {
@@ -424,40 +439,20 @@ function validateProvenance(provenance: unknown, errors: string[]): void {
     }
 }
 
-const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata.google.com']);
-
+/** The destination rule in `egress.ts`; the MCP client applies the same one to its server URL. */
 function validateHttpUrl(baseUrl: string, errors: string[], hostCreated: boolean): void {
-    let url: URL;
+    for (const reason of destinationUrlErrors(baseUrl, { hostCreated, subject: 'manifest' })) {
+        errors.push(`transport.baseUrl ${reason}`);
+    }
+}
+
+/** A bare http(s) origin, as `new URL(value).origin` would print it. */
+function isHttpOrigin(value: string): boolean {
     try {
-        url = new URL(baseUrl);
+        const url = new URL(value);
+        return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin === value;
     } catch {
-        errors.push('transport.baseUrl is not a URL');
-        return;
-    }
-    if (url.username || url.password) {
-        errors.push('transport.baseUrl must not embed credentials');
-    }
-    // A query or fragment here is never sent (paths are joined onto the base)
-    // and would only be stored and digested.
-    if (url.search || url.hash) {
-        errors.push('transport.baseUrl must not carry a query or fragment');
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-        errors.push('transport.baseUrl must be http or https');
-        return;
-    }
-    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-    const literal = isIpLiteral(host);
-    const loopback = host === 'localhost' || host.endsWith('.localhost') || (literal && isLoopbackAddress(host));
-    if (METADATA_HOSTS.has(host) || host === '169.254.169.254') {
-        errors.push('transport.baseUrl targets a metadata service');
-    } else if (loopback) {
-        if (!hostCreated) errors.push('transport.baseUrl may target loopback only in a host-created manifest');
-    } else if (literal && !classifyAddress(host).ok) {
-        errors.push('transport.baseUrl targets a non-public address');
-    }
-    if (url.protocol === 'http:' && !loopback) {
-        errors.push('transport.baseUrl must be https, except loopback http in a host-created manifest');
+        return false;
     }
 }
 
@@ -597,6 +592,9 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
         if (typeof input.transport.serverId !== 'string' || !/^[A-Za-z0-9_.:-]{1,80}$/.test(input.transport.serverId)) {
             errors.push('transport.serverId is invalid');
         }
+        if (typeof input.transport.origin !== 'string' || !isHttpOrigin(input.transport.origin)) {
+            errors.push('transport.origin must be an http or https origin');
+        }
         if (typeof input.transport.toolName !== 'string' || !NAME_PATTERN.test(input.transport.toolName)) {
             errors.push('transport.toolName is invalid');
         }
@@ -635,6 +633,11 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
                 errors.push(`input ${String(entry.name)} location is invalid`);
             }
             if (typeof entry.required !== 'boolean') errors.push(`input ${String(entry.name)} required must be boolean`);
+            for (const hint of ['example', 'default'] as const) {
+                if (entry[hint] !== undefined && !isInputHint(entry[hint])) {
+                    errors.push(`input ${String(entry.name)} ${hint} must be a short primitive`);
+                }
+            }
             errors.push(...validateValueType(entry.schema, `inputs.${String(entry.name)}.schema`));
             if (entry.in === 'body') bodies += 1;
             if (transportKind === 'http' && entry.in === 'argument') {
@@ -770,8 +773,20 @@ export function canonicalInput(entry: CapabilityInput): CapabilityInput {
         name: entry.name,
         in: entry.in,
         required: entry.required,
-        schema: entry.schema
+        schema: entry.schema,
+        ...(entry.example !== undefined ? { example: entry.example } : {}),
+        ...(entry.default !== undefined ? { default: entry.default } : {})
     };
+}
+
+/** The longest example or default kept from a spec. Longer ones are dropped, not cut. */
+export const MAX_INPUT_HINT = 200;
+
+/** An example or default a field can show: a short string, a finite number, or a boolean. */
+export function isInputHint(value: unknown): value is Primitive {
+    if (typeof value === 'string') return value.length <= MAX_INPUT_HINT;
+    if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0);
+    return typeof value === 'boolean';
 }
 
 function canonicalProvenance(provenance: CapabilityProvenance): CapabilityProvenance {
@@ -795,7 +810,8 @@ function canonicalAuth(auth: AuthBinding): AuthBinding {
         ...(auth.name ? { name: auth.name } : {}),
         ...(auth.prefix ? { prefix: auth.prefix } : {}),
         ...(auth.scopes ? { scopes: canonicalScopes(auth.scopes) } : {}),
-        ...(auth.secretRef ? { secretRef: auth.secretRef } : {})
+        ...(auth.secretRef ? { secretRef: auth.secretRef } : {}),
+        ...(auth.hint ? { hint: auth.hint } : {})
     };
 }
 
@@ -805,7 +821,7 @@ export function canonicalScopes(scopes: readonly string[]): string[] {
 
 function canonicalTransport(transport: CapabilityTransport): CapabilityTransport {
     if (transport.kind === 'mcp') {
-        return { kind: 'mcp', serverId: transport.serverId, toolName: transport.toolName };
+        return { kind: 'mcp', serverId: transport.serverId, origin: transport.origin, toolName: transport.toolName };
     }
     if (transport.kind === 'local') {
         return { kind: 'local', handler: transport.handler };

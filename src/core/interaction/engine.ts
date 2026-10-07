@@ -138,6 +138,42 @@ export class InteractionEngine {
         }, () => this.canvas.unkeep(poolId, entryId));
     }
 
+    /**
+     * A click places a block on the canvas: today, an API installed from the
+     * Add an API dialog. Admitted, traced and undoable exactly like a spoken
+     * "add", so a UI add is not one more direct canvas writer (AGENTS.md
+     * "adapters never call the canvas stores directly"; MasterMind critique
+     * O8). An unknown block type is refused, not thrown at the caller.
+     */
+    place(blockId: string, displayName: string, at: { x: number; y: number }, timestampMs = Date.now()): SpatialCommand {
+        const point: FramedPoint = { frame: 'canvas', x: at.x, y: at.y };
+        const proposal = this.proposal('create', [], {
+            point,
+            modalities: ['pointer'],
+            confidence: 1,
+            timestampMs,
+            evidence: ['pointer-click:place', `block:${blockId}`]
+        });
+        proposal.create = { blockId, displayName };
+        if (!blockId.trim() || !displayName.trim()) return this.refuse(proposal, 'empty-block');
+
+        let id: string;
+        try {
+            id = this.canvas.add(blockId, displayName, at.x, at.y);
+        } catch {
+            return this.refuse(proposal, 'unknown-block');
+        }
+        this.remember(id);
+        proposal.subjects = [{ id }];
+        return this.commitTracked(proposal, {
+            command: 'CREATE',
+            subject: id,
+            to: { x: at.x, y: at.y },
+            modalities: ['pointer'],
+            committedAt: timestampMs
+        }, () => this.canvas.remove(id));
+    }
+
     select(ids: string[]): void {
         this.selection = [...ids];
         ids.forEach(id => this.remember(id));

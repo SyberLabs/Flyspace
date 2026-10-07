@@ -46,7 +46,8 @@ export type ProposedAuthRequirement =
 
 export type ProposedTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
-    | { kind: 'mcp'; serverId: string; toolName: string }
+    /** `origin` is the server's URL origin; admission keys the credential slot on it, as for an http base. */
+    | { kind: 'mcp'; serverId: string; origin: string; toolName: string }
     /** Names a runtime the host binds. The provider cannot supply its endpoint. */
     | { kind: 'async'; runtimeId: string; operation: string };
 
