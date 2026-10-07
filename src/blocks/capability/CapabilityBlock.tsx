@@ -12,6 +12,7 @@ import { triggerIdempotencyKey } from '@/core/capabilities/triggers';
 import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
 import { EffectPill } from '@/components/apis/ApiReview';
+import { KeyField, keySlotOf, useHasKey } from '@/components/apis/KeyField';
 import { argumentsFrom, CapabilityInputs, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
 
@@ -35,13 +36,16 @@ function isPlainParams(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/**
- * One view for every runtime capability.
- * Mounting the view is not an execution request. The user runs it.
- * Write and destructive also wait until approval, and every write or
- * destructive run shows its method, resolved URL and arguments first: it is
- * sent only after the person confirms that exact request.
- */
+/** The executor's error for a keyed run whose slot is empty this session. */
+export function isUnboundKeyError(error: string): boolean {
+    return /^Secret slot \S+ is empty$/.test(error);
+}
+
+/** An API saying no to the credential: worth offering to change the key. */
+function isRefusal(error: string): boolean {
+    return /\bHTTP (401|403)\b/.test(error);
+}
+
 /** What an HTTP status usually means for the person running the block. */
 export function errorHint(error: string): string | null {
     const status = /\bHTTP (\d{3})\b/.exec(error)?.[1];
@@ -52,6 +56,13 @@ export function errorHint(error: string): string | null {
     return null;
 }
 
+/**
+ * One view for every runtime capability.
+ * Mounting the view is not an execution request. The user runs it.
+ * Write and destructive also wait until approval, and every write or
+ * destructive run shows its method, resolved URL and arguments first: it is
+ * sent only after the person confirms that exact request.
+ */
 export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const block = useBlockStore(state => state.getBlock(instanceId));
     const capabilityId = block?.schema.capabilityId ?? '';
@@ -67,6 +78,11 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     // Inputs fold away once a run has answered, so the result has the room;
     // an explicit toggle by the person wins until the block remounts.
     const [inputsPinned, setInputsPinned] = useState<boolean | null>(null);
+    const [changingKey, setChangingKey] = useState(false);
+    const keySlot = keySlotOf(manifest);
+    const hasKey = useHasKey(keySlot);
+    // Keys live for the session, so after a reload a keyed block asks again.
+    const needsKey = keySlot !== null && !hasKey;
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
     const params = isPlainParams(block?.params) ? block.params : {};
@@ -76,7 +92,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const trigger = manifest?.trigger ?? { kind: 'manual' as const };
 
     const run = (idempotencyKey?: string, confirmedRun?: string) => {
-        if (!manifest || running) return;
+        if (!manifest || running || needsKey) return;
         if (sideEffect && (manifest.approval !== 'approved' || !confirmedRun)) return;
         const key = idempotencyKey ?? attemptKey.current ?? `click_${newId()}`;
         attemptKey.current = key;
@@ -158,12 +174,27 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
             </div>
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+                {needsKey && manifest ? (
+                    <div className="space-y-1 rounded-md border border-[var(--truth-amber)]/40 p-2">
+                        <p className="text-xs text-[var(--text-primary)]">This API needs its key.</p>
+                        <p className="text-[10px] text-[var(--text-muted)]">Keys are kept for this session only, so enter it again after a reload.</p>
+                        <KeyField manifest={manifest} />
+                    </div>
+                ) : null}
+
                 {/* What you look at after Run comes first: the error or the result. */}
-                {block?.error ? (
+                {block?.error && !(needsKey && isUnboundKeyError(block.error)) ? (
                     <p role="alert" className="rounded-md border border-[var(--truth-red)]/40 px-2 py-1 text-xs text-[var(--truth-red)] [overflow-wrap:anywhere]">
                         {block.error}
                         {errorHint(block.error) ? <span className="block text-[var(--text-muted)]">{errorHint(block.error)}</span> : null}
+                        {keySlot && hasKey && isRefusal(block.error) && !changingKey ? (
+                            <button type="button" onClick={() => setChangingKey(true)}
+                                className="mt-1 block text-[11px] text-[var(--text-secondary)] underline">Change key</button>
+                        ) : null}
                     </p>
+                ) : null}
+                {changingKey && manifest && hasKey ? (
+                    <KeyField manifest={manifest} autoFocus onSaved={() => setChangingKey(false)} onCancel={() => setChangingKey(false)} />
                 ) : null}
 
                 {response.present ? (
@@ -242,14 +273,16 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 <button
                     type="button"
                     onClick={requestRun}
-                    disabled={!manifest || running || blocked || missing.length > 0}
+                    disabled={!manifest || running || blocked || needsKey || missing.length > 0}
                     className="shrink-0 rounded-md bg-[var(--citadel-primary)] px-2 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[var(--citadel-elevated)] disabled:text-[var(--text-muted)]"
                 >
                     {running
                         ? 'Running…'
                         : blocked
                             ? 'Needs approval'
-                            : missing.length > 0
+                            : needsKey
+                                ? 'Enter the key'
+                                : missing.length > 0
                                 ? `Enter ${missing.map(input => input.name).join(', ')}`
                                 : 'Run'}
                 </button>
