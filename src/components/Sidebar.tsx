@@ -15,7 +15,8 @@ import {
     ChevronDown,
     ChevronRight,
     FileText,
-    Cpu
+    Cpu,
+    Plus
 } from 'lucide-react';
 import { useState } from 'react';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
@@ -24,7 +25,7 @@ import { OmniBlockSchema, BlockCategory } from '@/core/schemas/block.schema';
 import { useBlockStore, useUIStore } from '@/core/stores';
 import { cn } from '@/lib/utils';
 import { BlockGlyph } from '@/components/blockIcons';
-import { CapabilityInstall } from '@/components/CapabilityInstall';
+import { AddApiDialog } from '@/components/apis/AddApiDialog';
 
 // Icon mapping
 const CATEGORY_ICONS: Record<BlockCategory, React.ReactNode> = {
@@ -67,6 +68,7 @@ const CATEGORY_LABELS: Record<BlockCategory, string> = {
 export function Sidebar() {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedCategories, setExpandedCategories] = useState<BlockCategory[]>(DEFAULT_EXPANDED_CATEGORIES);
+    const [addApiOpen, setAddApiOpen] = useState(false);
     // Capability installs mutate the block registry outside React. Subscribing
     // here redraws the Armory when a manifest is added or removed.
     useCapabilityStore(state => state.manifests.length);
@@ -113,7 +115,19 @@ export function Sidebar() {
                 </div>
             </div>
 
-            <CapabilityInstall />
+            {/* Adding an API happens in its own dialog: search results and a
+                review do not fit, or scroll, inside a 280px strip. */}
+            <div className="px-4 py-3 border-b border-[var(--citadel-border)]">
+                <button
+                    type="button"
+                    onClick={() => setAddApiOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--citadel-border)] px-3 py-2 text-sm text-[var(--text-secondary)] hover:border-[var(--citadel-primary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                    <Plus className="w-4 h-4" />
+                    Add an API
+                </button>
+            </div>
+            <AddApiDialog open={addApiOpen} onClose={() => setAddApiOpen(false)} />
 
             {/* Block Categories */}
             <div className="sidebar-content space-y-2">
