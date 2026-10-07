@@ -73,7 +73,7 @@
     "zod": "4.6.5"
   },
   "type": "module",
-  "overrides": {
-    "sharp": "0.35.5"
+  "optionalDependencies": {
+    "sharp": "^0.35.5"
   }
 }
