@@ -262,4 +262,22 @@ describe('omni-mind hydrate', () => {
         expect(rejected[1].reason).toContain('graph');
         expect(rejected[4].reason).toContain('importance');
     });
+
+    it('keeps an active persona when the persisted active one is dropped, or when every persona is', async () => {
+        const fresh = createInitialMindState();
+        await writeVault('omni-mind', {
+            personas: [fresh.personas[1], { id: 'p_bad', name: 'No prompt' }],
+            activePersonaId: 'p_bad'
+        }, 1);
+        await useMindStore.persist.rehydrate();
+        let state = useMindStore.getState();
+        expect(state.getActivePersona()?.id).toBe(fresh.personas[1].id);
+
+        useMindStore.setState(createInitialMindState());
+        await writeVault('omni-mind', { personas: 'none', activePersonaId: 'ghost' }, 1);
+        await useMindStore.persist.rehydrate();
+        state = useMindStore.getState();
+        expect(state.personas.map(p => p.id)).toEqual(fresh.personas.map(p => p.id));
+        expect(state.getActivePersona()?.id).toBe(fresh.activePersonaId);
+    });
 });

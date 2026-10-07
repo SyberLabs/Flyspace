@@ -412,10 +412,18 @@ export const useMindStore = create<MindStore>()(
                 }
 
                 const graph = admitField<KnowledgeGraph>('omni-mind', persisted, 'graph', GRAPH_SHAPE);
-                const personas = persisted.personas === undefined
+                // A persona list that admits nothing falls back to the built-ins,
+                // and the active persona must be one that was admitted: Think
+                // refuses to run with none, so a dropped record must not disable it.
+                const admittedPersonas = persisted.personas === undefined
                     ? currentState.personas
                     : admitRecords<PersonaConfig>('omni-mind', 'personas', persisted.personas, PERSONA_SHAPE);
-                const activePersonaId = admitField<string>('omni-mind', persisted, 'activePersonaId', 'string');
+                const personas = admittedPersonas.length > 0 ? admittedPersonas : currentState.personas;
+                const persistedActive = admitField<string>('omni-mind', persisted, 'activePersonaId', 'string')
+                    ?? currentState.activePersonaId;
+                const activePersonaId = personas.some(p => p.id === persistedActive)
+                    ? persistedActive
+                    : (personas.find(p => p.id === currentState.activePersonaId) ?? personas[0]).id;
 
                 // Ensure all built-in pools exist (handles schema migrations)
                 const mergedPools = admitRecords<ContextPool>(
@@ -435,7 +443,7 @@ export const useMindStore = create<MindStore>()(
                     llmConfig: mergedLLM,
                     graph: graph ?? currentState.graph,
                     personas,
-                    activePersonaId: activePersonaId ?? currentState.activePersonaId,
+                    activePersonaId,
                     contextPools: mergedPools
                 };
             }
