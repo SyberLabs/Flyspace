@@ -347,7 +347,6 @@ export function aggregateWireContext(targetBlockId: string): {
     sourceIds: string[];
     /** Everything that fed this context, wired and ambient alike. */
     sources: ContextSource[];
-    lastUpdate: number;
 } {
     const wires = useWireStore.getState().getWiresToBlock(targetBlockId);
     const activeWires = wires.filter(w => w.status === 'active');
@@ -361,8 +360,7 @@ export function aggregateWireContext(targetBlockId: string): {
         return {
             context: 'No active data sources connected. Wire some blocks to provide context!',
             sourceIds: [],
-            sources: [],
-            lastUpdate: Date.now()
+            sources: []
         };
     }
 
@@ -399,57 +397,21 @@ export function aggregateWireContext(targetBlockId: string): {
             ? contextParts.join('\n\n═══════════════════════════════════════\n\n')
             : 'Connected sources have no data available yet.',
         sourceIds,
-        sources,
-        lastUpdate: Date.now()
+        sources
     };
 }
 
 /**
- * WireService class for managing wire lifecycle
- * Simplified: No polling, context updates are on-demand only
+ * WireService class for managing wire lifecycle.
+ * No polling and no cached context: a persona turn calls
+ * aggregateWireContext when it runs.
  */
 class WireService {
     /**
      * Create a wire connection
      */
     createWire(sourceBlockId: string, targetBlockId: string, filters?: Partial<WireFilters>): string {
-        const wireId = useWireStore.getState().addWire(sourceBlockId, targetBlockId, filters);
-        if (!wireId) return '';
-
-        // Immediate context update for target
-        this.updateTargetContext(targetBlockId);
-
-        return wireId;
-    }
-
-    /**
-     * Manually update context for a target block
-     */
-    updateTargetContext(targetBlockId: string) {
-        const block = useBlockStore.getState().getBlock(targetBlockId);
-        if (!block) return;
-
-        const { context, lastUpdate } = aggregateWireContext(targetBlockId);
-
-        const currentData = isRecord(block.data) ? block.data : {};
-        useBlockStore.getState().updateData(targetBlockId, {
-            ...currentData,
-            currentContext: context,
-            lastContextUpdate: lastUpdate
-        });
-    }
-
-    /**
-     * Refresh all wires for a specific source block
-     * Call this when a source block's data updates
-     */
-    refreshWiresFromSource(sourceBlockId: string) {
-        const wires = useWireStore.getState().getWiresFromBlock(sourceBlockId);
-        const targetIds = new Set(wires.map(w => w.targetBlockId));
-
-        targetIds.forEach(targetId => {
-            this.updateTargetContext(targetId);
-        });
+        return useWireStore.getState().addWire(sourceBlockId, targetBlockId, filters) || '';
     }
 }
 
