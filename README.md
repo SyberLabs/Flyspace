@@ -1,3 +1,5 @@
+<img src="docs/assets/flyspace-logo.jpg" width="120" alt="Logo: five layered white strokes sweeping like a wing, on black">
+
 # OmniOS
 
 A canvas for thinking with AI over live data. Drop **blocks** that pull real
