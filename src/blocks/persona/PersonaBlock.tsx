@@ -45,6 +45,7 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
     const block = useBlockStore(state => state.blocks.find(b => b.instance_id === instanceId));
     const updateData = useBlockStore(state => state.updateData);
     const getWiresToBlock = useWireStore(state => state.getWiresToBlock);
+    const draft = useUIStore(state => state.drafts[instanceId]);
 
     const [input, setInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -71,7 +72,7 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
         if (container) {
             container.scrollTop = container.scrollHeight;
         }
-    }, [personaData.messages]);
+    }, [personaData.messages, draft]);
 
     const updatePersonaData = useCallback((updates: Partial<PersonaBlockData>) => {
         updateData(instanceId, { ...personaData, ...updates });
@@ -190,7 +191,7 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
 
             {/* Messages - maximized */}
             <div className="flex-1 overflow-auto p-2 space-y-2">
-                {personaData.messages.length === 0 ? (
+                {personaData.messages.length === 0 && !draft ? (
                     // Wires and messages are independent: a wired persona
                     // with no chat is ready to think, not missing context.
                     <div className="flex flex-col items-center justify-center h-full text-center py-6">
@@ -279,7 +280,17 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                         </div>
                     ))
                 )}
-                {personaData.isThinking && (
+                {personaData.isThinking && draft && (
+                    // The answer as it streams. It lives in the UI store until
+                    // the turn ends and the message is committed to the block.
+                    <div className="flex gap-2 justify-start">
+                        <span className="text-lg flex-shrink-0">{config.avatar}</span>
+                        <div className="max-w-[85%] px-3 py-2 rounded-lg text-sm bg-[var(--citadel-surface)] text-[var(--text-primary)] border border-[var(--citadel-border)]">
+                            <AnswerBody content={draft} />
+                        </div>
+                    </div>
+                )}
+                {personaData.isThinking && !draft && (
                     <div className="flex gap-2 items-center">
                         <span className="text-lg">{config.avatar}</span>
                         <div className="flex items-center gap-2 px-3 py-2 bg-[var(--citadel-surface)] rounded-lg border border-[var(--citadel-border)]">
