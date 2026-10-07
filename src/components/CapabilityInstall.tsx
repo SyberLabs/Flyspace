@@ -204,6 +204,7 @@ export function CapabilityInstall() {
                     <InstalledList
                         installed={installed.filter(manifest => manifest.source.locator !== 'speech')}
                     />
+                    <StaleList />
                 </div>
             ) : null}
         </div>
@@ -213,6 +214,26 @@ export function CapabilityInstall() {
 /** `GET /timeline/{location}`: what tells two same-titled operations apart. */
 function operationOf(manifest: CapabilityManifest): string {
     return manifest.transport.kind === 'http' ? `${manifest.transport.method} ${manifest.transport.path}` : '';
+}
+
+/** Persisted capabilities the current rule could not restore. Named, not dropped. */
+function StaleList() {
+    const stale = useCapabilityStore(state => state.stale);
+    const forgetStale = useCapabilityStore(state => state.forgetStale);
+    if (stale.length === 0) return null;
+    return (
+        <ul className="space-y-1">
+            {stale.map(entry => (
+                <li key={entry.id} className="text-xs">
+                    <span>{entry.title}</span>
+                    <span className="ml-1 text-[var(--truth-red)]">needs re-install: {entry.reason}</span>
+                    <button type="button" className="ml-2 underline" onClick={() => forgetStale(entry.id)}>
+                        Forget {entry.title}
+                    </button>
+                </li>
+            ))}
+        </ul>
+    );
 }
 
 /**

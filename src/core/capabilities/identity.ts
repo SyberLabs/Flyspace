@@ -21,7 +21,8 @@ export function canonicalBase(baseUrl: string): string {
 
 export function capabilityIdentityKey(transport: CapabilityTransport): string {
     if (transport.kind === 'local') return `local|${transport.handler}`;
-    if (transport.kind === 'mcp') return `mcp|${transport.serverId}|${transport.toolName}`;
+    // The origin is in the key so two servers that share a label are two capabilities.
+    if (transport.kind === 'mcp') return `mcp|${transport.origin}|${transport.serverId}|${transport.toolName}`;
     if (transport.kind === 'async') return `async|${transport.runtimeId}|${transport.operation}`;
     return `http|${canonicalBase(transport.baseUrl)}|${transport.method}|${transport.path}`;
 }
@@ -37,15 +38,17 @@ export function credentialSlot(baseUrl: string, auth: SlotAuth): string {
 }
 
 /**
- * Slot for any transport that can carry a credential. Non-HTTP destinations
- * are named by kind and host-bound id, which cannot collide with a URL origin.
+ * Slot for any transport that can carry a credential. An MCP server is a URL
+ * origin like an HTTP base and takes the same slot, so two servers that share
+ * a label never share a secret. An async runtime is named by kind and
+ * host-bound id, which cannot collide with a URL origin.
  */
 export function transportCredentialSlot(
     transport: CapabilityTransport,
     auth: SlotAuth
 ): string | undefined {
     if (transport.kind === 'http') return credentialSlot(transport.baseUrl, auth);
-    if (transport.kind === 'mcp') return slotFor(`mcp:${transport.serverId}`, auth);
+    if (transport.kind === 'mcp') return credentialSlot(transport.origin, auth);
     if (transport.kind === 'async') return slotFor(`async:${transport.runtimeId}`, auth);
     return undefined;
 }

@@ -359,6 +359,22 @@ describe('capability compiler', () => {
         expect(rejected.rejected[0]?.errors.join(' ')).toMatch(/digest/);
     });
 
+    it('gives two MCP servers with the same label and tool at different origins distinct ids that coexist', () => {
+        const tool = {
+            serverId: 'board',
+            name: 'list_board',
+            inputSchema: { type: 'object', properties: {} },
+            outputSchema: { type: 'array', items: { type: 'string' } }
+        };
+        const [first] = compileMcpTools([{ ...tool, origin: 'https://board.example.test' }]).manifests;
+        const [second] = compileMcpTools([{ ...tool, origin: 'https://other.example.test' }]).manifests;
+        expect(first.id).not.toBe(second.id);
+        expect(installProposal(first).ok).toBe(true);
+        expect(installProposal(second).ok).toBe(true);
+        expect(getCapability(first.id)?.transport).toMatchObject({ origin: 'https://board.example.test' });
+        expect(getCapability(second.id)?.transport).toMatchObject({ origin: 'https://other.example.test' });
+    });
+
     it('an imported capability blob lands writes pending; the same blob through rehydrate keeps approval', () => {
         const create = byOp('createPost');
         const list = byOp('listPosts');
@@ -397,6 +413,7 @@ describe('capability compiler', () => {
         const compiled = compileMcpTools([
             {
                 serverId: 'board',
+                origin: 'https://board.example.test',
                 name: 'list_board',
                 description: 'Read the board',
                 annotations: { readOnlyHint: true },
@@ -408,6 +425,7 @@ describe('capability compiler', () => {
             },
             {
                 serverId: 'board',
+                origin: 'https://board.example.test',
                 name: 'wipe_board',
                 annotations: { readOnlyHint: true, destructiveHint: true },
                 outputSchema: { type: 'boolean' }
@@ -419,6 +437,7 @@ describe('capability compiler', () => {
         expect(read).toMatchObject({ effect: 'write', approval: 'pending' });
         const trusted = compileMcpTools([{
             serverId: 'board',
+            origin: 'https://board.example.test',
             name: 'list_board',
             annotations: { readOnlyHint: true },
             inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
@@ -432,6 +451,7 @@ describe('capability compiler', () => {
 
         const calls: unknown[] = [];
         bindMcpTransport('board', {
+            origin: 'https://board.example.test',
             call: async (_server, tool, args) => {
                 calls.push({ tool, args });
                 return ['alpha'];

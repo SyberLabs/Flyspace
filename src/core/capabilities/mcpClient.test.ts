@@ -29,7 +29,7 @@ import { bindMcpTransport, unbindMcpTransport } from './execute';
 import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
 import { approveCapability, clearCapabilities } from './registry';
 import { capabilitySecrets } from './secrets';
-import { transportCredentialSlot } from './identity';
+import { credentialSlot, transportCredentialSlot } from './identity';
 import type { CapabilityManifest } from './manifest';
 
 interface Seen {
@@ -150,10 +150,31 @@ async function track<T extends Fixture>(fixture: Promise<T>): Promise<T> {
     return ready;
 }
 
+/** This test file is the host that built the loopback fixture URL, so it may say so. */
 function client(config: Parameters<typeof createMcpHttpTransport>[0]): McpSdkTransport {
-    const transport = createMcpHttpTransport(config);
+    const transport = createMcpHttpTransport({ hostCreated: true, ...config });
     transports.push(transport);
     return transport;
+}
+
+/** Answers every request with a 307 to `target`, which must never see the request. */
+async function redirectingServer(target: string): Promise<Fixture> {
+    const seen: Seen[] = [];
+    const server = http.createServer((req, res) => {
+        seen.push({ method: req.method, apiKey: req.headers['x-api-key'] as string | undefined ?? null });
+        req.resume();
+        req.on('end', () => {
+            res.writeHead(307, { location: target });
+            res.end();
+        });
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    return {
+        url: `http://127.0.0.1:${port}/mcp`,
+        seen,
+        close: () => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); })
+    };
 }
 
 async function installFrom(
@@ -323,6 +344,23 @@ describe('MCP capability end to end through the provider, admission, and executo
         expect(fixture.seen.length).toBe(before);
     });
 
+    it('keys the slot on the server origin, so a second server with the same label never receives the first secret', async () => {
+        const first = await track(modernServer('k-a'));
+        const second = await track(modernServer('k-b'));
+        const { manifest } = await installFrom(first, 'k-a', 'list', true);
+        const slot = transportCredentialSlot(manifest.transport, manifest.auth)!;
+        expect(slot).toBe(credentialSlot(new URL(first.url).origin, manifest.auth));
+        expect(slot).not.toBe(credentialSlot(new URL(second.url).origin, manifest.auth));
+        capabilitySecrets.set(slot, 'k-a');
+
+        // The host rebinds the label "board" to another origin.
+        bindMcpTransport('board', client({ url: second.url, serverId: 'board' }));
+        const result = await executeCapability(manifest.id, { limit: 1 });
+        expect(result.ok).toBe(false);
+        expect(result.error?.code).toBe('TRANSPORT_NOT_BOUND');
+        expect(second.seen).toHaveLength(0);
+    });
+
     it('does not let an untrusted readOnlyHint grant read/auto', async () => {
         const fixture = await track(modernServer('k-live'));
         const { manifest } = await installFrom(fixture, 'k-live', 'list', false);
@@ -358,6 +396,49 @@ describe('MCP capability end to end through the provider, admission, and executo
         expect(manifest.effect).toBe('write');
         expect(result.error?.code).toBe('EFFECT_UNCERTAIN');
         expect(fixture.seen.map(entry => entry.method)).toContain('tools/call');
+    });
+});
+
+describe('MCP server URL follows the http base URL rule before a credential is sent', () => {
+    it('refuses an http URL that is not loopback', () => {
+        expect(() => createMcpHttpTransport({ url: 'http://mcp.example.test/mcp', headers: { 'x-api-key': 'k-live' } }))
+            .toThrow(/must be https/);
+    });
+
+    it('refuses loopback http unless the host built the config, so the fixture never sees the key', async () => {
+        const fixture = await track(modernServer('k-live'));
+        expect(() => createMcpHttpTransport({ url: fixture.url, headers: { 'x-api-key': 'k-live' } }))
+            .toThrow(/loopback only in a host-created config/);
+        expect(fixture.seen).toHaveLength(0);
+        // The same URL, vouched for by the host, connects.
+        const allowed = client({ url: fixture.url, headers: { 'x-api-key': 'k-live' } });
+        expect(await allowed.call('board', 'list', { limit: 1 })).toEqual({ items: ['alpha'], era: 'modern' });
+    });
+
+    it.each([
+        ['https://user:pw@mcp.example.test/mcp', 'embed credentials'],
+        ['https://mcp.example.test/mcp?token=abc', 'query or fragment'],
+        ['https://169.254.169.254/mcp', 'metadata service'],
+        ['https://10.0.0.1/mcp', 'non-public address'],
+        ['https://localhost/mcp', 'loopback only in a host-created config']
+    ])('refuses %s like an http base URL', (url, reason) => {
+        expect(() => createMcpHttpTransport({ url, headers: { 'x-api-key': 'k-live' } })).toThrow(reason);
+    });
+
+    it('accepts a public https URL without opening a connection', () => {
+        const transport = createMcpHttpTransport({ url: 'https://mcp.example.test/mcp', serverId: 'board' });
+        expect(transport.origin).toBe('https://mcp.example.test');
+        expect(transport.protocolEra()).toBeUndefined();
+    });
+
+    it('never replays a credentialed request to the host a 3xx names', async () => {
+        const target = await track(modernServer('k-live'));
+        const bouncer = await track(redirectingServer(target.url));
+        const transport = client({ url: bouncer.url, headers: { 'x-api-key': 'k-live' } });
+        await expect(transport.call('board', 'list', { limit: 1 })).rejects.toThrow();
+        expect(bouncer.seen.length).toBeGreaterThan(0);
+        expect(bouncer.seen.every(entry => entry.apiKey === 'k-live')).toBe(true);
+        expect(target.seen).toHaveLength(0);
     });
 });
 

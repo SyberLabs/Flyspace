@@ -5,12 +5,24 @@
 // policy, effect classification, and credential slots stay in Omni.
 
 import { Client, StreamableHTTPClientTransport, type VersionNegotiationMode } from '@modelcontextprotocol/client';
+import { destinationUrlErrors } from './egress';
 import type { McpCallContext, McpTransport } from './execute';
 import { canonicalize, sha256 } from './hash';
 import type { McpToolSchema } from './mcp';
 
 export interface McpServerConfig {
+    /**
+     * Checked against the http base URL rule (`destinationUrlErrors`) when
+     * the transport is created, before any session opens: https, no embedded
+     * credentials, query or fragment, no private or metadata address.
+     */
     url: string;
+    /**
+     * The host itself built this config (not a manifest, provider, model or
+     * stored snapshot). Only then may `url` target loopback, http or https:
+     * the same gate as `validateManifest(..., { hostCreated: true })`.
+     */
+    hostCreated?: boolean;
     /** Labels tools returned by listTools. The provider re-labels them with its own server id. */
     serverId?: string;
     /**
@@ -45,6 +57,13 @@ interface Session {
 }
 
 export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport {
+    // The same rule an http transport.baseUrl passes, applied once, before
+    // a credential can be attached to anything.
+    const refused = destinationUrlErrors(config.url, { hostCreated: config.hostCreated === true, subject: 'config' });
+    if (refused.length > 0) throw new Error(`MCP server URL ${refused.join('; ')}`);
+    const url = new URL(config.url);
+    const origin = url.origin;
+
     let session: Session | undefined;
     /** Replaced sessions that still have requests in flight. */
     const draining = new Set<Session>();
@@ -107,7 +126,12 @@ export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport
             { name: config.clientName ?? 'omni', version: config.clientVersion ?? '0.1.0' },
             { versionNegotiation: { mode: config.versionNegotiation ?? 'auto' } }
         );
-        const transport = new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers } });
+        // The SDK (v2.2.0, src/client/streamableHttp.ts) spreads requestInit
+        // into every fetch init (GET stream, POST, DELETE) and overrides only
+        // method, headers, body and signal, so `redirect` reaches fetch. A 3xx
+        // then comes back as a non-ok response and fails the request; the
+        // credentialed request is never replayed to the host Location names.
+        const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers, redirect: 'manual' } });
         const ready = client.connect(transport, signal ? { signal } : undefined).then(() => client);
         const current: Session = { key, client, ready, active: 1, retired: false, closed: false };
         session = current;
@@ -124,6 +148,8 @@ export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport
     }
 
     return {
+        origin,
+
         async call(_serverId, toolName, args, signal, context) {
             const held = await lease(context, signal);
             try {
@@ -167,6 +193,7 @@ export function createMcpHttpTransport(config: McpServerConfig): McpSdkTransport
             for (const tool of page.tools) {
                 tools.push({
                     serverId: config.serverId ?? '',
+                    origin,
                     name: tool.name,
                     ...(tool.description ? { description: tool.description } : {}),
                     inputSchema: tool.inputSchema,

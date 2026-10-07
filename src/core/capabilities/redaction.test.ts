@@ -140,7 +140,7 @@ describe('dispatched-call errors carry no credential', () => {
             title: 'Search',
             effectHint: 'read',
             auth: { kind: 'apiKey', in: 'header', name: 'x-api-key' },
-            transport: { kind: 'mcp', serverId: 'board', toolName: 'search' },
+            transport: { kind: 'mcp', serverId: 'board', origin: 'https://board.example.test', toolName: 'search' },
             inputs: [],
             output: { schema: { kind: 'array', items: { kind: 'string' } }, presentation: 'raw' },
             execution: { kind: 'sync' },
@@ -150,7 +150,7 @@ describe('dispatched-call errors carry no credential', () => {
         expect(installed.ok, installed.errors.join('; ')).toBe(true);
         const manifest = installed.manifest!;
         capabilitySecrets.set(transportCredentialSlot(manifest.transport, manifest.auth)!, SECRET);
-        bindMcpTransport('board', { call: async () => { throw new Error(echo(SECRET)); } });
+        bindMcpTransport('board', { origin: 'https://board.example.test', call: async () => { throw new Error(echo(SECRET)); } });
         await expectCleanRun(manifest, SECRET);
     });
 

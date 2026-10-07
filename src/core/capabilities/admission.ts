@@ -55,7 +55,7 @@ const PROVIDER_KEYS = new Set(['id', 'kind']);
 const IDENTITY_KEYS = new Set(['origin', 'operationId', 'sourceLocator', 'sourceRevision']);
 const AUTH_KEYS = new Set(['kind', 'in', 'name', 'prefix', 'scopes']);
 const HTTP_TRANSPORT_KEYS = new Set(['kind', 'access', 'baseUrl', 'method', 'path']);
-const MCP_TRANSPORT_KEYS = new Set(['kind', 'serverId', 'toolName']);
+const MCP_TRANSPORT_KEYS = new Set(['kind', 'serverId', 'origin', 'toolName']);
 const ASYNC_TRANSPORT_KEYS = new Set(['kind', 'runtimeId', 'operation']);
 const SYNC_EXECUTION_KEYS = new Set(['kind']);
 const ASYNC_EXECUTION_KEYS = new Set(['kind', 'pollIntervalMs', 'maxDurationMs']);
@@ -163,7 +163,7 @@ function hostTransport(transport: ProposedTransport): { transport: CapabilityTra
         };
     }
     if (transport.kind === 'mcp') {
-        return { transport: { kind: 'mcp', serverId: transport.serverId, toolName: transport.toolName } };
+        return { transport: { kind: 'mcp', serverId: transport.serverId, origin: transport.origin, toolName: transport.toolName } };
     }
     if (transport.kind === 'async') {
         return { transport: { kind: 'async', runtimeId: transport.runtimeId, operation: transport.operation } };
@@ -294,6 +294,14 @@ function shapeErrors(input: unknown): string[] {
         }
     } else if (input.transport.kind === 'mcp') {
         closed(input.transport, MCP_TRANSPORT_KEYS, 'proposal.transport', errors);
+        // The credential slot is derived from this origin, as from an http baseUrl.
+        const origin = originOf(input.transport.origin);
+        if (origin === undefined || origin !== input.transport.origin) {
+            errors.push('proposal.transport.origin must be a URL origin');
+        } else if (isRecord(input.externalIdentity) && typeof input.externalIdentity.origin === 'string'
+            && origin !== input.externalIdentity.origin) {
+            errors.push('proposal.externalIdentity.origin does not match the transport');
+        }
     } else if (input.transport.kind === 'async') {
         closed(input.transport, ASYNC_TRANSPORT_KEYS, 'proposal.transport', errors, {
             baseUrl: 'async endpoints are bound by the host runtime',
