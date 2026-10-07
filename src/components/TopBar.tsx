@@ -133,7 +133,7 @@ export function TopBar({
 
                     <div className="w-px h-4 bg-[var(--citadel-border)]" />
 
-                    {/* Data Mode (Live/Mock) */}
+                    {/* Refresh rate (fast/normal); all data is live either way */}
                     <button
                         onClick={toggleMockData}
                         className={cn(
@@ -142,7 +142,9 @@ export function TopBar({
                                 ? "text-[var(--truth-amber)] hover:bg-[var(--truth-amber)]/10"
                                 : "text-[var(--truth-green)] hover:bg-[var(--truth-green)]/10"
                         )}
-                        title={useMockData ? "Using mock data - click to try live API" : "Using live API"}
+                        title={useMockData
+                            ? "Fast refresh: live data polled every 5–60 s - click for normal refresh"
+                            : "Normal refresh: live data polled every 1–60 min - click for fast refresh"}
                     >
                         {useMockData ? (
                             <Database className="w-3.5 h-3.5" />

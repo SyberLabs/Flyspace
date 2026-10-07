@@ -24,7 +24,9 @@ export function dropSettingsClientKeys(persisted: unknown): unknown {
 export const useSettingsStore = create<SettingsState>()(
     persist(
         (set) => ({
-            useMockData: true,
+            // Fast refresh off by default: on, it polls real third-party APIs
+            // every 5–60 s. See OmniSettings.useMockData for why the key is named so.
+            useMockData: false,
             gridSnapping: true,
             gridSize: 20,
 

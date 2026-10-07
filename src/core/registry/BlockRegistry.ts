@@ -82,10 +82,7 @@ blockRegistry.register({
     block_id: 'polymarket_live_odds',
     display_name: 'Polymarket',
     category: 'truth',
-    data_type: 'probabilistic_stream',
-    refresh_rate: '1s',
     semantic_tags: ['prediction', 'truth_signal', 'market', 'probability', 'betting'],
-    wiring_logic: 'map_to_game_theory_agent',
     ports: [
         createJsonOutputPort('out', 'Market Data')
     ],
@@ -98,10 +95,7 @@ blockRegistry.register({
     block_id: 'coingecko_crypto',
     display_name: 'Crypto Markets',
     category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '1m',
     semantic_tags: ['crypto', 'bitcoin', 'ethereum', 'prices', 'market'],
-    wiring_logic: 'map_to_quant_agent',
     icon: 'Coins',
     description: 'Live cryptocurrency prices and market data',
     ports: [
@@ -114,10 +108,7 @@ blockRegistry.register({
     block_id: 'hackernews_feed',
     display_name: 'Hacker News',
     category: 'pulse',
-    data_type: 'news_feed',
-    refresh_rate: '5m',
     semantic_tags: ['hackernews', 'tech', 'startups', 'programming', 'ycombinator'],
-    wiring_logic: 'map_to_narrative_agent',
     icon: 'Zap',
     description: 'Top stories from Hacker News',
     ports: [
@@ -130,10 +121,7 @@ blockRegistry.register({
     block_id: 'openalex_works',
     display_name: 'OpenAlex',
     category: 'truth',
-    data_type: 'news_feed',
-    refresh_rate: '30m',
     semantic_tags: ['research', 'papers', 'citations', 'scholarly'],
-    wiring_logic: 'map_to_research_agent',
     ports: [
         createJsonOutputPort('out', 'Research Feed')
     ],
@@ -146,10 +134,7 @@ blockRegistry.register({
     block_id: 'worldbank_indicator',
     display_name: 'World Bank',
     category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '1h',
     semantic_tags: ['development', 'global', 'indicator', 'time series'],
-    wiring_logic: 'map_to_quant_agent',
     ports: [
         createJsonOutputPort('out', 'Indicator Data')
     ],
@@ -161,10 +146,7 @@ blockRegistry.register({
     block_id: 'usgs_quakes',
     display_name: 'Earthquakes',
     category: 'physicality',
-    data_type: 'telemetry',
-    refresh_rate: '5m',
     semantic_tags: ['earthquake', 'usgs', 'hazards', 'geology'],
-    wiring_logic: 'map_to_analyst_agent',
     ports: [
         createJsonOutputPort('out', 'Quake Feed')
     ],
@@ -176,10 +158,7 @@ blockRegistry.register({
     block_id: 'openmeteo_forecast',
     display_name: 'Weather',
     category: 'environment',
-    data_type: 'telemetry',
-    refresh_rate: '15m',
     semantic_tags: ['weather', 'forecast', 'climate', 'open-meteo'],
-    wiring_logic: 'map_to_analyst_agent',
     ports: [
         createJsonOutputPort('out', 'Forecast')
     ],
@@ -191,10 +170,7 @@ blockRegistry.register({
     block_id: 'frankfurter_fx',
     display_name: 'FX Rates',
     category: 'truth',
-    data_type: 'financial',
-    refresh_rate: '1h',
     semantic_tags: ['fx', 'currency', 'ecb', 'rates'],
-    wiring_logic: 'map_to_quant_agent',
     ports: [
         createJsonOutputPort('out', 'Rates')
     ],
@@ -206,10 +182,7 @@ blockRegistry.register({
     block_id: 'wikipedia_search',
     display_name: 'Wikipedia',
     category: 'pulse',
-    data_type: 'news_feed',
-    refresh_rate: '10m',
     semantic_tags: ['wikipedia', 'encyclopedia', 'knowledge'],
-    wiring_logic: 'map_to_research_agent',
     ports: [
         createJsonOutputPort('out', 'Articles')
     ],
@@ -221,10 +194,7 @@ blockRegistry.register({
     block_id: 'openlibrary_search',
     display_name: 'Open Library',
     category: 'truth',
-    data_type: 'news_feed',
-    refresh_rate: '10m',
     semantic_tags: ['books', 'library', 'research'],
-    wiring_logic: 'map_to_research_agent',
     ports: [
         createJsonOutputPort('out', 'Books')
     ],
@@ -236,10 +206,7 @@ blockRegistry.register({
     block_id: 'github_repos',
     display_name: 'GitHub',
     category: 'truth',
-    data_type: 'news_feed',
-    refresh_rate: '10m',
     semantic_tags: ['github', 'code', 'opensource', 'repos'],
-    wiring_logic: 'map_to_developer_agent',
     ports: [
         createJsonOutputPort('out', 'Repositories')
     ],
@@ -251,10 +218,7 @@ blockRegistry.register({
     block_id: 'crossref_works',
     display_name: 'Crossref',
     category: 'truth',
-    data_type: 'news_feed',
-    refresh_rate: '10m',
     semantic_tags: ['research', 'doi', 'papers', 'citations'],
-    wiring_logic: 'map_to_research_agent',
     ports: [
         createJsonOutputPort('out', 'Works')
     ],
@@ -271,10 +235,7 @@ blockRegistry.register({
     block_id: 'text_note',
     display_name: 'Text Note',
     category: 'workspace',
-    data_type: 'text',
-    refresh_rate: 'manual',
     semantic_tags: ['notes', 'documents', 'research', 'writing', 'markdown'],
-    wiring_logic: 'map_to_analyst_agent',
     ports: [
         createTextOutputPort('out', 'Text Content')
     ],
@@ -291,10 +252,7 @@ blockRegistry.register({
     block_id: 'persona_analyst',
     display_name: 'Analyst',
     category: 'model',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
     semantic_tags: ['persona', 'ai', 'analyst', 'data', 'insights', 'intelligence'],
-    wiring_logic: 'accepts_wire_input',
     ports: [
         createAnyInputPort('in', 'Data Input'),
         createTextOutputPort('out', 'Analysis')
@@ -308,10 +266,7 @@ blockRegistry.register({
     block_id: 'persona_strategist',
     display_name: 'Strategist',
     category: 'model',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
     semantic_tags: ['persona', 'ai', 'strategist', 'planning', 'tactics'],
-    wiring_logic: 'accepts_wire_input',
     ports: [
         createAnyInputPort('in', 'Data Input'),
         createTextOutputPort('out', 'Strategy')
@@ -325,10 +280,7 @@ blockRegistry.register({
     block_id: 'persona_researcher',
     display_name: 'Researcher',
     category: 'model',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
     semantic_tags: ['persona', 'ai', 'researcher', 'science', 'knowledge'],
-    wiring_logic: 'accepts_wire_input',
     ports: [
         createAnyInputPort('in', 'Data Input'),
         createTextOutputPort('out', 'Research')
@@ -342,10 +294,7 @@ blockRegistry.register({
     block_id: 'persona_creative',
     display_name: 'Creative',
     category: 'model',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
     semantic_tags: ['persona', 'ai', 'creative', 'ideas', 'innovation'],
-    wiring_logic: 'accepts_wire_input',
     ports: [
         createAnyInputPort('in', 'Data Input'),
         createTextOutputPort('out', 'Ideas')
@@ -359,10 +308,7 @@ blockRegistry.register({
     block_id: 'persona_guardian',
     display_name: 'Guardian',
     category: 'model',
-    data_type: 'conversation',
-    refresh_rate: 'manual',
     semantic_tags: ['persona', 'ai', 'guardian', 'risk', 'protection'],
-    wiring_logic: 'accepts_wire_input',
     ports: [
         createAnyInputPort('in', 'Data Input'),
         createTextOutputPort('out', 'Risk Analysis')
@@ -382,10 +328,7 @@ blockRegistry.register({
     block_id: 'memory_pool',
     display_name: 'Memory',
     category: 'model',
-    data_type: 'custom',
-    refresh_rate: 'manual',
     semantic_tags: ['memory', 'context', 'recall', 'mind', 'pool', 'notes'],
-    wiring_logic: 'none',
     ports: [
         createJsonOutputPort('out', 'Entries')
     ],
