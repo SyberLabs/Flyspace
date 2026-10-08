@@ -184,7 +184,7 @@ describe('compile status', () => {
             'requirements that combine several schemes are unsupported',
             'GET /a: transport.baseUrl must be https, except loopback http in a host-created manifest',
             'requirements that combine several schemes are unsupported'
-        ])).toBe('It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)');
+        ])).toBe('It needs a sign-in Flyspace does not support yet (OAuth, or several keys at once)');
         expect(describeCompileBlocker(['transport.baseUrl must be https'])).toBe('Its server address is not a fixed https URL');
         expect(describeCompileBlocker(['getThing: something new went wrong'])).toBe('something new went wrong');
         expect(describeCompileBlocker([])).toBe('No operations it describes can be used yet');

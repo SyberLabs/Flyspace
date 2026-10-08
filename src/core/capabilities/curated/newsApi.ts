@@ -2,7 +2,7 @@
 // Hand-written from https://newsapi.org/docs/endpoints/top-headlines and
 // /everything (2026-10-07). The key goes in the X-Api-Key header, which keeps
 // it out of the URL. NewsAPI sends no CORS headers (and its free plan refuses
-// browser calls), so OmniOS reaches it through its server broker.
+// browser calls), so Flyspace reaches it through its server broker.
 
 const ARTICLES = {
     type: 'object',

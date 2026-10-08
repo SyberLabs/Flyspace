@@ -7,7 +7,7 @@ import { fetchCatalogSpec, RegistryFetchError } from './registrySearch';
 
 const FRED = curatedApi('omni:fred')!;
 
-describe('FRED, as OmniOS ships it', () => {
+describe('FRED, as Flyspace ships it', () => {
     const { manifests, errors } = compileOpenApi(FRED.spec, { sourceLocator: FRED.entry.specUrl, brokerOrigins: FRED.brokerOrigins });
 
     it('compiles to the three reads its entry claims, all through the server broker', () => {

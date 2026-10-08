@@ -47,7 +47,7 @@ export interface ApiIndexEntry {
     /** Why nothing compiled, in plain words. Only when `operations` is 0. */
     blocker?: string;
     /**
-     * Shipped with OmniOS (curatedApis.ts), not from the directory. Never
+     * Shipped with Flyspace (curatedApis.ts), not from the directory. Never
      * present in the built index: parseApiIndex refuses it there.
      */
     curated?: true;
@@ -70,19 +70,19 @@ export function describeCompileBlocker(messages: readonly string[]): string {
     if (messages.length === 0) return 'No operations it describes can be used yet';
     const reasons = messages.map(message => {
         if (/must be signed/i.test(message)) {
-            return 'Every request must be signed (as with AWS), which OmniOS does not do';
+            return 'Every request must be signed (as with AWS), which Flyspace does not do';
         }
         if (/combine several schemes|no supported security scheme|unsupported scheme|oauth/i.test(message)) {
-            return 'It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)';
+            return 'It needs a sign-in Flyspace does not support yet (OAuth, or several keys at once)';
         }
         if (/baseUrl must be https|server url|relative server|concrete server/i.test(message)) {
             return 'Its server address is not a fixed https URL';
         }
         if (/compound .* parameters|parameter style|cookie parameters/i.test(message)) {
-            return 'It takes parameters in a form OmniOS does not support yet';
+            return 'It takes parameters in a form Flyspace does not support yet';
         }
         if (/oneOf|anyOf|allOf|cyclic|does not declare a type|not a single ValueType/i.test(message)) {
-            return 'Its data shapes are ones OmniOS cannot type yet';
+            return 'Its data shapes are ones Flyspace cannot type yet';
         }
         if (/responses are in the supported subset|response schema is required|no success response|requestBody must be application/i.test(message)) {
             return 'It does not send and receive plain JSON';

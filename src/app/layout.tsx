@@ -25,8 +25,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "The Citadel | Project Omni",
-  description: "A sovereign, high-bandwidth cognitive exoskeleton. Your Cognitive Integrated Development Environment.",
+  title: "Flyspace",
+  description: "A canvas for thinking with AI over live data.",
   keywords: ["cognitive IDE", "prediction markets", "data visualization", "AI", "productivity"],
 };
 
