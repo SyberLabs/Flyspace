@@ -63,26 +63,27 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
         return currentShell ? getWiresByShell(currentShell) : wires;
     }, [wires, currentShell, getWiresByShell]);
 
+    // Routing depends on geometry only. Block data and status change all the
+    // time (fetches, a persona streaming tokens); keying on a geometry string
+    // keeps those updates from re-routing every wire.
+    const geometryKey = JSON.stringify(blocks
+        .filter(b => !currentShell || b.shellId === currentShell)
+        .map(b => [b.instance_id, b.position.x, b.position.y, b.dimensions.width, b.dimensions.height]));
+    const wiringKey = JSON.stringify(shellWires.map(w => [w.id, w.sourceBlockId, w.targetBlockId]));
+
     // Every block on this shell is an obstacle; the dragged one where it is now.
     const routeBlocks = useMemo<RouteBlock[]>(() => {
-        return blocks
-            .filter(b => !currentShell || b.shellId === currentShell)
-            .map(b => {
-                const delta = activeDragId === b.instance_id && dragDelta ? dragDelta : { x: 0, y: 0 };
-                return {
-                    id: b.instance_id,
-                    x: b.position.x + delta.x,
-                    y: b.position.y + delta.y,
-                    width: b.dimensions.width,
-                    height: b.dimensions.height
-                };
-            });
-    }, [blocks, currentShell, activeDragId, dragDelta]);
+        const rows = JSON.parse(geometryKey) as Array<[string, number, number, number, number]>;
+        return rows.map(([id, x, y, width, height]) => {
+            const delta = activeDragId === id && dragDelta ? dragDelta : { x: 0, y: 0 };
+            return { id, x: x + delta.x, y: y + delta.y, width, height };
+        });
+    }, [geometryKey, activeDragId, dragDelta]);
 
-    const routeInput = useMemo<RouteWire[]>(
-        () => shellWires.map(w => ({ id: w.id, source: w.sourceBlockId, target: w.targetBlockId })),
-        [shellWires]
-    );
+    const routeInput = useMemo<RouteWire[]>(() => {
+        const rows = JSON.parse(wiringKey) as Array<[string, string, string]>;
+        return rows.map(([id, source, target]) => ({ id, source, target }));
+    }, [wiringKey]);
 
     const routing = useMemo(() => {
         return activeDragId

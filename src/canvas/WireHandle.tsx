@@ -11,6 +11,7 @@ import { Plug } from 'lucide-react';
 import { wireService } from '@/core/services/wire.service';
 import { PortSchema, PortDataType } from '@/core/schemas/block.schema';
 import { cn } from '@/lib/utils';
+import { polylineToPath } from './routing/svgPath';
 
 interface WireHandleProps {
     blockId: string;
@@ -141,12 +142,18 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
 
     const isConnected = connectionCount > 0;
 
-    // Calculate bezier curve path for drag line
+    // Live preview while dragging: a circuit-style elbow (out, across, in),
+    // matching the routed wires it will become.
     const getDragPath = () => {
         if (!dragState) return '';
         const { startX, startY, currentX, currentY } = dragState;
-        const controlOffset = Math.min(100, Math.abs(currentX - startX) / 2);
-        return `M ${startX} ${startY} C ${startX + controlOffset} ${startY}, ${currentX - controlOffset} ${currentY}, ${currentX} ${currentY}`;
+        const midX = currentX > startX + 24 ? (startX + currentX) / 2 : startX + 24;
+        return polylineToPath([
+            { x: startX, y: startY },
+            { x: midX, y: startY },
+            { x: midX, y: currentY },
+            { x: currentX, y: currentY }
+        ]);
     };
 
     return (
@@ -242,7 +249,7 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
                 )}
             </AnimatePresence>
 
-            {/* Drag line visualization - Bezier curve */}
+            {/* Drag line visualization - orthogonal elbow */}
             {dragState && (
                 <svg
                     className="fixed inset-0 pointer-events-none z-50"
@@ -261,7 +268,7 @@ export function WireHandle({ blockId, side, ports = [], connectionCount = 0 }: W
                             </feMerge>
                         </filter>
                     </defs>
-                    {/* Bezier curve path */}
+                    {/* Elbow path */}
                     <motion.path
                         d={getDragPath()}
                         fill="none"

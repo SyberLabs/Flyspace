@@ -277,7 +277,13 @@ function routeCore(
     const obstacles = blocks.map(b => inflate(b, opts.clearance));
     const grid = new RoutingGrid(obstacles, ends.flatMap(e => [e.ps.y, e.pt.y]), opts.clearance + opts.stub);
     const search = new GridSearch(grid);
-    const costs = { bend: opts.bendPenalty, cross: opts.crossPenalty, share: opts.sharePenalty, greed: opts.greed };
+    const costs = {
+        bend: opts.bendPenalty,
+        cross: opts.crossPenalty,
+        share: opts.sharePenalty,
+        greed: opts.greed,
+        reserve: STUB_RESERVE
+    };
     const t1 = now();
 
     // Net tags: one per source block (its bundle), one per target block (its trunk).
@@ -297,14 +303,26 @@ function routeCore(
     const routed: boolean[] = new Array(ends.length).fill(false);
     const ignored: Obstacle[][] = new Array(ends.length);
     const row = (y: number) => indexOf(grid.ys, y);
-    for (const i of order) {
-        const e = ends[i];
-        // Turn no sooner than `stub` past the port (on the first grid line out
-        // there), or sooner if a neighbouring block leaves less room than that.
+
+    // Where each wire's search starts and ends: no sooner than `stub` past the
+    // port (on the first grid line out there), or sooner if a neighbouring
+    // block leaves less room. Each stub is kept for its own net, so no other
+    // wire runs along it or cuts across it right in front of a port.
+    const plan = ends.map(e => {
         const sj = row(e.ps.y);
         const tj = row(e.pt.y);
-        const start = grid.node(grid.stubEnd(e.ps.x, sj, 1, opts.stub), sj);
-        const goal = grid.node(grid.stubEnd(e.pt.x, tj, -1, opts.stub), tj);
+        const si = grid.stubEnd(e.ps.x, sj, 1, opts.stub);
+        const ti = grid.stubEnd(e.pt.x, tj, -1, opts.stub);
+        const srcTag = tag(`<${e.wire.source}`);
+        const dstTag = tag(`>${e.wire.target}`);
+        grid.reserveStub(sj, grid.lineAtOrAfter(e.ps.x), si, srcTag);
+        grid.reserveStub(tj, grid.lineAtOrBefore(e.pt.x), ti, dstTag);
+        return { start: grid.node(si, sj), goal: grid.node(ti, tj), srcTag, dstTag };
+    });
+
+    for (const i of order) {
+        const e = ends[i];
+        const { start, goal, srcTag, dstTag } = plan[i];
         const as = grid.point(start);
         const at = grid.point(goal);
         // A port walled in by an overlapping block may pass through that block.
@@ -315,8 +333,6 @@ function routeCore(
             routed[i] = true;
             continue;
         }
-        const srcTag = tag(`<${e.wire.source}`);
-        const dstTag = tag(`>${e.wire.target}`);
         const path = search.find(start, goal, srcTag, dstTag, costs, ignored[i]);
         if (path) {
             const from = trunkStart(path, grid.nx);
@@ -403,6 +419,9 @@ export function routeWires(blocks: RouteBlock[], wires: RouteWire[], options: Pa
 }
 
 const LIVE_GREED = 2;
+
+/** Cost of using another net's port stub: about ten bends, so only a last resort. */
+const STUB_RESERVE = 360;
 
 function rectKey(b: RouteBlock): string {
     return `${b.x},${b.y},${b.width},${b.height}`;

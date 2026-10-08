@@ -86,6 +86,9 @@ export class RoutingGrid {
     readonly vEdgeNet: Int32Array;
     readonly hNodeNet: Int32Array;
     readonly vNodeNet: Int32Array;
+    /** Port stubs: row edges and nodes kept for the net of the port they lead to. */
+    readonly hReserve: Int32Array;
+    readonly nodeReserve: Int32Array;
 
     constructor(readonly obstacles: Obstacle[], portYs: number[], frame: number) {
         const gx = axisLines(obstacles.flatMap(o => [o.l, o.r]), [], frame);
@@ -105,6 +108,8 @@ export class RoutingGrid {
         this.vEdgeNet = new Int32Array(this.vBlock.length);
         this.hNodeNet = new Int32Array(nx * ny);
         this.vNodeNet = new Int32Array(nx * ny);
+        this.hReserve = new Int32Array(this.hBlock.length);
+        this.nodeReserve = new Int32Array(nx * ny);
 
         for (const o of obstacles) {
             const iL = indexOf(this.xs, o.l);
@@ -153,6 +158,19 @@ export class RoutingGrid {
             if (next < 0 || next >= this.nx) return i;
             if (this.hBlock[j * (this.nx - 1) + Math.min(i, next)] !== 0) return i;
             i = next;
+        }
+    }
+
+    /** Keep the stub from line i0 to line i1 on row j for `tag`: other nets pay to use or cross it. */
+    reserveStub(j: number, i0: number, i1: number, tag: number): void {
+        const keep = (arr: Int32Array, k: number) => {
+            arr[k] = arr[k] === 0 || arr[k] === tag ? tag : -1;
+        };
+        const lo = Math.min(i0, i1);
+        const hi = Math.max(i0, i1);
+        for (let i = lo; i <= hi; i++) {
+            keep(this.nodeReserve, j * this.nx + i);
+            if (i < hi) keep(this.hReserve, j * (this.nx - 1) + i);
         }
     }
 
@@ -271,6 +289,8 @@ export interface SearchCosts {
     cross: number;
     share: number;
     greed: number;
+    /** Cost of running along or across another net's port stub. */
+    reserve: number;
 }
 
 /** Reusable search buffers; sized to the grid. */
@@ -302,7 +322,7 @@ export class GridSearch {
      */
     find(start: number, goal: number, srcTag: number, dstTag: number, costs: SearchCosts, ignore: Obstacle[]): number[] | null {
         const grid = this.grid;
-        const { nx, ny, xs, ys, xw, yw, hBlock, vBlock, hEdgeNet, vEdgeNet, hNodeNet, vNodeNet } = grid;
+        const { nx, ny, xs, ys, xw, yw, hBlock, vBlock, hEdgeNet, vEdgeNet, hNodeNet, vNodeNet, hReserve, nodeReserve } = grid;
         const gen = ++this.gen;
         const heap = this.heap;
         const gArr = this.g;
@@ -381,8 +401,10 @@ export class GridSearch {
                 let len: number;
                 let edgeNet: number;
                 let crossNet: number;
+                let reserved = nodeReserve[next];
                 if (d < 2) {
                     const e = j * (nx - 1) + (d === EAST ? i : ni);
+                    if (hReserve[e] !== 0) reserved = hReserve[e];
                     const count = hBlock[e];
                     if (count !== 0 && (ignore.length === 0 || covered(count, (x + xs[ni]) / 2, y))) continue;
                     len = (d === EAST ? xs[ni] - x : x - xs[ni]) * yw[j];
@@ -401,6 +423,7 @@ export class GridSearch {
                 else if (edgeNet !== 0) c += len * costs.share;
                 if (crossNet !== 0 && crossNet !== srcTag && crossNet !== dstTag && next !== goal) c += costs.cross;
                 if (d !== dir) c += bend;
+                if (reserved !== 0 && reserved !== srcTag && reserved !== dstTag) c += costs.reserve;
                 if (stamp[ns] === gen && gArr[ns] <= c) continue;
                 stamp[ns] = gen;
                 gArr[ns] = c;

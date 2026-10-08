@@ -10,23 +10,26 @@ export interface PlacementRect {
 }
 
 /**
- * Space kept between blocks: room for a wire's clearance on both sides and a
- * couple of lanes between them.
+ * Space kept between blocks. Ports sit on the left and right sides, so a
+ * side-by-side pair needs room for both port handles, both stubs and a lane
+ * or two between them; above and below, a wire's clearance on both sides and
+ * a couple of lanes are enough.
  */
-export const PLACEMENT_GAP = 40;
+export const PLACEMENT_GAP = { x: 72, y: 40 };
 
 /** Smallest x and y a placed block may have: room for its input port handle at the canvas edge. */
 export const PLACEMENT_MARGIN = 24;
 
-function overlaps(a: PlacementRect, b: PlacementRect, gap: number): boolean {
-    return a.x < b.x + b.width + gap
-        && a.x + a.width + gap > b.x
-        && a.y < b.y + b.height + gap
-        && a.y + a.height + gap > b.y;
+function overlaps(a: PlacementRect, b: PlacementRect, gap: { x: number; y: number }): boolean {
+    return a.x < b.x + b.width + gap.x
+        && a.x + a.width + gap.x > b.x
+        && a.y < b.y + b.height + gap.y
+        && a.y + a.height + gap.y > b.y;
 }
 
 /**
  * The free top-left nearest to `desired` for a block of `size`, keeping `gap`
+ * (horizontal and vertical)
  * from every occupied rect and staying at x, y >= PLACEMENT_MARGIN. Candidates are the
  * requested point and the positions snug against each existing block (left,
  * right, above, below, and their combinations), so a block lands beside its
@@ -37,7 +40,7 @@ export function findFreeSpot(
     occupied: PlacementRect[],
     desired: { x: number; y: number },
     size: { width: number; height: number },
-    gap = PLACEMENT_GAP
+    gap: { x: number; y: number } = PLACEMENT_GAP
 ): { x: number; y: number } {
     const want = { x: Math.max(PLACEMENT_MARGIN, desired.x), y: Math.max(PLACEMENT_MARGIN, desired.y) };
     const fits = (x: number, y: number) => {
@@ -49,11 +52,11 @@ export function findFreeSpot(
     const xs = new Set<number>([want.x]);
     const ys = new Set<number>([want.y]);
     for (const o of occupied) {
-        xs.add(o.x + o.width + gap);
-        xs.add(o.x - gap - size.width);
+        xs.add(o.x + o.width + gap.x);
+        xs.add(o.x - gap.x - size.width);
         xs.add(o.x);
-        ys.add(o.y + o.height + gap);
-        ys.add(o.y - gap - size.height);
+        ys.add(o.y + o.height + gap.y);
+        ys.add(o.y - gap.y - size.height);
         ys.add(o.y);
     }
     let best: { x: number; y: number } | null = null;
@@ -72,6 +75,6 @@ export function findFreeSpot(
     }
     if (best) return best;
     // Unreachable in practice (right of everything is always free); keep a total answer.
-    const right = Math.max(PLACEMENT_MARGIN, ...occupied.map(o => o.x + o.width + gap));
+    const right = Math.max(PLACEMENT_MARGIN, ...occupied.map(o => o.x + o.width + gap.x));
     return { x: right, y: want.y };
 }

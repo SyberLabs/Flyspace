@@ -92,10 +92,17 @@ function vote(a: Segment, b: Segment): number {
     // High end: whichever ends first turns off; it belongs on the side it turns to.
     if (Math.abs(a.hi - b.hi) > EPS) {
         v += a.hi < b.hi ? a.sideHi : -b.sideHi;
+    } else if (a.sideHi !== b.sideHi) {
+        // Both turn off at the same point, to opposite sides: the wrong order
+        // would lay their turns on top of each other, which is worse than a
+        // crossing, so this vote counts double.
+        v += 2 * Math.sign(a.sideHi - b.sideHi);
     }
     // Low end: whichever starts later joined from a side; it belongs on that side.
     if (Math.abs(a.lo - b.lo) > EPS) {
         v += a.lo > b.lo ? a.sideLo : -b.sideLo;
+    } else if (a.sideLo !== b.sideLo) {
+        v += 2 * Math.sign(a.sideLo - b.sideLo);
     }
     return v;
 }
@@ -146,6 +153,7 @@ function band(horizontal: boolean, coord: number, lo: number, hi: number, blocks
 export function nudge(wires: NetPolyline[], blocks: RouteBlock[], opts: RouteOptions): Point[][] {
     const segs = segmentsOf(wires);
     const offset = new Map<Segment, number>();
+    const bandCache = new Map<Segment, [number, number]>();
 
     // Cluster parallel segments that overlap along their run and sit closer
     // than one lane gap: they share a corridor (the same grid line, or a
@@ -164,15 +172,60 @@ export function nudge(wires: NetPolyline[], blocks: RouteBlock[], opts: RouteOpt
             }
         }
     }
-    const clusters = new Map<number, Segment[]>();
-    segs.forEach((s, i) => {
-        const root = find(i);
-        let c = clusters.get(root);
-        if (!c) clusters.set(root, (c = []));
-        c.push(s);
-    });
-    for (const cluster of clusters.values()) {
-        if (cluster.length > 1) assignLanes(cluster);
+    // Moving one corridor's lanes stretches the runs that join them, which can
+    // lay a run onto a neighbouring corridor's lane. Lane, look for such
+    // collisions on the resulting geometry, merge the corridors involved, and
+    // lane again until nothing collides.
+    const index = new Map(segs.map((s, i) => [s, i]));
+    const lineAt = (s: Segment) => s.coord + (offset.get(s) ?? 0);
+    // Segments of one wire are consecutive in `segs`.
+    const neighbour = (s: Segment, step: number): Segment | undefined => {
+        const t = segs[index.get(s)! + step];
+        return t && t.w === s.w ? t : undefined;
+    };
+    const finalSpan = (s: Segment): [number, number] => {
+        const p = wires[s.w].points;
+        const prev = neighbour(s, -1);
+        const next = neighbour(s, 1);
+        const along = (q: Point) => (s.horizontal ? q.x : q.y);
+        const a = prev ? lineAt(prev) : along(p[s.k]);
+        const b = next ? lineAt(next) : along(p[s.k + 1]);
+        return [Math.min(a, b), Math.max(a, b)];
+    };
+    for (let pass = 0; pass < 6; pass++) {
+        offset.clear();
+        const clusters = new Map<number, Segment[]>();
+        segs.forEach((s, i) => {
+            const root = find(i);
+            let c = clusters.get(root);
+            if (!c) clusters.set(root, (c = []));
+            c.push(s);
+        });
+        for (const cluster of clusters.values()) {
+            if (cluster.length > 1) assignLanes(cluster);
+        }
+        let merged = false;
+        for (const horizontal of [true, false]) {
+            const list = segs.filter(s => s.horizontal === horizontal)
+                .map(s => ({ s, at: lineAt(s), span: finalSpan(s) }))
+                .sort((p, q) => p.at - q.at || index.get(p.s)! - index.get(q.s)!);
+            for (let x = 0; x < list.length; x++) {
+                for (let y = x + 1; y < list.length; y++) {
+                    const a = list[x];
+                    const b = list[y];
+                    if (b.at - a.at >= opts.laneGap - 0.5) break;
+                    if (a.s.net === b.s.net) continue;
+                    const ia = find(index.get(a.s)!);
+                    const ib = find(index.get(b.s)!);
+                    if (ia === ib) continue;
+                    if (Math.min(a.span[1], b.span[1]) - Math.max(a.span[0], b.span[0]) > 0.5) {
+                        parent[ib] = ia;
+                        merged = true;
+                    }
+                }
+            }
+        }
+        if (!merged) break;
     }
 
     function assignLanes(comp: Segment[]): void {
@@ -202,21 +255,35 @@ export function nudge(wires: NetPolyline[], blocks: RouteBlock[], opts: RouteOpt
                 center = c;
             }
         }
-        const lo = Math.min(...comp.map(s => s.lo));
-        const hi = Math.max(...comp.map(s => s.hi));
-        const [min, max] = band(comp[0].horizontal, center, lo, hi, blocks, opts.laneClearance);
+        // Each segment may only move within the free band of its own run
+        // (between the nearest blocks on either side of it). Find where the
+        // first lane may start so every lane stays in every band; narrow the
+        // gap if the corridor is tight; leave the corridor alone if even the
+        // narrowest gap does not fit.
+        const bandOf = (seg: Segment) => {
+            let b = bandCache.get(seg);
+            if (!b) bandCache.set(seg, (b = band(seg.horizontal, seg.coord, seg.lo, seg.hi, blocks, opts.laneClearance)));
+            return b;
+        };
         const n = lanes.length;
-        let gap = opts.laneGap;
-        if (n > 1 && Number.isFinite(min) && Number.isFinite(max) && max > min) {
-            gap = Math.min(gap, (max - min) / (n - 1));
+        for (const gap of [opts.laneGap, opts.laneGap * 0.75, opts.laneGap / 2, opts.laneGap / 4]) {
+            const spread = gap * (n - 1);
+            let from = -Infinity;
+            let to = Infinity;
+            lanes.forEach((lane, idx) => {
+                for (const seg of lane.segs) {
+                    const [min, max] = bandOf(seg);
+                    from = Math.max(from, min - idx * gap);
+                    to = Math.min(to, max - idx * gap);
+                }
+            });
+            if (from > to + EPS) continue;
+            const startAt = Math.min(Math.max(center - spread / 2, from), to);
+            lanes.forEach((lane, idx) => {
+                for (const seg of lane.segs) offset.set(seg, startAt + idx * gap - seg.coord);
+            });
+            return;
         }
-        const spread = gap * (n - 1);
-        let startAt = center - spread / 2;
-        if (Number.isFinite(max)) startAt = Math.min(startAt, max - spread);
-        if (Number.isFinite(min)) startAt = Math.max(startAt, min);
-        lanes.forEach((lane, idx) => {
-            for (const s of lane.segs) offset.set(s, startAt + idx * gap - s.coord);
-        });
     }
 
     // Rebuild each polyline from its (possibly moved) segment lines.

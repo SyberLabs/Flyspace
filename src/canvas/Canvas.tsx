@@ -28,6 +28,10 @@ import { Atmosphere } from '@/components/brand/Atmosphere';
 import { Sigil } from '@/components/brand/Sigil';
 import { spatialSession } from '@/core/interaction/session';
 import { point } from '@/core/interaction/coordinates';
+import { findFreeSpot } from '@/core/stores/placement';
+
+/** Room a dropped block keeps from its neighbours: both port handles stay uncovered. */
+const DROP_GAP = { x: 40, y: 16 };
 
 interface CanvasProps {
     /** Opens the Shell Store. The empty canvas leads with it. */
@@ -128,7 +132,14 @@ export function Canvas({ onBrowseShells }: CanvasProps) {
             newX = Math.max(0, newX);
             newY = Math.max(0, newY);
 
-            spatialSession.pointerMove(blockId, { x: newX, y: newY });
+            // A drop never covers another block (or its port handles): the
+            // nearest free spot to where it was let go. A free drop is unchanged.
+            const others = shellBlocks
+                .filter(b => b.instance_id !== blockId)
+                .map(b => ({ ...b.position, ...b.dimensions }));
+            const spot = findFreeSpot(others, { x: newX, y: newY }, block.dimensions, DROP_GAP);
+
+            spatialSession.pointerMove(blockId, spot);
         }
     }, [shellBlocks, gridSnapping, gridSize]);
 
