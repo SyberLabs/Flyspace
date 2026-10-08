@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { ApiSearch } from '@/components/ApiSearch';
 import type { ApiIndexEntry } from '@/core/capabilities/apiIndex';
 import { compileOpenApi } from '@/core/capabilities/openapi';
+import { curatedApi } from '@/core/capabilities/curatedApis';
 import { fetchCatalogSpec, RegistryFetchError } from '@/core/capabilities/registrySearch';
 import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/capabilities/secrets';
 import { installProposal } from '@/core/capabilities/registry';
@@ -101,8 +102,8 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
 
     if (!open) return null;
 
-    const showProposals = (document: unknown, title: string, subtitle: string, locator?: string) => {
-        const result = compileOpenApi(document, locator ? { sourceLocator: locator } : {});
+    const showProposals = (document: unknown, title: string, subtitle: string, locator?: string, brokerOrigins?: readonly string[]) => {
+        const result = compileOpenApi(document, { ...(locator ? { sourceLocator: locator } : {}), ...(brokerOrigins ? { brokerOrigins } : {}) });
         setInstall(Object.fromEntries(result.manifests.map(m => [m.id, true])));
         setPlaceId(defaultPlacement(result.manifests));
         setSecrets({});
@@ -125,7 +126,11 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
         try {
             const document = await fetchCatalogSpec(entry, { signal: abort.signal });
             if (abort.signal.aborted) return;
-            showProposals(document, entry.title, entry.updated ? `Spec updated ${entry.updated} · ${entry.id}` : entry.id, entry.specUrl);
+            const curated = entry.curated ? curatedApi(entry.id) : undefined;
+            const subtitle = curated
+                ? `Spec written by OmniOS from the provider's docs · ${entry.updated}`
+                : entry.updated ? `Spec updated ${entry.updated} · ${entry.id}` : entry.id;
+            showProposals(document, entry.title, subtitle, entry.specUrl, curated?.brokerOrigins);
         } catch (err) {
             if (abort.signal.aborted) return;
             setReview({ state: 'failed', message: err instanceof RegistryFetchError ? err.message : `${entry.title}: the spec could not be fetched` });

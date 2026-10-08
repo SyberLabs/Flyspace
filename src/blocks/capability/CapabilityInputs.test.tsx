@@ -249,3 +249,20 @@ describe('coerceInput', () => {
         expect(coerceInput(input('boolean'), true)).toBe(true);
     });
 });
+
+describe('an input with one allowed value', () => {
+    const format: CapabilityInput = { name: 'file_type', in: 'query', required: true, schema: { kind: 'string', enum: ['json'] } };
+    const series: CapabilityInput = { name: 'series_id', in: 'query', required: true, schema: { kind: 'string' } };
+
+    it('is sent without a field, and never asked for', () => {
+        render(<CapabilityInputs inputs={[format, series]} params={{}} wired={{}} onChange={() => {}} />);
+        expect(screen.queryByLabelText(/^File type/)).toBeNull();
+        expect(missingInputs([format, series], {}, {}).map(input => input.name)).toEqual(['series_id']);
+        expect(argumentsFrom([format, series], { series_id: 'GDP' })).toEqual({ file_type: 'json', series_id: 'GDP' });
+        expect(inputSummaryOf([format, series], { series_id: 'GDP' })).toBe('series_id GDP');
+    });
+
+    it('stays a choice when it is optional', () => {
+        expect(argumentsFrom([{ ...format, required: false }], {})).toEqual({});
+    });
+});

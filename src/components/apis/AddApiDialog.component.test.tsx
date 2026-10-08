@@ -57,9 +57,14 @@ const INDEX: ApiIndex = {
     ]
 };
 
+let fetched: string[] = [];
+const calls = () => fetched;
+
 function serve(spec: unknown = KEYLESS_SPEC) {
+    fetched = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        fetched.push(url);
         if (url === '/api-index.json') return new Response(JSON.stringify(INDEX));
         if (url.startsWith('https://api.apis.guru/')) return new Response(JSON.stringify(spec));
         return new Response('not found', { status: 404 });
@@ -97,6 +102,30 @@ afterEach(() => {
 // ============================================
 // Find → review → install & place
 // ============================================
+
+describe('AddApiDialog: a curated API (FRED)', () => {
+    it('finds FRED beside the directory, says its calls go through OmniOS, and installs it as broker reads', async () => {
+        render(<Harness />);
+        fireEvent.change(await screen.findByLabelText('Search APIs'), { target: { value: 'unemployment inflation' } });
+        expect(screen.getByText('· curated by OmniOS')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Review FRED Economic Data' }));
+
+        expect(await screen.findByText(/Spec written by OmniOS from the provider/)).toBeTruthy();
+        expect(screen.getByText(/Sends requests to/).textContent).toContain('https://api.stlouisfed.org through OmniOS’s own server');
+        expect(screen.getByText(/refuses calls from a browser/)).toBeTruthy();
+        const key = screen.getByLabelText('Key for https://api.stlouisfed.org').closest('label')!;
+        expect(key.textContent).toContain('Request one at https://fredaccount.stlouisfed.org/apikeys');
+
+        fireEvent.change(screen.getByLabelText('Key for https://api.stlouisfed.org'), { target: { value: 'abc123' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Install & place' }));
+
+        const installed = listCapabilities().filter(m => m.source.locator === 'omni:curated/fred');
+        expect(installed).toHaveLength(3);
+        for (const manifest of installed) expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('server_broker');
+        expect(placedCapabilityBlocks()[0].schema.display_name).toBe('Values of an economic series over time');
+        expect(calls().some(url => url.includes('stlouisfed'))).toBe(false); // nothing fetched for the spec
+    });
+});
 
 describe('AddApiDialog: from search to the canvas', () => {
     it('opens on search, and reviews nothing until an API is chosen', async () => {

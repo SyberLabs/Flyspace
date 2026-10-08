@@ -13,7 +13,7 @@ import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
 import { EffectPill } from '@/components/apis/ApiReview';
 import { KeyField, keySlotOf, useHasKey } from '@/components/apis/KeyField';
-import { argumentsFrom, CapabilityInputs, inputSummaryOf, missingInputs } from './CapabilityInputs';
+import { argumentsFrom, CapabilityInputs, constantOf, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
 
 function readItems(data: unknown): OmniItem[] {
@@ -41,15 +41,19 @@ export function isUnboundKeyError(error: string): boolean {
     return /^Secret slot \S+ is empty$/.test(error);
 }
 
-/** An API saying no to the credential: worth offering to change the key. */
+/**
+ * An API that may be saying no to the credential: worth offering to change
+ * the key. Some report a bad key as 400 (FRED does), not 401 or 403.
+ */
 function isRefusal(error: string): boolean {
-    return /\bHTTP (401|403)\b/.test(error);
+    return /\bHTTP (400|401|403)\b/.test(error);
 }
 
 /** What an HTTP status usually means for the person running the block. */
 export function errorHint(error: string): string | null {
     const status = /\bHTTP (\d{3})\b/.exec(error)?.[1];
     if (status === '401' || status === '403') return 'The API refused the request. Check the key, or whether your plan covers this call.';
+    if (status === '400') return 'The API rejected the request. Check the inputs, and the key if it takes one.';
     if (status === '404') return 'Nothing was found for these inputs.';
     if (status === '429') return 'Too many requests. Wait a moment, then run again.';
     if (status?.startsWith('5')) return 'The API had a problem on its side. Try again later.';
@@ -162,12 +166,16 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const answered = response.present || items.length > 0;
     const showInputs = inputsPinned ?? (!answered || !!block?.error || missing.length > 0);
     const inputSummary = manifest ? inputSummaryOf(manifest.inputs, params) : '';
+    const editable = manifest ? manifest.inputs.filter(input => !constantOf(input)) : [];
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-2 p-3 text-sm text-[var(--text-primary)]">
             <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
                 {manifest ? <EffectPill effect={manifest.effect} /> : <span>not installed</span>}
                 {destination ? <span className="min-w-0 truncate font-mono" title={destination}>{destination}</span> : null}
+                {manifest?.transport.kind === 'http' && manifest.transport.access === 'server_broker' ? (
+                    <span className="shrink-0" title="Sent from OmniOS's own server: this API refuses browser calls">via server</span>
+                ) : null}
                 {sideEffect ? (
                     <span className="ml-auto shrink-0">{manifest?.approval === 'approved' ? 'approved' : 'needs approval'}</span>
                 ) : null}
@@ -207,7 +215,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                     </ul>
                 ) : null}
 
-                {manifest && manifest.inputs.length > 0 ? (
+                {manifest && editable.length > 0 ? (
                     showInputs ? (
                         <div className="space-y-1">
                             {answered ? (
@@ -230,7 +238,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                     )
                 ) : null}
 
-                {!answered && !block?.error && (!manifest || manifest.inputs.length === 0) ? (
+                {!answered && !block?.error && (!manifest || editable.length === 0) ? (
                     <p className="text-xs text-[var(--text-muted)]">
                         {manifest ? 'Run it to see the result here.' : 'This capability is not installed.'}
                     </p>

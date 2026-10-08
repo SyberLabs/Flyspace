@@ -69,10 +69,24 @@ export function coerceInput(input: CapabilityInput, draft: unknown): unknown {
     return draft;
 }
 
-/** Typed arguments for every filled field. Empty fields are left to wires. */
+/**
+ * A required input with exactly one allowed value is not a choice: FRED's
+ * `file_type` must be `json`. It is sent without a field.
+ */
+export function constantOf(input: CapabilityInput): { value: unknown } | null {
+    const options = input.schema.enum;
+    return input.required && options?.length === 1 ? { value: options[0] } : null;
+}
+
+/** Typed arguments for every filled field, and every constant. Empty fields are left to wires. */
 export function argumentsFrom(inputs: readonly CapabilityInput[], params: Record<string, unknown>): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const input of inputs) {
+        const constant = constantOf(input);
+        if (constant) {
+            out[input.name] = constant.value;
+            continue;
+        }
         if (!Object.hasOwn(params, input.name)) continue;
         const value = coerceInput(input, params[input.name]);
         if (value !== undefined) out[input.name] = value;
@@ -111,7 +125,7 @@ export function missingInputs(
     wired: Record<string, unknown>
 ): CapabilityInput[] {
     return inputs.flatMap(input => {
-        if (wired[input.name] !== undefined) return [];
+        if (constantOf(input) || wired[input.name] !== undefined) return [];
         const own = params[input.name];
         const fields = bodyFields(input);
         if (fields && (input.required || isFilled(own))) {
@@ -127,6 +141,7 @@ export function inputSummaryOf(inputs: readonly CapabilityInput[], params: Recor
     const shown = (input: CapabilityInput, value: unknown) =>
         `${input.name} ${!isFilled(value) ? '—' : looksLikeKey(input.name, input.schema.description) ? '••••' : String(value)}`;
     return inputs.flatMap(input => {
+        if (constantOf(input)) return [];
         const value = params[input.name];
         const fields = bodyFields(input);
         if (fields) {
@@ -278,9 +293,9 @@ interface Slot {
  * and wins over a wired value; an emptied field falls back to the wire.
  */
 export function CapabilityInputs({ inputs, params, wired, onChange, disabled }: CapabilityInputsProps) {
-    if (inputs.length === 0) return null;
+    if (inputs.every(input => constantOf(input))) return null;
 
-    const slots: Slot[] = inputs.flatMap(input => {
+    const slots: Slot[] = inputs.filter(input => !constantOf(input)).flatMap(input => {
         const fields = bodyFields(input);
         if (!fields) {
             return [{

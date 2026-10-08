@@ -46,6 +46,11 @@ export interface ApiIndexEntry {
     operations?: number;
     /** Why nothing compiled, in plain words. Only when `operations` is 0. */
     blocker?: string;
+    /**
+     * Shipped with OmniOS (curatedApis.ts), not from the directory. Never
+     * present in the built index: parseApiIndex refuses it there.
+     */
+    curated?: true;
 }
 
 /** The compiler stops after this many operations, so the index counts no higher. */
@@ -216,7 +221,8 @@ export function parseApiIndex(value: unknown): ApiIndex | null {
             || typeof entry.supported !== 'boolean'
             || entry.supported !== entry.openapiVersion.startsWith('3.')
             || typeof entry.updated !== 'string'
-            || !validCompileStatus(entry)) {
+            || !validCompileStatus(entry)
+            || entry.curated !== undefined) {
             return null;
         }
         seen.add(entry.id);
