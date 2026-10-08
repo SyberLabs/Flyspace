@@ -127,3 +127,15 @@ measurement exists. Do not write "works with any API" or
 Architecture that spans repositories lives in `SyberLabs/MasterMind`. A change
 here that alters a cross-repo contract is a proposal there first, not a decision
 made in this repo.
+
+## Public dependency lookup
+
+`.mcp.json` registers the hosted GitHits MCP server (`https://mcp.githits.com`,
+OAuth on first use). Headless agents set `GITHITS_API_TOKEN` in the environment;
+never write a token to a file.
+
+- Use it for the exact source and docs of the dependency version in
+  `package-lock.json`, and for vulnerability, changelog, and upgrade checks
+  before bumping a dependency.
+- It indexes public open-source code only. Never send it OmniOS code, keys,
+  canvas contents, or personal data.
