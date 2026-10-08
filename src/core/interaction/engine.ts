@@ -168,7 +168,7 @@ export class InteractionEngine {
         return this.commitTracked(proposal, {
             command: 'CREATE',
             subject: id,
-            to: { x: at.x, y: at.y },
+            to: this.placedAt(id, at),
             modalities: ['pointer'],
             committedAt: timestampMs
         }, () => this.canvas.remove(id));
@@ -367,6 +367,12 @@ export class InteractionEngine {
         return this.execute(proposal, timestampMs, false);
     }
 
+    /** Where a created block actually landed: the canvas moves it off occupied space. */
+    private placedAt(id: string, requested: { x: number; y: number }): { x: number; y: number } {
+        const placed = this.canvas.getInstance(id)?.position;
+        return placed ? { x: placed.x, y: placed.y } : { x: requested.x, y: requested.y };
+    }
+
     private execute(proposal: MultimodalInteractionProposal, timestampMs: number, fromConfirm: boolean): SpatialCommand {
         if (proposal.action === 'create' && proposal.create && proposal.geometry?.point) {
             const at = proposal.geometry.point;
@@ -375,7 +381,7 @@ export class InteractionEngine {
             return this.commitTracked(proposal, {
                 command: 'CREATE',
                 subject: id,
-                to: { x: at.x, y: at.y },
+                to: this.placedAt(id, at),
                 modalities: fromConfirm ? ['speech', 'pointer'] : ['speech'],
                 committedAt: timestampMs
             }, () => this.canvas.remove(id));

@@ -128,6 +128,10 @@ export function Canvas({ onBrowseShells }: CanvasProps) {
             newX = Math.max(0, newX);
             newY = Math.max(0, newY);
 
+            // A drop lands where it was let go, even beside or over another
+            // block: moving a block is the person's call, and the wires re-route
+            // around wherever it lands. Only a newly added block is placed in
+            // free space (blockStore.addBlock).
             spatialSession.pointerMove(blockId, { x: newX, y: newY });
         }
     }, [shellBlocks, gridSnapping, gridSize]);
@@ -373,6 +377,7 @@ function DraggableBlock({ id, isDragging, isSelected, onSelect, onClose }: Dragg
         <div
             ref={setNodeRef}
             style={style}
+            data-block-id={id}
             onClick={onSelect}
             className={cn(
                 "group relative",
