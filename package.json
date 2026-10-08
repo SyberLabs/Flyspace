@@ -29,7 +29,7 @@
     "@modelcontextprotocol/client": "2.2.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "framer-motion": "^13.4.4",
+    "framer-motion": "^14.0.0",
     "idb": "^8.0.3",
     "jose": "6.2.12",
     "lucide-react": "^1.52.0",
