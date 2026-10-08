@@ -1,8 +1,10 @@
 'use client';
 
 // ============================================
-// PROJECT OMNI: WIRE RENDERER (Simplified)
-// SVG-based wire connections between blocks
+// PROJECT OMNI: WIRE RENDERER
+// Circuit-style wires: orthogonal runs that never cross a block, parallel
+// runs spread into lanes, hops where two wires must cross, junction dots
+// where wires split or join a trunk. Routing lives in ./routing (pure).
 // ============================================
 
 import { useMemo, useState, useCallback } from 'react';
@@ -10,6 +12,7 @@ import { useWireStore } from '@/core/stores/wireStore';
 import { useBlockStore } from '@/core/stores';
 import { useUIStore } from '@/core/stores/uiStore';
 import { DataWire, WireType } from '@/core/schemas/wire.schema';
+import { WireRouter, polylineToPath, midpoint, type RouteBlock, type RouteWire } from './routing';
 
 interface WireRendererProps {
     activeDragId?: string | null;
@@ -27,9 +30,18 @@ const WIRE_COLORS: Record<WireType, string> = {
     reactive: '#ffb54a'
 };
 
-/**
- * Simplified wire renderer - no animations for performance
- */
+const STROKE = 1.75;
+const STROKE_EMPHASIS = 2.5;
+/** Dark casing under each wire so a hop reads as a jump, not a tangle. */
+const CASING = 5;
+
+function wireColor(wire: DataWire): string {
+    if (wire.status === 'error') return '#ef4444';
+    if (wire.status === 'stale') return '#f59e0b';
+    if (wire.status === 'disconnected') return '#6b7280';
+    return WIRE_COLORS[wire.wireType || 'push'];
+}
+
 export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererProps) {
     const wires = useWireStore(state => state.wires);
     const getWiresByShell = useWireStore(state => state.getWiresByShell);
@@ -37,8 +49,12 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
     const blocks = useBlockStore(state => state.blocks);
     const activeShellId = useBlockStore(state => state.activeShellId);
     const readingWireIds = useUIStore(state => state.readingWireIds);
+    const selectedBlockId = useUIStore(state => state.selectedBlockId);
 
     const [hoveredWireId, setHoveredWireId] = useState<string | null>(null);
+    // One router per renderer: it remembers settled paths so a drag frame
+    // only re-routes the wires the moving block touches or runs into.
+    const [router] = useState(() => new WireRouter());
 
     const currentShell = shellId || activeShellId;
 
@@ -47,53 +63,53 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
         return currentShell ? getWiresByShell(currentShell) : wires;
     }, [wires, currentShell, getWiresByShell]);
 
-    // Calculate wire paths
+    // Every block on this shell is an obstacle; the dragged one where it is now.
+    const routeBlocks = useMemo<RouteBlock[]>(() => {
+        return blocks
+            .filter(b => !currentShell || b.shellId === currentShell)
+            .map(b => {
+                const delta = activeDragId === b.instance_id && dragDelta ? dragDelta : { x: 0, y: 0 };
+                return {
+                    id: b.instance_id,
+                    x: b.position.x + delta.x,
+                    y: b.position.y + delta.y,
+                    width: b.dimensions.width,
+                    height: b.dimensions.height
+                };
+            });
+    }, [blocks, currentShell, activeDragId, dragDelta]);
+
+    const routeInput = useMemo<RouteWire[]>(
+        () => shellWires.map(w => ({ id: w.id, source: w.sourceBlockId, target: w.targetBlockId })),
+        [shellWires]
+    );
+
+    const routing = useMemo(() => {
+        return activeDragId
+            ? router.routeLive(routeBlocks, routeInput, activeDragId)
+            : router.route(routeBlocks, routeInput);
+    }, [router, routeBlocks, routeInput, activeDragId]);
+
     const wirePaths = useMemo(() => {
-        return shellWires.map(wire => {
-            const sourceBlock = blocks.find(b => b.instance_id === wire.sourceBlockId);
-            const targetBlock = blocks.find(b => b.instance_id === wire.targetBlockId);
-
-            if (!sourceBlock || !targetBlock) return null;
-
-            const sourceDelta = activeDragId === wire.sourceBlockId && dragDelta ? dragDelta : { x: 0, y: 0 };
-            const targetDelta = activeDragId === wire.targetBlockId && dragDelta ? dragDelta : { x: 0, y: 0 };
-
-            // Source: right edge center
-            const sourceX = sourceBlock.position.x + sourceBlock.dimensions.width + sourceDelta.x;
-            const sourceY = sourceBlock.position.y + sourceBlock.dimensions.height / 2 + sourceDelta.y;
-
-            // Target: left edge center
-            const targetX = targetBlock.position.x + targetDelta.x;
-            const targetY = targetBlock.position.y + targetBlock.dimensions.height / 2 + targetDelta.y;
-
-            // Bezier curve
-            const controlOffset = Math.min(80, Math.abs(targetX - sourceX) / 2);
-            const path = `M ${sourceX} ${sourceY} C ${sourceX + controlOffset} ${sourceY}, ${targetX - controlOffset} ${targetY}, ${targetX} ${targetY}`;
-
-            // Midpoint
-            const midX = (sourceX + targetX) / 2;
-            const midY = (sourceY + targetY) / 2;
-
-            return {
+        const byId = new Map(shellWires.map(w => [w.id, w]));
+        const names = new Map(blocks.map(b => [b.instance_id, b.schema.display_name]));
+        return routing.wires.flatMap(routed => {
+            const wire = byId.get(routed.id);
+            if (!wire || routed.points.length < 2) return [];
+            const start = routed.points[0];
+            const end = routed.points[routed.points.length - 1];
+            return [{
                 wire,
-                path,
-                sourceX, sourceY, targetX, targetY, midX, midY,
-                sourceName: sourceBlock.schema.display_name,
-                targetName: targetBlock.schema.display_name
-            };
-        }).filter(Boolean) as Array<{
-            wire: DataWire;
-            path: string;
-            sourceX: number;
-            sourceY: number;
-            targetX: number;
-            targetY: number;
-            midX: number;
-            midY: number;
-            sourceName: string;
-            targetName: string;
-        }>;
-    }, [shellWires, blocks, activeDragId, dragDelta]);
+                path: polylineToPath(routed.points, routed.hops),
+                hasHops: routed.hops.length > 0,
+                start,
+                end,
+                mid: midpoint(routed.points),
+                sourceName: names.get(wire.sourceBlockId) ?? '',
+                targetName: names.get(wire.targetBlockId) ?? ''
+            }];
+        });
+    }, [routing, shellWires, blocks]);
 
     const handleRemoveWire = useCallback((wireId: string) => {
         if (confirm('Remove this wire?')) {
@@ -103,12 +119,27 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
 
     if (wirePaths.length === 0) return null;
 
-    const getWireColor = (wire: DataWire) => {
-        if (wire.status === 'error') return '#ef4444';
-        if (wire.status === 'stale') return '#f59e0b';
-        if (wire.status === 'disconnected') return '#6b7280';
-        return WIRE_COLORS[wire.wireType || 'push'];
-    };
+    // Emphasis: the hovered wire, else the selected block's wires. Others recede.
+    const focusIds = hoveredWireId
+        ? new Set([hoveredWireId])
+        : selectedBlockId
+            ? new Set(wirePaths
+                .filter(p => p.wire.sourceBlockId === selectedBlockId || p.wire.targetBlockId === selectedBlockId)
+                .map(p => p.wire.id))
+            : null;
+    const hasFocus = !!focusIds && focusIds.size > 0;
+    const colorById = new Map(wirePaths.map(p => [p.wire.id, wireColor(p.wire)]));
+
+    // Paint order: wires that hop over others go on top so the hop reads; the
+    // selected block's wires above those. (Hover does not reorder: moving the
+    // node under the pointer would flicker; the hovered wire gets an overlay.)
+    const selectedIds = !hoveredWireId ? focusIds : null;
+    const ordered = [...wirePaths].sort((a, b) => {
+        const fa = selectedIds?.has(a.wire.id) ? 1 : 0;
+        const fb = selectedIds?.has(b.wire.id) ? 1 : 0;
+        return fa - fb || Number(a.hasHops) - Number(b.hasHops);
+    });
+    const hovered = hoveredWireId ? wirePaths.find(p => p.wire.id === hoveredWireId) : undefined;
 
     return (
         <svg
@@ -124,10 +155,12 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
                 overflow: 'visible'
             }}
         >
-            {wirePaths.map(({ wire, path, targetX, targetY, midX, midY, sourceName, targetName }) => {
-                const isHovered = hoveredWireId === wire.id;
+            {ordered.map(({ wire, path, start, end }) => {
+                const isFocused = !!focusIds?.has(wire.id);
                 const isReading = readingWireIds.includes(wire.id);
-                const color = getWireColor(wire);
+                const color = colorById.get(wire.id)!;
+                const dimmed = hasFocus && !isFocused && !isReading;
+                const width = isFocused || isReading ? STROKE_EMPHASIS : STROKE;
 
                 return (
                     <g
@@ -135,66 +168,113 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
                         data-testid="wire"
                         data-wire-status={wire.status}
                         data-wire-id={wire.id}
+                        data-source-id={wire.sourceBlockId}
+                        data-target-id={wire.targetBlockId}
                         data-reading={isReading ? 'true' : undefined}
+                        style={{ opacity: dimmed ? 0.28 : 1, transition: 'opacity 0.15s ease' }}
                     >
-                        {/* Hover area - wider invisible path */}
+                        {/* Casing: a dark band under the wire */}
                         <path
                             d={path}
                             fill="none"
-                            stroke="transparent"
-                            strokeWidth={20}
-                            style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
-                            onMouseEnter={() => setHoveredWireId(wire.id)}
-                            onMouseLeave={() => setHoveredWireId(null)}
-                            onClick={() => handleRemoveWire(wire.id)}
+                            stroke="var(--citadel-void)"
+                            strokeWidth={CASING}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                         />
 
                         {/* Main wire path */}
                         <path
                             d={path}
+                            data-wire-main="true"
                             fill="none"
                             stroke={color}
-                            strokeWidth={isHovered || isReading ? 3 : 2}
+                            strokeWidth={width}
                             strokeLinecap="round"
+                            strokeLinejoin="round"
                             className={isReading ? 'wire-reading' : undefined}
                             style={{ transition: 'stroke-width 0.15s ease' }}
                         />
 
-                        {/* Arrow at target */}
+                        {/* Output end: a small terminal dot */}
+                        <circle cx={start.x} cy={start.y} r={2.25} fill={color} />
+
+                        {/* Input end: an arrowhead into the port */}
                         <polygon
-                            points={`${targetX},${targetY} ${targetX - 8},${targetY - 4} ${targetX - 8},${targetY + 4}`}
+                            points={`${end.x},${end.y} ${end.x - 7},${end.y - 3.75} ${end.x - 7},${end.y + 3.75}`}
                             fill={color}
                         />
 
-                        {/* Label at midpoint - [Source → Target] */}
-                        {isHovered && (
-                            <g transform={`translate(${midX}, ${midY})`}>
-                                {/* Background */}
-                                <rect
-                                    x={-80}
-                                    y={-28}
-                                    width={160}
-                                    height={24}
-                                    rx={4}
-                                    fill="rgba(0,0,0,0.9)"
-                                    stroke={color}
-                                    strokeWidth={1}
-                                />
-                                {/* Text */}
-                                <text
-                                    textAnchor="middle"
-                                    y={-12}
-                                    fill="white"
-                                    fontSize={11}
-                                    fontFamily="system-ui, sans-serif"
-                                >
-                                    {sourceName} → {targetName}
-                                </text>
-                            </g>
-                        )}
+                        {/* Hover area - wider invisible path */}
+                        <path
+                            d={path}
+                            fill="none"
+                            stroke="transparent"
+                            strokeWidth={12}
+                            style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
+                            onMouseEnter={() => setHoveredWireId(wire.id)}
+                            onMouseLeave={() => setHoveredWireId(null)}
+                            onClick={() => handleRemoveWire(wire.id)}
+                        />
                     </g>
                 );
             })}
+
+            {/* Junction dots: where wires split from one output or join one input's trunk */}
+            {routing.junctions.map(j => {
+                const dimmed = hasFocus && !j.wires.some(id => focusIds?.has(id));
+                return (
+                    <circle
+                        key={`${j.x},${j.y}`}
+                        data-testid="wire-junction"
+                        cx={j.x}
+                        cy={j.y}
+                        r={3}
+                        fill={colorById.get(j.wires[0]) ?? 'var(--citadel-primary)'}
+                        stroke="var(--citadel-void)"
+                        strokeWidth={1.5}
+                        style={{ opacity: dimmed ? 0.28 : 1, transition: 'opacity 0.15s ease' }}
+                    />
+                );
+            })}
+
+            {/* Hovered wire, redrawn on top of everything */}
+            {hovered && (
+                <path
+                    d={hovered.path}
+                    fill="none"
+                    stroke={colorById.get(hovered.wire.id)}
+                    strokeWidth={STROKE_EMPHASIS}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ pointerEvents: 'none', filter: `drop-shadow(0 0 4px ${colorById.get(hovered.wire.id)})` }}
+                />
+            )}
+
+            {/* Label at midpoint - [Source → Target] */}
+            {hovered && (
+                <g transform={`translate(${hovered.mid.x}, ${hovered.mid.y})`} style={{ pointerEvents: 'none' }}>
+                    <rect
+                        x={-80}
+                        y={-30}
+                        width={160}
+                        height={22}
+                        rx={4}
+                        fill="rgba(0,0,0,0.9)"
+                        stroke={colorById.get(hovered.wire.id)}
+                        strokeWidth={1}
+                    />
+                    <text
+                        textAnchor="middle"
+                        y={-15}
+                        fill="white"
+                        fontSize={11}
+                        fontFamily="system-ui, sans-serif"
+                    >
+                        {hovered.sourceName} → {hovered.targetName}
+                    </text>
+                </g>
+            )}
         </svg>
     );
 }

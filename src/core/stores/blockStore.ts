@@ -14,6 +14,7 @@ import {
 import { vaultStorage } from '../vault';
 import { newId } from '../id';
 import { useWireStore } from './wireStore';
+import { findFreeSpot } from './placement';
 
 /**
  * omni-blocks persist migrations.
@@ -43,7 +44,7 @@ interface BlockState {
     /** Currently active shell ID */
     activeShellId: string;
 
-    /** Add a new block to the canvas */
+    /** Add a new block to the canvas, at `position` or the nearest free spot to it */
     addBlock: (schema: OmniBlockSchema, position: { x: number; y: number }, shellId?: string) => string;
 
     /** Remove a block from the canvas */
@@ -111,6 +112,14 @@ export const useBlockStore = create<BlockState>()(
                 // block needs room for one field per input plus its result.
                 const isPersonaBlock = schema.block_id.startsWith('persona_');
                 const defaultHeight = isPersonaBlock ? 400 : schema.capabilityId ? capabilityHeight(schema) : 240;
+                const dimensions = { width: 320, height: defaultHeight };
+                const targetShell = shellId || get().activeShellId;  // Use active shell when not specified
+
+                // Never on top of another block: the requested point if it is
+                // free, else the nearest free spot on this shell.
+                const occupied = get().blocks
+                    .filter(b => b.shellId === targetShell)
+                    .map(b => ({ ...b.position, ...b.dimensions }));
 
                 const newBlock: BlockInstance = {
                     instance_id: instanceId,
@@ -118,9 +127,9 @@ export const useBlockStore = create<BlockState>()(
                     status: 'disconnected',
                     last_updated: null,
                     data: null,
-                    position,
-                    dimensions: { width: 320, height: defaultHeight },
-                    shellId: shellId || get().activeShellId  // Use active shell when not specified
+                    position: findFreeSpot(occupied, position, dimensions),
+                    dimensions,
+                    shellId: targetShell
                 };
 
                 set(state => ({

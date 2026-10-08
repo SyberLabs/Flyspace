@@ -373,6 +373,7 @@ function DraggableBlock({ id, isDragging, isSelected, onSelect, onClose }: Dragg
         <div
             ref={setNodeRef}
             style={style}
+            data-block-id={id}
             onClick={onSelect}
             className={cn(
                 "group relative",
