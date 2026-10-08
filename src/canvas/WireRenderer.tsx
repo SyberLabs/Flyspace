@@ -115,6 +115,7 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
     const handleRemoveWire = useCallback((wireId: string) => {
         if (confirm('Remove this wire?')) {
             removeWire(wireId);
+            setHoveredWireId(null);
         }
     }, [removeWire]);
 
