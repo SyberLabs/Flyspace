@@ -14,6 +14,7 @@
 // ============================================
 
 import { isCatalogSpecUrl, isUsableEntry, parseApiIndex, type ApiIndex, type ApiIndexEntry } from './apiIndex';
+import { curatedApi } from './curatedApis';
 
 /** Results kept per search; also the candidate set a re-rank may reorder. */
 export const DEFAULT_RESULT_LIMIT = 24;
@@ -223,6 +224,10 @@ function isTimeout(err: unknown): boolean {
  * even if the index was tampered with after it loaded.
  */
 export async function fetchCatalogSpec(entry: ApiIndexEntry, options: FetchOptions = {}): Promise<unknown> {
+    // A curated spec ships in the bundle: nothing to fetch. Looked up by id in
+    // the repo's own list, so an entry cannot claim a spec it does not have.
+    const curated = entry.curated ? curatedApi(entry.id) : undefined;
+    if (curated) return structuredClone(curated.spec);
     if (!entry.supported) {
         throw new RegistryFetchError('unsupported_version', `${entry.title} is Swagger ${entry.openapiVersion}; only OpenAPI 3.x can be installed`);
     }

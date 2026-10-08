@@ -139,6 +139,17 @@ describe('changing a key the API refused', () => {
         expect(new URL(requests.at(-1)!).searchParams.get('license')).toBe('right-license');
     });
 
+    it('offers it on a 400 too, since some APIs report a bad key that way (FRED does)', async () => {
+        status = 400;
+        const { manifest, instanceId } = placeWeather();
+        capabilitySecrets.set(manifest.auth.secretRef!, 'a-license');
+        render(<CapabilityBlockView instanceId={instanceId} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('Check the inputs, and the key if it takes one.');
+        expect(screen.getByRole('button', { name: 'Change key' })).toBeTruthy();
+    });
+
     it('does not offer it for errors a key cannot fix', async () => {
         status = 404;
         const { manifest, instanceId } = placeWeather();

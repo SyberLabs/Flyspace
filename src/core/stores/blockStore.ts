@@ -84,10 +84,18 @@ interface BlockState {
 }
 
 /** Header, run button and a few result rows, plus about one field row per input. */
+/**
+ * Tall enough for the fields the block shows when placed: each required
+ * input (a field, its label, a line of help), plus one line for the fold
+ * that holds the optional ones. A one-value input is filled, not shown.
+ */
 function capabilityHeight(schema: OmniBlockSchema): number {
     const inbound = schema.ports?.find(port => port.direction === 'input')?.schema;
-    const inputs = inbound?.properties ? Object.keys(inbound.properties).length : 0;
-    return Math.min(560, Math.max(280, 220 + inputs * 64)); // a field, its label, and a line of help
+    const properties = Object.entries(inbound?.properties ?? {});
+    const required = new Set(inbound?.required ?? []);
+    const shown = properties.filter(([name, value]) => required.has(name) && value.enum?.length !== 1).length;
+    const folded = properties.some(([name]) => !required.has(name)) ? 1 : 0;
+    return Math.min(560, Math.max(280, 220 + shown * 64 + folded * 28));
 }
 
 export const useBlockStore = create<BlockState>()(

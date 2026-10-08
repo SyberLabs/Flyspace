@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isUsableEntry, MAX_INDEXED_OPERATIONS, type ApiIndex, type ApiIndexEntry } from '@/core/capabilities/apiIndex';
+import { CURATED_APIS } from '@/core/capabilities/curatedApis';
 import { createApiSearcher, loadApiIndex } from '@/core/capabilities/registrySearch';
 import { fetchIntentScores, rankResults, routedIntents, type IntentScore } from '@/core/capabilities/registryRanking';
 
@@ -68,8 +69,10 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
 
     useEffect(() => () => routingAbort.current?.abort(), []);
 
-    const searcher = useMemo(() => (index ? createApiSearcher(index.entries) : null), [index]);
-    const byId = useMemo(() => new Map((index?.entries ?? []).map(entry => [entry.id, entry])), [index]);
+    // Curated APIs ship with OmniOS and are searched beside the directory.
+    const entries = useMemo(() => (index ? [...CURATED_APIS.map(api => api.entry), ...index.entries] : []), [index]);
+    const searcher = useMemo(() => (index ? createApiSearcher(entries) : null), [index, entries]);
+    const byId = useMemo(() => new Map(entries.map(entry => [entry.id, entry])), [entries]);
 
     // Routing applies only to the query it was asked for. Typing on drops back
     // to keyword order until Enter asks again.
@@ -168,7 +171,7 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                                         </span>
                                         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--text-muted)]">
                                             <span className="max-w-full truncate">{entry.id}</span>
-                                            <span>· spec {shortDate(entry.updated)}</span>
+                                            {entry.curated ? <span>· curated by OmniOS</span> : <span>· spec {shortDate(entry.updated)}</span>}
                                             {source === 'intent' && intent ? <span>· matches “{intentLabel(intent)}”</span> : null}
                                             {entry.supported ? null : <span>· Swagger {entry.openapiVersion}, not supported yet</span>}
                                             {entry.operations ? <span>· {operationCount(entry.operations)}</span> : null}

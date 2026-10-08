@@ -67,9 +67,75 @@ function Fields({ record }: { record: Record<string, unknown> }) {
     );
 }
 
-function List({ list }: { list: unknown[] }) {
+/** A list a table can show: every item a record of a few plain values. */
+const MAX_TABLE_COLUMNS = 8;
+
+function isPlain(value: unknown): boolean {
+    return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+export function tableOf(list: unknown[]): { columns: string[]; fixed: [string, unknown][] } | null {
+    if (list.length === 0 || !list.every(item => isRecord(item) && Object.values(item).every(isPlain))) return null;
+    const records = list as Record<string, unknown>[];
+    const keys: string[] = [];
+    for (const record of records) for (const key of Object.keys(record)) if (!keys.includes(key)) keys.push(key);
+    if (keys.length === 0 || keys.length > MAX_TABLE_COLUMNS * 2) return null;
+    // A column that holds one value in every row says it once, above the table.
+    const fixed = records.length > 1
+        ? keys.filter(key => records.every(record => record[key] === records[0][key])).map(key => [key, records[0][key]] as [string, unknown])
+        : [];
+    const columns = keys.filter(key => !fixed.some(([name]) => name === key));
+    if (columns.length === 0 || columns.length > MAX_TABLE_COLUMNS) return null;
+    return { columns, fixed };
+}
+
+function Table({ list, columns, fixed }: { list: Record<string, unknown>[]; columns: string[]; fixed: [string, unknown][] }) {
     const [all, setAll] = useState(false);
     const shown = all ? list : list.slice(0, PREVIEW_ROWS);
+    return (
+        <div className="space-y-1">
+            <p className="text-[11px] text-[var(--text-muted)] [overflow-wrap:anywhere]">
+                {list.length} result{list.length === 1 ? '' : 's'}
+                {fixed.map(([key, value]) => <span key={key}> · {labelOf(key)} {cellOf(value)}</span>)}
+            </p>
+            <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                    <thead>
+                        <tr>
+                            {columns.map(column => (
+                                <th key={column} scope="col" className="border-b border-[var(--citadel-border)] px-1 py-0.5 text-left font-normal text-[var(--text-muted)]">
+                                    {labelOf(column)}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {shown.map((record, index) => (
+                            <tr key={index}>
+                                {columns.map(column => (
+                                    <td key={column} className="border-b border-[var(--citadel-border)]/50 px-1 py-0.5 text-[var(--text-primary)] [overflow-wrap:anywhere]">
+                                        {cellOf(record[column])}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            {list.length > PREVIEW_ROWS ? (
+                <button type="button" onClick={() => setAll(v => !v)} className="text-[11px] text-[var(--text-secondary)] underline">
+                    {all ? 'Show fewer' : `Show all ${list.length}`}
+                </button>
+            ) : null}
+        </div>
+    );
+}
+
+function List({ list }: { list: unknown[] }) {
+    const table = tableOf(list);
+    const [all, setAll] = useState(false);
+    const shown = all ? list : list.slice(0, PREVIEW_ROWS);
+    if (table) return <Table list={list as Record<string, unknown>[]} columns={table.columns} fixed={table.fixed} />;
     return (
         <div className="space-y-1">
             <p className="text-[11px] text-[var(--text-muted)]">{list.length} result{list.length === 1 ? '' : 's'}</p>
@@ -97,6 +163,20 @@ function List({ list }: { list: unknown[] }) {
 }
 
 /**
+ * The one list a record carries, when it carries exactly one non-empty list
+ * and nothing else nested: FRED's `observations`, a search's `results`.
+ */
+export function listInside(value: unknown): { key: string; list: unknown[]; rest: Record<string, unknown> } | null {
+    if (!isRecord(value)) return null;
+    const lists = Object.entries(value).filter(([, entry]) => Array.isArray(entry) && entry.length > 0);
+    if (lists.length !== 1) return null;
+    const [key, list] = lists[0] as [string, unknown[]];
+    const rest = Object.fromEntries(Object.entries(value).filter(([name]) => name !== key));
+    if (!Object.values(rest).every(entry => isPlain(entry) || (Array.isArray(entry) && entry.length === 0))) return null;
+    return { key, list, rest };
+}
+
+/**
  * The response, laid out for reading: a record as label–value rows, a list
  * as rows you can open, text as text. "Raw JSON" shows exactly what came back.
  */
@@ -104,11 +184,10 @@ export function CapabilityResult({ value }: { value: unknown }) {
     const [raw, setRaw] = useState(false);
     if (value === undefined) return null;
 
-    // A response that wraps its list in one field ({ results: [...] }) reads as the list.
-    const keys = isRecord(value) ? Object.keys(value) : [];
-    const unwrapped = keys.length === 1 && Array.isArray((value as Record<string, unknown>)[keys[0]])
-        ? (value as Record<string, unknown[]>)[keys[0]]
-        : value;
+    // A response that wraps its one list ({ count, results: [...] }) reads as
+    // the list; anything around it folds under "About this response".
+    const wrapped = listInside(value);
+    const unwrapped = wrapped ? wrapped.list : value;
 
     return (
         <div className="space-y-1.5">
@@ -123,7 +202,17 @@ export function CapabilityResult({ value }: { value: unknown }) {
                     {JSON.stringify(value, null, 2).slice(0, RAW_LIMIT)}
                 </pre>
             ) : Array.isArray(unwrapped) ? (
-                <List list={unwrapped} />
+                <>
+                    <List list={unwrapped} />
+                    {wrapped && Object.keys(wrapped.rest).length > 0 ? (
+                        <details className="text-xs">
+                            <summary className="cursor-pointer text-[11px] text-[var(--text-muted)]">
+                                About this response · {Object.keys(wrapped.rest).length} field{Object.keys(wrapped.rest).length === 1 ? '' : 's'}
+                            </summary>
+                            <div className="mt-1"><Fields record={wrapped.rest} /></div>
+                        </details>
+                    ) : null}
+                </>
             ) : isRecord(unwrapped) ? (
                 <Fields record={unwrapped} />
             ) : (

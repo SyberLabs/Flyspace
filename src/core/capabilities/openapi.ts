@@ -42,6 +42,13 @@ export interface CompileOptions {
      * its locator stays `title@version` from the document itself.
      */
     sourceLocator?: string;
+    /**
+     * Origins the host has chosen to reach through its server broker, for an
+     * API that refuses browser calls (FRED sends no CORS headers). Only reads
+     * go that way; a write stays browser-direct and approval-gated. A host
+     * decision, never read from the document: a pasted spec cannot pick it.
+     */
+    brokerOrigins?: readonly string[];
 }
 
 export function compileOpenApi(spec: unknown, options: CompileOptions = {}): CompileResult {
@@ -90,7 +97,8 @@ export function compileOpenApi(spec: unknown, options: CompileOptions = {}): Com
                 label,
                 title: titles.get(`${method} ${path}`) ?? label.slice(0, MAX_TITLE),
                 baseUrl: base.url,
-                locator
+                locator,
+                brokered: options.brokerOrigins?.includes(new URL(base.url).origin) === true
             });
             if ('error' in compiled) errors.push({ operation: label, message: compiled.error });
             else manifests.push(compiled.manifest);
@@ -162,6 +170,8 @@ function compileOperation(args: {
     title: string;
     baseUrl: string;
     locator: string;
+    /** The host routes this origin's reads through its server broker. */
+    brokered: boolean;
 }): { manifest: CapabilityManifest } | { error: string } {
     const effectChoice = chooseEffect(args.method, args.operation);
     if ('error' in effectChoice) return effectChoice;
@@ -178,9 +188,12 @@ function compileOperation(args: {
     const output = collectOutput(args.spec, args.operation);
     if ('error' in output) return output;
 
+    const viaBroker = args.brokered
+        && (effectChoice.effect === 'read' || effectChoice.effect === 'compute')
+        && authBinding.kind !== 'oauth';
     const transport = {
         kind: 'http' as const,
-        access: 'browser_direct' as const,
+        access: viaBroker ? 'server_broker' as const : 'browser_direct' as const,
         baseUrl: args.baseUrl,
         method: args.method,
         path: args.path
@@ -309,6 +322,14 @@ function resolveAuth(
     return { error: refused && /must be signed/.test(refused) ? refused : 'no supported security scheme (apiKey, http bearer, http basic)' };
 }
 
+/** What the spec says about its key, for where the key is asked for. An unfilled template ("{{apiKeyDescription}}") says nothing. */
+function keyHint(description: unknown): string | undefined {
+    if (typeof description !== 'string') return undefined;
+    const text = description.replace(/\s+/g, ' ').trim();
+    if (!text || /^\{\{[^}]*\}\}$/.test(text)) return undefined;
+    return text.slice(0, MAX_AUTH_HINT);
+}
+
 function schemeToAuth(baseUrl: string, name: string, scheme: Record<string, unknown>): { auth: CapabilityManifest['auth'] } | { error: string } {
     const secretRef = (auth: { kind: 'apiKey' | 'bearer' | 'basic'; in?: 'header' | 'query'; name?: string }) =>
         credentialSlot(baseUrl, auth);
@@ -319,17 +340,19 @@ function schemeToAuth(baseUrl: string, name: string, scheme: Record<string, unkn
         || (scheme.type === 'apiKey' && typeof scheme.description === 'string' && /\bsignature\b/i.test(scheme.description))) {
         return { error: `unsupported scheme ${name}: every request must be signed` };
     }
+    const hint = keyHint(scheme.description);
+    const withHint = hint ? { hint } : {};
     if (scheme.type === 'apiKey' && placement && typeof scheme.name === 'string') {
         const auth = { kind: 'apiKey' as const, in: placement, name: scheme.name };
-        return { auth: { ...auth, secretRef: secretRef(auth) } };
+        return { auth: { ...auth, secretRef: secretRef(auth), ...withHint } };
     }
     if (scheme.type === 'http' && scheme.scheme === 'bearer') {
         const auth = { kind: 'bearer' as const };
-        return { auth: { ...auth, secretRef: secretRef(auth) } };
+        return { auth: { ...auth, secretRef: secretRef(auth), ...withHint } };
     }
     if (scheme.type === 'http' && scheme.scheme === 'basic') {
         const auth = { kind: 'basic' as const };
-        return { auth: { ...auth, secretRef: secretRef(auth) } };
+        return { auth: { ...auth, secretRef: secretRef(auth), ...withHint } };
     }
     return { error: `unsupported scheme ${name}` };
 }
@@ -438,9 +461,7 @@ function keyFromParameter(inputs: CapabilityInput[], baseUrl: string): { auth: C
     const key = keys[0];
     if (key.in !== 'query' && key.in !== 'header') return null;
     const placement = { kind: 'apiKey' as const, in: key.in, name: key.name };
-    const text = key.schema.description?.trim();
-    // An unfilled template ("{{apiKeyDescription}}") says nothing; leave it out.
-    const hint = text && !/^\{\{[^}]*\}\}$/.test(text) ? text.slice(0, MAX_AUTH_HINT) : undefined;
+    const hint = keyHint(key.schema.description);
     return {
         auth: { ...placement, secretRef: credentialSlot(baseUrl, placement), ...(hint ? { hint } : {}) },
         inputs: inputs.filter(input => input !== key)

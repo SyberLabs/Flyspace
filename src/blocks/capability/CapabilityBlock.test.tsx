@@ -93,9 +93,9 @@ describe('CapabilityBlockView', () => {
         expect(fetchMock).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
-        // A list reads as rows; each row's title is the record's own title.
+        // A list of flat records reads as a table, one row per record.
         expect(await screen.findByText('1 result')).toBeTruthy();
-        expect(screen.getAllByText('Hello from the board')[0].tagName).toBe('SUMMARY');
+        expect(screen.getAllByText('Hello from the board')[0].tagName).toBe('TD');
     });
 
     it('does not run a write capability before approval', () => {
