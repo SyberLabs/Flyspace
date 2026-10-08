@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { isUsableEntry, MAX_INDEXED_OPERATIONS, type ApiIndex, type ApiIndexEntry } from '@/core/capabilities/apiIndex';
 import { CURATED_APIS } from '@/core/capabilities/curatedApis';
 import { createApiSearcher, loadApiIndex } from '@/core/capabilities/registrySearch';
-import { fetchIntentScores, rankResults, routedIntents, type IntentScore } from '@/core/capabilities/registryRanking';
+import { fetchIntentScores, rankResults, routedIntents, unavailableIntents, type IntentScore } from '@/core/capabilities/registryRanking';
 
 /** Results shown at once. A list longer than this is a scroll, not a choice. */
 const SHOWN = 12;
@@ -82,6 +82,7 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
         [searcher, byId, query, scores]
     );
     const understoodAs = routedIntents(scores).map(score => intentLabel(score.id));
+    const nothingYet = unavailableIntents(scores);
 
     const askMeaning = async () => {
         const text = query.trim();
@@ -128,6 +129,11 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                                 ? 'Enter searches by meaning. Your search text, and only that, is sent to TypeSafe (JEV).'
                                 : null}
                 </p>
+                {!routingBusy && nothingYet.length > 0 ? (
+                    <p role="status" className="text-[11px] leading-4 text-[var(--truth-amber)] [overflow-wrap:anywhere]">
+                        {nothingYet.map(({ id, reason }) => `No ${intentLabel(id)} API OmniOS can use yet. ${reason}`).join(' ')}
+                    </p>
+                ) : null}
             </form>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-2">

@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { parseApiIndex, type ApiIndexEntry } from './apiIndex';
+import { curatedApi } from './curatedApis';
 import { createApiSearcher } from './registrySearch';
 import { intentCriteria, OTHER_INTENT, REGISTRY_INTENTS, type RegistryIntent } from './registryIntents';
-import { fetchIntentScores, rankResults, routedIntents } from './registryRanking';
+import { fetchIntentScores, rankResults, routedIntents, unavailableIntents } from './registryRanking';
 
 // ============================================
 // The intent list, checked against the real index
@@ -20,11 +21,17 @@ describe('REGISTRY_INTENTS', () => {
         expect(ids).not.toContain(OTHER_INTENT);
     });
 
-    it('pins only APIs that exist in the index and can be installed', () => {
+    it('pins only APIs that give something to place, or says why none does', () => {
         for (const intent of REGISTRY_INTENTS) {
+            if (intent.unavailable) {
+                expect(intent.apis, intent.id).toEqual([]);
+                expect(intent.unavailable.length, intent.id).toBeGreaterThan(20);
+                continue;
+            }
             expect(intent.apis.length, intent.id).toBeGreaterThan(0);
             for (const id of intent.apis) {
-                expect(realById.get(id)?.supported, `${intent.id} → ${id}`).toBe(true);
+                const usable = curatedApi(id) !== undefined || (realById.get(id)?.operations ?? 0) > 0;
+                expect(usable, `${intent.id} → ${id}`).toBe(true);
             }
         }
     });
@@ -174,5 +181,22 @@ describe('a curated API that compiles to nothing', () => {
         const intents: RegistryIntent[] = [{ id: 'weather', criteria: 'weather forecasts', terms: 'forecast', apis: ['dead-weather.example'] }];
         const results = rankResults('weather service', createApiSearcher(catalog), new Map(catalog.map(e => [e.id, e])), [{ id: 'weather', p: 0.95 }], { intents });
         expect(results.map(r => `${r.source}:${r.entry.id}`)).toEqual(['intent:live-weather.example', 'keyword:dead-weather.example']);
+    });
+});
+
+describe('an intent no usable API answers', () => {
+    const intents: RegistryIntent[] = [{ id: 'calendar', criteria: 'calendars', terms: 'calendar events', apis: [], unavailable: 'The calendar APIs in the directory need a Google sign-in.' }];
+    const catalog = [entry('events.example', 'Events API', { description: 'calendar events log', operations: 2 })];
+
+    it('is said plainly, and its terms do not pad the results', () => {
+        const scores = [{ id: 'calendar', p: 0.9 }];
+        expect(unavailableIntents(scores, intents)).toEqual([{ id: 'calendar', reason: 'The calendar APIs in the directory need a Google sign-in.' }]);
+        const results = rankResults('schedule a meeting', createApiSearcher(catalog), new Map(catalog.map(e => [e.id, e])), scores, { intents });
+        expect(results.filter(r => r.source === 'intent')).toEqual([]);
+    });
+
+    it('is not reported when routing found nothing', () => {
+        expect(unavailableIntents(null, intents)).toEqual([]);
+        expect(unavailableIntents([{ id: 'other', p: 0.9 }], intents)).toEqual([]);
     });
 });
