@@ -16,6 +16,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseApiIndex } from '../src/core/capabilities/apiIndex';
+import { CURATED_APIS } from '../src/core/capabilities/curatedApis';
 import { createApiSearcher } from '../src/core/capabilities/registrySearch';
 import { LITERAL_QUESTIONS, SEMANTIC_QUESTIONS, scoreRecall, type EvalQuestion } from '../src/core/capabilities/registrySearch.eval';
 import { rankResults, routedIntents, type IntentScore } from '../src/core/capabilities/registryRanking';
@@ -29,8 +30,10 @@ async function main(): Promise<void> {
     }
     const index = parseApiIndex(JSON.parse(readFileSync(path.join(process.cwd(), 'public', 'api-index.json'), 'utf8')));
     if (!index) throw new Error('public/api-index.json is missing or invalid');
-    const searcher = createApiSearcher(index.entries);
-    const byId = new Map(index.entries.map(e => [e.id, e]));
+    // The entries search offers: OmniOS's curated APIs beside the directory.
+    const entries = [...CURATED_APIS.map(api => api.entry), ...index.entries];
+    const searcher = createApiSearcher(entries);
+    const byId = new Map(entries.map(e => [e.id, e]));
 
     const questions: EvalQuestion[] = [...LITERAL_QUESTIONS, ...SEMANTIC_QUESTIONS];
     const scores = new Map<string, IntentScore[] | null>();

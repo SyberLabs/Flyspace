@@ -32,7 +32,7 @@ export const LITERAL_QUESTIONS: EvalQuestion[] = [
     { query: 'github issues', accept: ['github.com', 'github.com:api.github.com'] },
     { query: 'geocode an address', accept: ['gov.bc.ca:geocoder'] },
     { query: 'movie reviews', accept: ['nytimes.com:movie_reviews'] },
-    { query: 'news articles', accept: ['nytimes.com:timeswire'] }
+    { query: 'news articles', accept: ['omni:newsapi', 'nytimes.com:timeswire'] }
 ];
 
 /**
@@ -44,7 +44,7 @@ export const SEMANTIC_QUESTIONS: EvalQuestion[] = [
     { query: 'is it going to rain tomorrow', accept: ['visualcrossing.com:weather', 'interzoid.com:getweathercity'] },
     { query: 'convert dollars to euros', accept: ['exchangerate-api.com', 'interzoid.com:getcurrencyrate', 'interzoid.com:convertcurrency'] },
     { query: 'text a phone number', accept: ['sms77.io'] },
-    { query: 'what is the price of a share of apple', accept: ['nfusionsolutions.biz'] },
+    { query: 'what is the price of a share of apple', accept: ['omni:alpha-vantage', 'nfusionsolutions.biz'] },
     { query: 'find the latitude and longitude of a street', accept: ['gov.bc.ca:geocoder'] },
     // 'schedule a meeting' dropped with 'calendar events': no usable calendar API.
 ];
