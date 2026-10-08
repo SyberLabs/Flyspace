@@ -15,7 +15,7 @@ import {
     FileText,
     Files,
     FlaskConical,
-    Github,
+    GitBranch,
     Globe,
     Image,
     Library,
@@ -47,7 +47,8 @@ export const BLOCK_ICON_COMPONENTS: Record<string, LucideIcon> = {
     FileText,
     Files,
     FlaskConical,
-    Github,
+    // lucide-react 1.x dropped brand icons; the `Github` name a block uses maps to a neutral one.
+    Github: GitBranch,
     Globe,
     Image,
     Library,
