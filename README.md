@@ -113,9 +113,10 @@ only party that held the key, called the provider and timed it. Leave
 npm run typecheck   # tsc, 0 errors
 npm run lint        # eslint, 0 errors (warnings are tracked debt)
 npm test            # vitest
-npm run test:e2e    # playwright golden path (needs npm run build first)
-npm run build
-npm run scan:bundle # no secret reached .next/static (build first)
+npm run build       # the Workers bundle that deploys (vinext); dist/
+npm run scan:bundle # no secret reached dist/client (build first)
+npm run build:next  # the Next server the e2e harness drives
+npm run test:e2e    # playwright golden path (needs npm run build:next first)
 ```
 
 Node version comes from `.nvmrc`, which CI reads too, so local and CI cannot

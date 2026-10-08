@@ -1,8 +1,9 @@
 # Deployment
 
-**Status: CI exists. CD is not built. The limited public preview is deployed
-by hand to https://omni.syberlabs.io on Cloudflare Workers (below), first on
-2026-10-03 from `35260bd`. The full app has no public deployment.**
+**Status: CI builds, scans and stages the Workers bundle; CD is not built. The
+limited public preview is deployed by hand to https://omni.syberlabs.io on
+Cloudflare Workers (below), first on 2026-10-03 from `35260bd`. The full app
+has no public deployment.**
 
 This records the decision so it does not get re-argued from scratch, and lists
 what has to be true before OmniOS is reachable from anywhere but your own
@@ -79,11 +80,21 @@ account. Deploy from a clean checkout of `main`:
 
 ```bash
 npm ci
-npm run build:vinext
+npm run build               # the same vinext build CI scans and tests
 npx wrangler login          # once per machine, or set CLOUDFLARE_API_TOKEN
 npm run start:vinext        # optional: smoke-test the Worker on localhost
 npm run deploy:vinext
 ```
+
+`npm run build` is the one build path: CI runs it in every job, scans its
+`dist/client` for secret canaries, dry-runs the Worker bundle with wrangler,
+and on every push to `main` uploads `dist/` plus that bundle as the
+`omnios-release-<sha>` workflow artifact. The build is not byte-reproducible
+(each run mints a new build id and chunk hashes), so a deploy that wants to
+ship exactly what CI tested must download that artifact rather than rebuild;
+a rebuild at the same commit runs the same command on the same source and
+nothing more. `next build` remains only as the server the Playwright golden
+path drives (`npm run build:next`); nothing deploys it.
 
 Then run the route checks above against `https://omni.syberlabs.io`.
 `workers.dev` and preview URLs are off, so the custom domain is the only

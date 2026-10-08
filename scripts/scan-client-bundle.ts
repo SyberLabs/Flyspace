@@ -3,7 +3,9 @@
 //
 //     npm run scan:bundle
 //
-// Two modes, both of which end in the same scan of `.next/static`:
+// Two modes, both of which end in the same scan of `dist/client`, the asset
+// directory `wrangler.jsonc` serves: the vinext build is the one artefact that
+// deploys, so it is the one the scan has to prove clean.
 //
 //   --canaries   Print `KEY=value` lines for every secret env var. CI evals
 //                these into the build environment, so the build runs with a
@@ -31,11 +33,11 @@ import {
 import { SECRET_ENV_VARS } from '../src/core/secrets';
 
 /** What a browser is actually served. See bundleScan.ts on why only this. */
-const CLIENT_BUNDLE_DIR = path.join(process.cwd(), '.next', 'static');
+const CLIENT_BUNDLE_DIR = path.join(process.cwd(), 'dist', 'client');
 
 function printCanaries(): void {
     // A per-invocation salt: a scan can only ever pass against the bundle the
-    // same run built, never against a stale .next left over from before.
+    // same run built, never against a stale dist/ left over from before.
     const salt = process.env.OMNI_CANARY_SALT?.trim() || String(Date.now());
     for (const name of SECRET_ENV_VARS) {
         process.stdout.write(`${name}=${canaryFor(name, salt)}\n`);
@@ -74,7 +76,7 @@ function main(): void {
     if (!existsSync(CLIENT_BUNDLE_DIR)) {
         console.error(
             `\nNo client bundle at ${CLIENT_BUNDLE_DIR}.\n` +
-            'Run `npm run build` first — a scan with nothing to scan proves nothing.'
+            'Run `npm run build` first - a scan with nothing to scan proves nothing.'
         );
         process.exit(2);
     }
