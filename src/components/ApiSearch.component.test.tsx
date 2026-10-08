@@ -105,7 +105,7 @@ describe('ApiSearch', () => {
         const onSelect = vi.fn();
         render(<ApiSearch onSelect={onSelect} />);
         await search('calendar events');
-        expect(resultNames()).toEqual(['Review Events API', 'Calendar API (nothing usable yet)']);
+        expect(resultNames().slice(0, 2)).toEqual(['Review Events API', 'Calendar API (nothing usable yet)']);
         expect(screen.getByText('· 3 operations')).toBeTruthy();
         expect(screen.getByText('Nothing usable yet: It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)')).toBeTruthy();
         const dead = screen.getByRole('button', { name: 'Calendar API (nothing usable yet)' }) as HTMLButtonElement;

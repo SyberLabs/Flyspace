@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseApiIndex } from './apiIndex';
+import { CURATED_APIS } from './curatedApis';
 import { createApiSearcher } from './registrySearch';
 import { LITERAL_QUESTIONS, SEMANTIC_QUESTIONS, scoreRecall } from './registrySearch.eval';
 
@@ -18,7 +19,8 @@ describe('registry search eval (real index)', () => {
         expect(index).not.toBeNull();
     });
 
-    const entries = index?.entries ?? [];
+    // The entries search offers: OmniOS's curated APIs beside the directory.
+    const entries = [...CURATED_APIS.map(api => api.entry), ...(index?.entries ?? [])];
     const byId = new Map(entries.map(e => [e.id, e]));
     // Scores the ranking people see, usable APIs first. The answer key was
     // re-curated so every answer gives something to place (checked below).

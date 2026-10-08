@@ -23,7 +23,8 @@ describe('a response that wraps one list', () => {
         expect(inside.key).toBe('observations');
         expect(Object.keys(inside.rest)).toEqual(['realtime_start', 'realtime_end', 'units', 'count']);
         expect(listInside({ a: [1], b: [2] })).toBeNull(); // two lists: no single answer
-        expect(listInside({ items: [1], meta: { nested: true } })).toBeNull(); // nested metadata stays a record
+        expect(listInside({ items: [1], meta: { page: { n: 2 } } })).toBeNull(); // deeper metadata: not one answer
+        expect(listInside({ items: [1], meta: { page: 2 } })?.rest).toEqual({ meta: { page: 2 } }); // flat metadata rides along
     });
 
     it('shows the list as a table, says repeated columns once, and folds the metadata', () => {
@@ -39,12 +40,57 @@ describe('a response that wraps one list', () => {
 
 describe('tableOf', () => {
     it('refuses records that nest, and lists too wide to read', () => {
-        expect(tableOf([{ a: 1, b: { c: 2 } }])).toBeNull();
-        expect(tableOf([Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`k${i}`, i]))])).toBeNull();
+        expect(tableOf([{ a: 1, b: { c: 2 }, d: { e: 3 } }])).toBeNull(); // mostly nested
+        expect(tableOf([Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`k${i}`, i]))])).toBeNull(); // too wide to read
         expect(tableOf([1, 2, 3])).toBeNull();
+    });
+
+    it('leaves out a column empty in every row (BLS footnotes: [{}])', () => {
+        const rows = [
+            { year: '2026', period: 'M09', value: '4.2', footnotes: [{}] },
+            { year: '2026', period: 'M08', value: '4.1', footnotes: [{}] }
+        ];
+        expect(tableOf(rows)).toEqual({ columns: ['period', 'value'], fixed: [['year', '2026']] });
     });
 
     it('keeps every column of a single row, since nothing repeats', () => {
         expect(tableOf([{ date: '2026-09-01', value: '4.1' }])).toEqual({ columns: ['date', 'value'], fixed: [] });
+    });
+});
+
+// Shapes from the curated APIs, as they answered on 2026-10-07.
+describe('lists found deeper in a response', () => {
+    it('reads BLS: the rows under Results.series[0].data, with the series id kept', () => {
+        const bls = {
+            status: 'REQUEST_SUCCEEDED', responseTime: 105, message: [],
+            Results: { series: [{ seriesID: 'LNS14000000', data: [
+                { year: '2026', period: 'M09', periodName: 'September', latest: 'true', value: '4.2' },
+                { year: '2026', period: 'M08', periodName: 'August', value: '4.1' }
+            ] }] }
+        };
+        const inside = listInside(bls)!;
+        expect(inside.key).toBe('data');
+        expect(inside.list).toHaveLength(2);
+        expect(inside.rest).toMatchObject({ status: 'REQUEST_SUCCEEDED', seriesID: 'LNS14000000' });
+    });
+
+    it('reads Alpha Vantage price history: a map keyed by date becomes rows with a date column', () => {
+        const history = {
+            'Meta Data': { '1. Information': 'Daily Prices', '2. Symbol': 'IBM' },
+            'Time Series (Daily)': {
+                '2026-10-07': { '1. open': '221.90', '4. close': '220.51' },
+                '2026-10-06': { '1. open': '219.10', '4. close': '221.29' }
+            }
+        };
+        render(<CapabilityResult value={history} />);
+        const headers = within(screen.getByRole('table')).getAllByRole('columnheader').map(h => h.textContent);
+        expect(headers).toEqual(['Date', '1. open', '4. close']);
+        expect(screen.getByText('2026-10-07')).toBeTruthy();
+    });
+
+    it('reads an Alpha Vantage quote: one record in a one-key wrapper shows its fields', () => {
+        render(<CapabilityResult value={{ 'Global Quote': { '01. symbol': 'IBM', '05. price': '220.5100' } }} />);
+        expect(screen.getByText('Global quote')).toBeTruthy();
+        expect(screen.getByText('220.5100')).toBeTruthy();
     });
 });

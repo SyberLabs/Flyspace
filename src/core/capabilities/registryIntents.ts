@@ -60,8 +60,9 @@ export const REGISTRY_INTENTS: RegistryIntent[] = [
 
     // --- Money ---
     { id: 'currency', criteria: 'Currency exchange rates and converting between currencies.', terms: 'currency exchange rates', apis: ['exchangerate-api.com', 'interzoid.com:getcurrencyrate', 'interzoid.com:convertcurrency'] },
-    { id: 'economic_data', criteria: 'Economic statistics over time: GDP, unemployment, inflation, interest rates, money supply.', terms: 'economic data unemployment inflation gdp', apis: ['omni:fred'] },
-    { id: 'stocks', criteria: 'Stock and share prices, and financial market data.', terms: 'stock market data prices', apis: ['nfusionsolutions.biz'] },
+    { id: 'economic_data', criteria: 'Economic statistics over time: GDP, unemployment, inflation, interest rates, money supply.', terms: 'economic data unemployment inflation gdp', apis: ['omni:fred', 'omni:bls'] },
+    { id: 'forecasts', criteria: 'Forecasts and predictions of future events: will something happen, and how likely.', terms: 'forecast prediction probability', apis: ['omni:metaculus'] },
+    { id: 'stocks', criteria: 'Stock and share prices, and financial market data.', terms: 'stock market data prices', apis: ['omni:alpha-vantage', 'nfusionsolutions.biz'] },
     { id: 'payments', criteria: 'Taking or sending payments.', terms: 'payments', apis: ['klarna.com:payments', 'velopayments.com'] },
     { id: 'crypto_payments', criteria: 'Accepting cryptocurrency payments.', terms: 'cryptocurrency payments', apis: ['nowpayments.io'] },
     { id: 'banking', criteria: 'Bank accounts, balances and transactions.', terms: 'banking bank accounts', apis: ['codat.io:banking'] },
@@ -92,7 +93,7 @@ export const REGISTRY_INTENTS: RegistryIntent[] = [
     { id: 'image_recognition', criteria: 'Recognising what is in an image, or reading text in it (OCR).', terms: 'image recognition ocr', apis: ['microsoft.com:cognitiveservices-ComputerVision'] },
 
     // --- Information and entertainment ---
-    { id: 'news', criteria: 'News articles and headlines.', terms: 'news articles', apis: ['nytimes.com:timeswire'] },
+    { id: 'news', criteria: 'News articles and headlines.', terms: 'news articles', apis: ['omni:newsapi', 'nytimes.com:timeswire'] },
     { id: 'movies', criteria: 'Films and movie reviews.', terms: 'movie reviews', apis: ['nytimes.com:movie_reviews'] },
     { id: 'books', criteria: 'Books, authors and bestseller lists.', terms: 'books', apis: ['nytimes.com:books_api'] },
     { id: 'music', criteria: 'Music, songs, artists and playlists.', terms: 'music', apis: [], unavailable: 'Spotify, the music API in the directory, needs an OAuth sign-in OmniOS does not support yet.' },
