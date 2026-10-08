@@ -57,6 +57,7 @@ jobs:
             echo 'run=false' >> "$GITHUB_OUTPUT"
           else
             echo "round=$((rounds + 1))" >> "$GITHUB_OUTPUT"
+            echo "open=$open" >> "$GITHUB_OUTPUT"
             echo 'run=true' >> "$GITHUB_OUTPUT"
           fi
 
@@ -118,10 +119,22 @@ jobs:
             --max-turns 40
             --allowedTools "Read,Grep,Glob,Edit,Write,Bash"
 
-      - name: Record the round
+      - name: Record the round only if findings were actually answered
         if: steps.gate.outputs.run == 'true' && success()
         env:
           GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ steps.gate.outputs.open }}
         run: |
-          gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" \
-            --body "$(printf '<!-- codex-feedback-round -->\nCodex feedback round %s answered the Codex findings on this pull request.' "${{ steps.gate.outputs.round }}")"
+          set -euo pipefail
+          query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved comments(first:1){nodes{author{login}}}}}}}}'
+          after=$(gh api graphql -f query="$query" -F o="$OWNER" -F r="$REPO" -F n="$PR" \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | select(.comments.nodes[0].author.login == "chatgpt-codex-connector")] | length')
+          echo "unresolved Codex threads before: $BEFORE · after: $after"
+          if [ "$after" -lt "$BEFORE" ]; then
+            gh pr comment "$PR" --repo "$OWNER/$REPO" --body "$(printf '<!-- codex-feedback-round -->\nCodex feedback round %s answered %s of %s Codex finding(s).' "${{ steps.gate.outputs.round }}" "$((BEFORE - after))" "$BEFORE")"
+          else
+            echo "::warning::No finding was resolved; this run does not count as a round."
+          fi
