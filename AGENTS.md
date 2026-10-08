@@ -58,7 +58,20 @@ Docs-only changes still run the checks that a docs edit can break (at least
 ## Work packages
 
 - **One work package = one branch = one PR.** Branch `wp/omni/<slug>`. Do not
-  bundle unrelated changes, and do not merge your own PR.
+  bundle unrelated changes. Merge happens through auto-merge once CI is green
+  and every review thread is answered under the Reviewer findings rule below;
+  do not click merge by hand.
+- **Reviewer findings.** Codex reviews every PR and opens a thread per finding.
+  The author agent answers every thread with exactly one of two replies, then
+  resolves it: `Fixed in <short sha>: <one line>` after the smallest correct
+  change and the narrowest test that proves it (commit as `Codex: <what
+  changed>`), or `Not a defect: <one-line reason>` when the finding is style,
+  naming, preference, or speculative hardening. A defect is something that
+  would ship a bug, a security hole, data loss, a broken build, or a failing
+  test. An unanswered thread is a merge blocker. When the author session is
+  gone, `.github/workflows/codex-feedback.yml` answers in its place (Sonnet,
+  bounded turns, two rounds per PR) and arms auto-merge. Humans review the
+  product, not the PR.
 - Do not edit files that another open work package owns. If two packages touch
   `APEX_PLAN.md` or `FINDINGS.md`, sequence them.
 - A PR body states: objective, what changed, what did not, tests run,

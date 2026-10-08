@@ -1,0 +1,115 @@
+# Answers Codex review findings so a human never has to. Runs only when the
+# Codex GitHub app submits a review on a non-draft pull request from this
+# repository, and only while that pull request has unresolved Codex threads.
+# Claude (Sonnet, bounded turns) reads each thread, pushes the smallest fix or
+# replies why it is not a defect, resolves the thread, then arms auto-merge.
+# Two rounds per pull request at most: a pushed fix makes Codex review again,
+# and the second answer is the last. After that the pull request waits for a
+# human. The round marker is the first line of a pull request comment.
+name: Codex feedback
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: codex-feedback-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  answer:
+    name: Answer Codex findings
+    if: >-
+      github.event.review.user.login == 'chatgpt-codex-connector[bot]' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Count unresolved Codex threads and prior rounds
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved comments(first:1){nodes{author{login}}}}}}}}'
+          open=$(gh api graphql -f query="$query" -F o="$OWNER" -F r="$REPO" -F n="$PR" \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | select(.comments.nodes[0].author.login == "chatgpt-codex-connector")] | length')
+          rounds=$(gh api "repos/$OWNER/$REPO/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.body | startswith("<!-- codex-feedback-round -->"))] | length')
+          echo "unresolved Codex threads: $open · rounds already run: $rounds"
+          if [ "$open" -eq 0 ]; then
+            echo "::notice::No unresolved Codex findings on #$PR; nothing to answer."
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          elif [ "$rounds" -ge 2 ]; then
+            gh pr comment "$PR" --repo "$OWNER/$REPO" --body "$(printf '<!-- codex-feedback-round -->\nCodex feedback: two rounds already ran on this pull request and Codex still has findings. Leaving it for a human.')"
+            echo "::warning::Round cap reached on #$PR; a human decides."
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          else
+            gh pr comment "$PR" --repo "$OWNER/$REPO" --body "$(printf '<!-- codex-feedback-round -->\nCodex feedback round %s: answering %s finding(s).' "$((rounds + 1))" "$open")"
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install locked dependencies so a fix can be tested
+        if: steps.gate.outputs.run == 'true'
+        run: npm ci
+
+      - name: Answer each finding
+        if: steps.gate.outputs.run == 'true'
+        uses: anthropics/claude-code-action@38c80c1a32cdbc0c6f34042464a0669d89363dde # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: chatgpt-codex-connector[bot]
+          prompt: |
+            You are answering Codex review findings on pull request #${{ github.event.pull_request.number }}
+            in ${{ github.repository }} (branch `${{ github.event.pull_request.head.ref }}`, already checked out).
+            Do not review the pull request yourself. Answer only the unresolved review threads that
+            chatgpt-codex-connector opened. Read only what each finding points at. This run must stay cheap.
+
+            List the threads once:
+              gh api graphql -F o=${{ github.repository_owner }} -F r=${{ github.event.repository.name }} -F n=${{ github.event.pull_request.number }} -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{id isResolved path line comments(first:1){nodes{author{login} body}}}}}}}' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved|not) | select(.comments.nodes[0].author.login=="chatgpt-codex-connector")'
+
+            For each thread, in order:
+            1. Read the finding and the code it names.
+            2. Decide: is it a concrete defect that would ship a bug, a security hole, data loss, a broken
+               build, or a failing test? Style, naming, preference, and speculative hardening are not defects.
+            3. If it is a defect: make the smallest correct change, run the narrowest test that proves it
+               (`npx vitest run <test file>`), and commit it with the message `Codex: <what changed>`.
+               Reply in the thread with exactly: `Fixed in <short sha>: <one line>`.
+               If it is not a defect, reply with exactly: `Not a defect: <one-line reason>`.
+               Reply with: gh api graphql -F id=<thread id> -F body='<reply>' -f query='mutation($id:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$id,body:$body}){comment{id}}}'
+            4. Resolve the thread: gh api graphql -F id=<thread id> -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}'
+
+            When every thread is answered: if you committed anything, `git push` once. Then run
+            `gh pr merge ${{ github.event.pull_request.number }} --auto --squash`. If auto-merge is refused,
+            leave one pull request comment saying so and stop.
+
+            Rules: no refactors, no new tests beyond the one that proves a fix, no edits outside what a
+            finding names, no comments beyond the ones above. If a fix would need more than a few small
+            edits, do not attempt it: reply `Not fixed here: <one-line reason>`, leave the thread
+            unresolved, and move on.
+          claude_args: |
+            --model claude-sonnet-5-5
+            --max-turns 40
+            --allowedTools "Read,Grep,Glob,Edit,Write,Bash(git:*),Bash(gh:*),Bash(npx vitest run:*),Bash(npm test:*)"
