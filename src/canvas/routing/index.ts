@@ -48,7 +48,13 @@ interface Ends {
 }
 
 function inflate(b: RouteBlock, by: number): Obstacle {
-    return { l: b.x - by, t: b.y - by, r: b.x + b.width + by, b: b.y + b.height + by };
+    return {
+        l: b.x - by,
+        t: b.y - by,
+        r: b.x + b.width + by,
+        b: b.y + b.height + by,
+        core: { l: b.x, t: b.y, r: b.x + b.width, b: b.y + b.height }
+    };
 }
 
 function strictlyInside(o: Obstacle, p: Point): boolean {
@@ -217,7 +223,10 @@ function snapShared(raw: Point[][], ends: Ends[], obstacles: Obstacle[], ignored
                     count++;
                     continue;
                 }
-                const walls = obstacles.filter(o => !ignored[i].includes(o));
+                const walls = obstacles.flatMap(o => {
+                    const own = ignored[i].find(g => g.l === o.l && g.t === o.t && g.r === o.r && g.b === o.b);
+                    return !own ? [o] : own.core ? [own.core] : [];
+                });
                 const moved = moveVertical(raw[i], k, x, walls, opts.stub);
                 if (moved) {
                     moves.set(i, moved);
@@ -325,8 +334,15 @@ function routeCore(
         const { start, goal, srcTag, dstTag } = plan[i];
         const as = grid.point(start);
         const at = grid.point(goal);
-        // A port walled in by an overlapping block may pass through that block.
-        ignored[i] = obstacles.filter(o => strictlyInside(o, as) || strictlyInside(o, at));
+        // A port walled in by a neighbour's clearance margin may cross that
+        // margin to get out, never the neighbour itself, unless the port is
+        // actually under it (overlapping blocks).
+        ignored[i] = obstacles
+            .filter(o => strictlyInside(o, as) || strictlyInside(o, at))
+            .map(o => {
+                const covered = [e.ps, e.pt, as, at].some(p => o.core && strictlyInside(o.core, p));
+                return covered ? { ...o, core: undefined } : o;
+            });
         const kept = reuse(e);
         if (kept) {
             raw[i] = kept;

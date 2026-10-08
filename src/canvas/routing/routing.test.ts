@@ -251,6 +251,18 @@ describe('routeWires: circuit-style routing', () => {
         expect(w.points[0].x).toBeCloseTo(216);
     });
 
+    it('gets a port out of a neighbour too close to it without crossing that neighbour', () => {
+        // n stands 20px right of a's edge: a's port is inside n's clearance margin, not under n.
+        const blocks: RouteBlock[] = [
+            { id: 'a', x: 0, y: 100, width: 200, height: 100 },
+            { id: 'n', x: 220, y: 0, width: 200, height: 400 },
+            { id: 'b', x: 700, y: 100, width: 200, height: 100 }
+        ];
+        const [w] = routeWires(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
+        expect(blockHits(blocks, w)).toEqual([]);
+        expectOrthogonal(w);
+    });
+
     it('skips wires whose blocks are missing', () => {
         const res = routeWires([{ id: 'a', x: 0, y: 0, width: 10, height: 10 }], [{ id: 'w', source: 'a', target: 'gone' }]);
         expect(res.wires).toEqual([]);

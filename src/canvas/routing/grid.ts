@@ -13,6 +13,12 @@ export interface Obstacle {
     t: number;
     r: number;
     b: number;
+    /**
+     * The block itself inside its clearance margin. When an obstacle is
+     * ignored for a walled-in port, the core still blocks: the wire may use
+     * the margin to get out, never the block.
+     */
+    core?: Obstacle;
 }
 
 const EPS = 1e-6;
@@ -317,7 +323,9 @@ export class GridSearch {
      * east into the target port). Steps on edges already carrying `srcTag` or
      * `dstTag` (this wire's own source bundle or target trunk) are discounted,
      * so wires of one output bundle and wires into one input share a trunk.
-     * `ignore` lists obstacles an endpoint sits inside (overlapping blocks);
+     * `ignore` lists obstacles an endpoint sits inside (blocks too close or
+     * overlapping): their margin does not block this wire, their core does
+     * unless the entry has none;
      * they do not block this wire. Returns grid node indices, or null.
      */
     find(start: number, goal: number, srcTag: number, dstTag: number, costs: SearchCosts, ignore: Obstacle[]): number[] | null {
@@ -350,7 +358,10 @@ export class GridSearch {
         const covered = (count: number, mx: number, my: number): boolean => {
             let ignored = 0;
             for (const o of ignore) {
-                if (mx > o.l + EPS && mx < o.r - EPS && my > o.t + EPS && my < o.b - EPS) ignored++;
+                if (!(mx > o.l + EPS && mx < o.r - EPS && my > o.t + EPS && my < o.b - EPS)) continue;
+                const c = o.core;
+                if (c && mx > c.l + EPS && mx < c.r - EPS && my > c.t + EPS && my < c.b - EPS) continue;
+                ignored++;
             }
             return ignored < count;
         };
