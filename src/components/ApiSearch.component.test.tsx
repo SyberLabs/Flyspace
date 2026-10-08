@@ -146,6 +146,16 @@ describe('ApiSearch', () => {
         expect(JSON.parse(String(intentCall.init?.body))).toEqual({ query: 'is it going to rain tomorrow' });
     });
 
+    it('says plainly when the meaning has no API OmniOS can use yet', async () => {
+        vi.stubEnv('NEXT_PUBLIC_OMNI_REGISTRY_JEV_ENABLED', '1');
+        serve({ intent: { scores: [{ id: 'calendar', p: 0.93 }], model: 'jev-1.13.0' } });
+        render(<ApiSearch onSelect={() => {}} />);
+        const box = await search('schedule a meeting with sam');
+        await act(async () => { fireEvent.submit(box.closest('form')!); });
+        const notice = await screen.findByRole('status');
+        expect(notice.textContent).toMatch(/^No calendar API OmniOS can use yet\. The calendar APIs in the directory \(Google Calendar\)/);
+    });
+
     it('drops back to keyword order once the text changes', async () => {
         vi.stubEnv('NEXT_PUBLIC_OMNI_REGISTRY_JEV_ENABLED', '1');
         serve({ intent: { scores: [{ id: 'weather', p: 0.97 }], model: 'jev-1.13.0' } });

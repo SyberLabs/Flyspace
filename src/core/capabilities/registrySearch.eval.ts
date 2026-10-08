@@ -22,15 +22,17 @@ export interface EvalQuestion {
 /** Phrased with the API's own vocabulary. Keyword search should do well here. */
 export const LITERAL_QUESTIONS: EvalQuestion[] = [
     { query: 'weather forecast', accept: ['visualcrossing.com:weather', 'interzoid.com:getweathercity'] },
-    { query: 'send sms text message', accept: ['nexmo.com:sms'] },
-    { query: 'translate text', accept: ['googleapis.com:translate', 'amazonaws.com:translate'] },
-    { query: 'calendar events', accept: ['googleapis.com:calendar'] },
+    // Re-keyed 2026-10-07 against the index's compile counts: an answer must
+    // give something to place. Nexmo SMS compiles to nothing; sms77.io sends
+    // SMS. Dropped, since no usable API answers them yet: 'translate text'
+    // (Google, Amazon), 'calendar events' (Google), 'send email' (SendGrid,
+    // Amazon SES). NYT article_search compiles to nothing; timeswire does.
+    { query: 'send sms text message', accept: ['sms77.io'] },
     { query: 'currency exchange rates', accept: ['exchangerate-api.com', 'interzoid.com:getcurrencyrate', 'interzoid.com:convertcurrency'] },
-    { query: 'send email', accept: ['sendgrid.com', 'amazonaws.com:sesv2', 'amazonaws.com:email'] },
     { query: 'github issues', accept: ['github.com', 'github.com:api.github.com'] },
     { query: 'geocode an address', accept: ['gov.bc.ca:geocoder'] },
     { query: 'movie reviews', accept: ['nytimes.com:movie_reviews'] },
-    { query: 'news articles', accept: ['nytimes.com:article_search', 'nytimes.com:timeswire'] }
+    { query: 'news articles', accept: ['nytimes.com:timeswire'] }
 ];
 
 /**
@@ -41,10 +43,10 @@ export const LITERAL_QUESTIONS: EvalQuestion[] = [
 export const SEMANTIC_QUESTIONS: EvalQuestion[] = [
     { query: 'is it going to rain tomorrow', accept: ['visualcrossing.com:weather', 'interzoid.com:getweathercity'] },
     { query: 'convert dollars to euros', accept: ['exchangerate-api.com', 'interzoid.com:getcurrencyrate', 'interzoid.com:convertcurrency'] },
-    { query: 'text a phone number', accept: ['nexmo.com:sms'] },
+    { query: 'text a phone number', accept: ['sms77.io'] },
     { query: 'what is the price of a share of apple', accept: ['nfusionsolutions.biz'] },
     { query: 'find the latitude and longitude of a street', accept: ['gov.bc.ca:geocoder'] },
-    { query: 'schedule a meeting', accept: ['googleapis.com:calendar'] }
+    // 'schedule a meeting' dropped with 'calendar events': no usable calendar API.
 ];
 
 export interface EvalScore {

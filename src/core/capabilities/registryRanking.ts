@@ -50,6 +50,18 @@ export function routedIntents(scores: readonly IntentScore[] | null): IntentScor
         .slice(0, MAX_ROUTED_INTENTS);
 }
 
+/** Routed intents no usable API answers yet, with the reason, for search to say plainly. */
+export function unavailableIntents(
+    scores: readonly IntentScore[] | null,
+    intents: readonly RegistryIntent[] = REGISTRY_INTENTS
+): { id: string; reason: string }[] {
+    const catalog = new Map(intents.map(intent => [intent.id, intent]));
+    return routedIntents(scores).flatMap(score => {
+        const reason = catalog.get(score.id)?.unavailable;
+        return reason ? [{ id: score.id, reason }] : [];
+    });
+}
+
 export function rankResults(
     query: string,
     searcher: ApiSearcher,
@@ -71,6 +83,9 @@ export function rankResults(
         const intent = catalog.get(score.id);
         // An id JEV returned that is not in the host's list is ignored, not trusted.
         if (!intent) continue;
+        // Nothing usable answers it: say so (unavailableIntents) rather than
+        // padding the list with keyword matches for its terms.
+        if (intent.unavailable) continue;
         // A curated API that compiles to nothing is not offered as the answer; keyword search still finds it.
         for (const id of intent.apis) {
             const entry = byId.get(id);
