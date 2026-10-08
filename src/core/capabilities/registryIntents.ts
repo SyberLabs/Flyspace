@@ -11,7 +11,7 @@
 //
 // Every `apis` id was chosen by hand and is checked by a test to give
 // something to place: it compiles to at least one operation in the index, or
-// OmniOS ships it (curatedApis.ts). An intent no usable API answers keeps
+// Flyspace ships it (curatedApis.ts). An intent no usable API answers keeps
 // `apis` empty and says why in `unavailable`; search then says so plainly
 // instead of offering weak keyword matches. Re-curated 2026-10-07 against
 // the compile counts in public/api-index.json. `terms` widen the keyword
@@ -60,8 +60,9 @@ export const REGISTRY_INTENTS: RegistryIntent[] = [
 
     // --- Money ---
     { id: 'currency', criteria: 'Currency exchange rates and converting between currencies.', terms: 'currency exchange rates', apis: ['exchangerate-api.com', 'interzoid.com:getcurrencyrate', 'interzoid.com:convertcurrency'] },
-    { id: 'economic_data', criteria: 'Economic statistics over time: GDP, unemployment, inflation, interest rates, money supply.', terms: 'economic data unemployment inflation gdp', apis: ['omni:fred'] },
-    { id: 'stocks', criteria: 'Stock and share prices, and financial market data.', terms: 'stock market data prices', apis: ['nfusionsolutions.biz'] },
+    { id: 'economic_data', criteria: 'Economic statistics over time: GDP, unemployment, inflation, interest rates, money supply.', terms: 'economic data unemployment inflation gdp', apis: ['omni:fred', 'omni:bls'] },
+    { id: 'forecasts', criteria: 'Forecasts and predictions of future events: will something happen, and how likely.', terms: 'forecast prediction probability', apis: ['omni:metaculus'] },
+    { id: 'stocks', criteria: 'Stock and share prices, and financial market data.', terms: 'stock market data prices', apis: ['omni:alpha-vantage', 'nfusionsolutions.biz'] },
     { id: 'payments', criteria: 'Taking or sending payments.', terms: 'payments', apis: ['klarna.com:payments', 'velopayments.com'] },
     { id: 'crypto_payments', criteria: 'Accepting cryptocurrency payments.', terms: 'cryptocurrency payments', apis: ['nowpayments.io'] },
     { id: 'banking', criteria: 'Bank accounts, balances and transactions.', terms: 'banking bank accounts', apis: ['codat.io:banking'] },
@@ -73,7 +74,7 @@ export const REGISTRY_INTENTS: RegistryIntent[] = [
     { id: 'barcode', criteria: 'Looking up a product barcode or UPC, or generating barcodes.', terms: 'barcode lookup', apis: ['go-upc.com'] },
 
     // --- Work and productivity ---
-    { id: 'calendar', criteria: 'Calendars, events, meetings and scheduling.', terms: 'calendar events', apis: [], unavailable: 'The calendar APIs in the directory (Google Calendar) need a sign-in OmniOS does not support yet (OAuth), or AWS request signing.' },
+    { id: 'calendar', criteria: 'Calendars, events, meetings and scheduling.', terms: 'calendar events', apis: [], unavailable: 'The calendar APIs in the directory (Google Calendar) need a sign-in Flyspace does not support yet (OAuth), or AWS request signing.' },
     { id: 'tasks', criteria: 'To-do lists and tasks.', terms: 'tasks', apis: [], unavailable: 'The to-do APIs in the directory need a Google sign-in, or have no fixed https server.' },
     { id: 'crm', criteria: 'Customer contacts, leads and deals (CRM).', terms: 'crm contacts', apis: ['apideck.com:crm', 'hubapi.com:crm'] },
     { id: 'support_tickets', criteria: 'Customer support tickets and help desks.', terms: 'customer support tickets', apis: ['apideck.com:customer-support'] },
@@ -81,21 +82,21 @@ export const REGISTRY_INTENTS: RegistryIntent[] = [
     { id: 'file_storage', criteria: 'Storing and retrieving files.', terms: 'file storage', apis: ['apideck.com:file-storage'] },
     { id: 'pdf', criteria: 'Creating, filling or converting PDF documents.', terms: 'pdf documents', apis: ['pdfgeneratorapi.com', 'api2pdf.com'] },
     { id: 'code', criteria: 'Code repositories, issues and pull requests.', terms: 'github repositories issues', apis: ['github.com'] },
-    { id: 'monitoring', criteria: 'Monitoring systems, metrics and alerts.', terms: 'monitoring alerts', apis: [], unavailable: 'The monitoring APIs in the directory (Google, Amazon CloudWatch) need a sign-in OmniOS does not support yet (OAuth), or AWS request signing.' },
+    { id: 'monitoring', criteria: 'Monitoring systems, metrics and alerts.', terms: 'monitoring alerts', apis: [], unavailable: 'The monitoring APIs in the directory (Google, Amazon CloudWatch) need a sign-in Flyspace does not support yet (OAuth), or AWS request signing.' },
     { id: 'questions_answers', criteria: 'Programming questions and answers from a Q&A community.', terms: 'questions answers', apis: ['stackexchange.com'] },
 
     // --- Language and media understanding ---
-    { id: 'translation', criteria: 'Translating text between languages.', terms: 'translate text', apis: [], unavailable: 'The translation APIs in the directory (Google, Amazon) need a sign-in OmniOS does not support yet (OAuth), or AWS request signing.' },
+    { id: 'translation', criteria: 'Translating text between languages.', terms: 'translate text', apis: [], unavailable: 'The translation APIs in the directory (Google, Amazon) need a sign-in Flyspace does not support yet (OAuth), or AWS request signing.' },
     { id: 'speech_to_text', criteria: 'Transcribing speech or audio into text.', terms: 'speech to text', apis: ['rev.ai'] },
-    { id: 'text_to_speech', criteria: 'Turning text into spoken audio.', terms: 'text to speech', apis: [], unavailable: 'The text-to-speech APIs in the directory (Google, Amazon Polly) need a sign-in OmniOS does not support yet (OAuth), or AWS request signing.' },
+    { id: 'text_to_speech', criteria: 'Turning text into spoken audio.', terms: 'text to speech', apis: [], unavailable: 'The text-to-speech APIs in the directory (Google, Amazon Polly) need a sign-in Flyspace does not support yet (OAuth), or AWS request signing.' },
     { id: 'sentiment', criteria: 'Sentiment, entities or meaning in a piece of text.', terms: 'sentiment text analysis', apis: ['symanto.net'] },
     { id: 'image_recognition', criteria: 'Recognising what is in an image, or reading text in it (OCR).', terms: 'image recognition ocr', apis: ['microsoft.com:cognitiveservices-ComputerVision'] },
 
     // --- Information and entertainment ---
-    { id: 'news', criteria: 'News articles and headlines.', terms: 'news articles', apis: ['nytimes.com:timeswire'] },
+    { id: 'news', criteria: 'News articles and headlines.', terms: 'news articles', apis: ['omni:newsapi', 'nytimes.com:timeswire'] },
     { id: 'movies', criteria: 'Films and movie reviews.', terms: 'movie reviews', apis: ['nytimes.com:movie_reviews'] },
     { id: 'books', criteria: 'Books, authors and bestseller lists.', terms: 'books', apis: ['nytimes.com:books_api'] },
-    { id: 'music', criteria: 'Music, songs, artists and playlists.', terms: 'music', apis: [], unavailable: 'Spotify, the music API in the directory, needs an OAuth sign-in OmniOS does not support yet.' },
+    { id: 'music', criteria: 'Music, songs, artists and playlists.', terms: 'music', apis: [], unavailable: 'Spotify, the music API in the directory, needs an OAuth sign-in Flyspace does not support yet.' },
     { id: 'video_games', criteria: 'Video games and game information.', terms: 'video games', apis: ['rawg.io'] },
     { id: 'sports', criteria: 'Sports scores, schedules and results.', terms: 'sports scores', apis: ['sportsdata.io:nfl-v3-scores', 'sportsdata.io:nba-v3-scores', 'sportsdata.io:mlb-v3-scores'] },
     { id: 'food', criteria: 'Recipes, food and nutrition facts.', terms: 'food nutrition recipes', apis: ['spoonacular.com'] },

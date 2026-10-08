@@ -51,7 +51,7 @@ export function destinationOf(manifest: CapabilityManifest): { origin: string; c
         origin: new URL(manifest.transport.baseUrl).origin,
         credential: placement ? `${manifest.auth.kind} in ${placement}` : null,
         inUrl: manifest.auth.in === 'query',
-        /** Sent from OmniOS's own server (the broker), not from the browser. */
+        /** Sent from Flyspace's own server (the broker), not from the browser. */
         viaServer: manifest.transport.access === 'server_broker'
     };
 }
@@ -83,12 +83,12 @@ export function ApiReview({ title, subtitle, proposals, install, placeId, onTogg
                 {destinations.length > 0 ? (
                     <p className="text-xs text-[var(--text-secondary)]">
                         Sends requests to <span className="font-mono">{destinations.join(', ')}</span>
-                        {viaServer ? ' through OmniOS’s own server' : null}
+                        {viaServer ? ' through Flyspace’s own server' : null}
                     </p>
                 ) : null}
                 {viaServer ? (
                     <p className="text-[11px] text-[var(--text-muted)]">
-                        This API refuses calls from a browser, so OmniOS&apos;s server makes them. Your key goes with each request to that server and on to the API; the server does not keep it.
+                        This API refuses calls from a browser, so Flyspace&apos;s server makes them. Your key goes with each request to that server and on to the API; the server does not keep it.
                     </p>
                 ) : null}
             </header>

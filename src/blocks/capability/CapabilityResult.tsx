@@ -67,24 +67,34 @@ function Fields({ record }: { record: Record<string, unknown> }) {
     );
 }
 
-/** A list a table can show: every item a record of a few plain values. */
-const MAX_TABLE_COLUMNS = 8;
+/** A list a table can show: records of a few mostly plain values. More columns read better as rows. */
+const MAX_TABLE_COLUMNS = 6;
 
 function isPlain(value: unknown): boolean {
     return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 
+/** Says nothing: BLS sends `footnotes: [{}]` on every row. */
+function isEmptyish(value: unknown): boolean {
+    if (value === null || value === undefined || value === '') return true;
+    if (Array.isArray(value)) return value.every(item => isRecord(item) && Object.keys(item).length === 0);
+    return isRecord(value) && Object.keys(value).length === 0;
+}
+
 export function tableOf(list: unknown[]): { columns: string[]; fixed: [string, unknown][] } | null {
-    if (list.length === 0 || !list.every(item => isRecord(item) && Object.values(item).every(isPlain))) return null;
+    if (list.length === 0 || !list.every(isRecord)) return null;
     const records = list as Record<string, unknown>[];
     const keys: string[] = [];
     for (const record of records) for (const key of Object.keys(record)) if (!keys.includes(key)) keys.push(key);
-    if (keys.length === 0 || keys.length > MAX_TABLE_COLUMNS * 2) return null;
-    // A column that holds one value in every row says it once, above the table.
+    // A column empty in every row is left out; one holding nested values stays, summarised.
+    const shown = keys.filter(key => !records.every(record => isEmptyish(record[key])));
+    const plain = shown.filter(key => records.every(record => isPlain(record[key]) || isEmptyish(record[key])));
+    if (plain.length === 0 || plain.length * 2 < shown.length) return null;
+    // A plain column that holds one value in every row says it once, above the table.
     const fixed = records.length > 1
-        ? keys.filter(key => records.every(record => record[key] === records[0][key])).map(key => [key, records[0][key]] as [string, unknown])
+        ? plain.filter(key => records.every(record => record[key] === records[0][key])).map(key => [key, records[0][key]] as [string, unknown])
         : [];
-    const columns = keys.filter(key => !fixed.some(([name]) => name === key));
+    const columns = shown.filter(key => !fixed.some(([name]) => name === key));
     if (columns.length === 0 || columns.length > MAX_TABLE_COLUMNS) return null;
     return { columns, fixed };
 }
@@ -113,7 +123,7 @@ function Table({ list, columns, fixed }: { list: Record<string, unknown>[]; colu
                         {shown.map((record, index) => (
                             <tr key={index}>
                                 {columns.map(column => (
-                                    <td key={column} className="border-b border-[var(--citadel-border)]/50 px-1 py-0.5 text-[var(--text-primary)] [overflow-wrap:anywhere]">
+                                    <td key={column} className={`border-b border-[var(--citadel-border)]/50 px-1 py-0.5 text-[var(--text-primary)] ${cellOf(record[column]).length <= 12 ? 'whitespace-nowrap' : '[overflow-wrap:anywhere]'}`}>
                                         {cellOf(record[column])}
                                     </td>
                                 ))}
@@ -162,18 +172,64 @@ function List({ list }: { list: unknown[] }) {
     );
 }
 
+/** How deep to look for the list a response carries (BLS: Results.series[0].data). */
+const MAX_LIST_DEPTH = 4;
+const DATE_KEY = /^\d{4}-\d{2}(-\d{2})?([ T][\d:]+)?$/;
+
+function isFlatRecord(value: unknown): value is Record<string, unknown> {
+    return isRecord(value) && Object.values(value).every(isPlain);
+}
+
 /**
- * The one list a record carries, when it carries exactly one non-empty list
- * and nothing else nested: FRED's `observations`, a search's `results`.
+ * A map of same-shaped records, read as rows: Alpha Vantage's
+ * `{ "2026-10-07": { "1. open": ... }, ... }`. The key becomes a column,
+ * named `date` when every key is a date.
  */
-export function listInside(value: unknown): { key: string; list: unknown[]; rest: Record<string, unknown> } | null {
+function rowsOf(value: unknown): unknown[] | null {
+    if (Array.isArray(value)) return value.length > 0 ? value : null;
     if (!isRecord(value)) return null;
-    const lists = Object.entries(value).filter(([, entry]) => Array.isArray(entry) && entry.length > 0);
-    if (lists.length !== 1) return null;
-    const [key, list] = lists[0] as [string, unknown[]];
-    const rest = Object.fromEntries(Object.entries(value).filter(([name]) => name !== key));
-    if (!Object.values(rest).every(entry => isPlain(entry) || (Array.isArray(entry) && entry.length === 0))) return null;
-    return { key, list, rest };
+    const entries = Object.entries(value);
+    if (entries.length < 2 || !entries.every(([, entry]) => isFlatRecord(entry))) return null;
+    const column = entries.every(([key]) => DATE_KEY.test(key)) ? 'date' : 'key';
+    return entries.map(([key, entry]) => ({ [column]: key, ...(entry as Record<string, unknown>) }));
+}
+
+/**
+ * The one list a response carries, found through wrappers: a record holding
+ * exactly one list (FRED's `observations`, a search's `results`), a
+ * one-element array around a record (BLS's `series`), or a map of rows.
+ * Plain values and flat records beside it are kept as details.
+ */
+export function listInside(value: unknown, depth = 0): { key: string; list: unknown[]; rest: Record<string, unknown> } | null {
+    if (depth > MAX_LIST_DEPTH) return null;
+    if (Array.isArray(value)) {
+        return value.length === 1 && isRecord(value[0]) ? listInside(value[0], depth + 1) : null;
+    }
+    if (!isRecord(value)) return null;
+    const found = Object.entries(value).flatMap(([key, entry]) => {
+        const rows = rowsOf(entry);
+        if (rows && !(Array.isArray(entry) && entry.length === 1 && isRecord(entry[0]) && listInside(entry[0], depth + 1))) {
+            return [{ key, list: rows, rest: {} as Record<string, unknown> }];
+        }
+        const inner = listInside(entry, depth + 1);
+        return inner ? [inner] : [];
+    });
+    if (found.length !== 1) return null;
+    const [inner] = found;
+    const rest: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+        if (key === inner.key || rowsOf(entry) || listInside(entry, depth + 1)) continue;
+        if (isPlain(entry) || isFlatRecord(entry) || (Array.isArray(entry) && entry.length === 0)) rest[key] = entry;
+        else return null; // something else nested beside it: not one answer
+    }
+    return { key: inner.key, list: inner.list, rest: { ...rest, ...inner.rest } };
+}
+
+/** `{ "Global Quote": { ... } }`: one record in a one-key wrapper reads as its fields. */
+function unwrapRecord(value: unknown): { label: string; record: Record<string, unknown> } | null {
+    if (!isRecord(value)) return null;
+    const keys = Object.keys(value);
+    return keys.length === 1 && isRecord(value[keys[0]]) ? { label: keys[0], record: value[keys[0]] as Record<string, unknown> } : null;
 }
 
 /**
@@ -187,7 +243,8 @@ export function CapabilityResult({ value }: { value: unknown }) {
     // A response that wraps its one list ({ count, results: [...] }) reads as
     // the list; anything around it folds under "About this response".
     const wrapped = listInside(value);
-    const unwrapped = wrapped ? wrapped.list : value;
+    const single = wrapped ? null : unwrapRecord(value);
+    const unwrapped = wrapped ? wrapped.list : single ? single.record : value;
 
     return (
         <div className="space-y-1.5">
@@ -214,7 +271,10 @@ export function CapabilityResult({ value }: { value: unknown }) {
                     ) : null}
                 </>
             ) : isRecord(unwrapped) ? (
-                <Fields record={unwrapped} />
+                <>
+                    {single ? <p className="text-[11px] text-[var(--text-muted)]">{labelOf(single.label)}</p> : null}
+                    <Fields record={unwrapped} />
+                </>
             ) : (
                 <p className="whitespace-pre-wrap text-xs text-[var(--text-primary)] [overflow-wrap:anywhere]">{cellOf(unwrapped)}</p>
             )}

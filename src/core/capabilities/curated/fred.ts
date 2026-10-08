@@ -2,7 +2,7 @@
 // Hand-written from https://fred.stlouisfed.org/docs/api/fred/ (2026-10-07):
 // FRED publishes no OpenAPI document, and is not in the APIs.guru directory.
 // Three reads; FRED has no writes. `file_type` is pinned to json because the
-// API answers XML by default. FRED sends no CORS headers, so OmniOS reaches
+// API answers XML by default. FRED sends no CORS headers, so Flyspace reaches
 // it through its own server broker (see curatedApis.ts).
 
 const DATE = { type: 'string', format: 'date' };
@@ -27,7 +27,7 @@ const FILE_TYPE = {
     name: 'file_type',
     in: 'query',
     required: true,
-    description: 'Response format. OmniOS reads JSON.',
+    description: 'Response format. Flyspace reads JSON.',
     schema: { type: 'string', enum: ['json'] }
 };
 

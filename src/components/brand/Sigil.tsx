@@ -20,7 +20,7 @@ export function Sigil({ size, className }: { size: number; className?: string })
         let handle: { cancel(): void } | undefined;
         import('@/vendor/syber/syber-sigil.js')
             .then(({ draw }) => {
-                if (!cancelled) handle = draw(canvas, 'OmniOS', { color: '#f59be0', animate: true });
+                if (!cancelled) handle = draw(canvas, 'Flyspace', { color: '#f59be0', animate: true });
             })
             .catch(() => { /* decorative: a missing mark is not an error state */ });
         return () => {

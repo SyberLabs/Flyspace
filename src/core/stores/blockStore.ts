@@ -13,8 +13,25 @@ import {
 } from '../schemas/block.schema';
 import { vaultStorage } from '../vault';
 import { newId } from '../id';
+import { admitField, admitRecords, type Shape } from '../vault/hydration';
 import { useWireStore } from './wireStore';
 import { findFreeSpot } from './placement';
+
+/** What a persisted BlockInstance must carry to be read back (see vault/hydration). */
+const BLOCK_INSTANCE_SHAPE = {
+    instance_id: 'string',
+    schema: {
+        block_id: 'string',
+        display_name: 'string',
+        category: 'string',
+        semantic_tags: 'array'
+    },
+    status: 'string',
+    last_updated: 'number|null',
+    position: { x: 'number', y: 'number' },
+    dimensions: { width: 'number', height: 'number' },
+    shellId: 'string'
+} as const satisfies Shape<BlockInstance>;
 
 /**
  * omni-blocks persist migrations.
@@ -236,7 +253,17 @@ export const useBlockStore = create<BlockState>()(
                 blocks: state.blocks,
                 activeShellId: state.activeShellId
             }),
-            migrate: migrateBlockStore
+            migrate: migrateBlockStore,
+            merge: (persistedState, currentState) => {
+                if (!persistedState) return currentState;
+                const persisted = persistedState as Record<string, unknown>;
+                return {
+                    ...currentState,
+                    blocks: admitRecords<BlockInstance>('omni-blocks', 'blocks', persisted.blocks, BLOCK_INSTANCE_SHAPE),
+                    activeShellId: admitField<string>('omni-blocks', persisted, 'activeShellId', 'string')
+                        ?? currentState.activeShellId
+                };
+            }
         }
     )
 );

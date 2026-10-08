@@ -322,6 +322,9 @@ function resolveAuth(
     return { error: refused && /must be signed/.test(refused) ? refused : 'no supported security scheme (apiKey, http bearer, http basic)' };
 }
 
+/** HTTP auth scheme names that carry a static key, sent as `Authorization: <Scheme> <key>`. */
+const STATIC_TOKEN_SCHEMES = new Set(['token', 'apikey', 'api-key', 'key']);
+
 /** What the spec says about its key, for where the key is asked for. An unfilled template ("{{apiKeyDescription}}") says nothing. */
 function keyHint(description: unknown): string | undefined {
     if (typeof description !== 'string') return undefined;
@@ -353,6 +356,13 @@ function schemeToAuth(baseUrl: string, name: string, scheme: Record<string, unkn
     if (scheme.type === 'http' && scheme.scheme === 'basic') {
         const auth = { kind: 'basic' as const };
         return { auth: { ...auth, secretRef: secretRef(auth), ...withHint } };
+    }
+    // `Authorization: Token <key>` (Metaculus, Django REST APIs): a static key
+    // under its own scheme name. Only names that mean a plain token; a
+    // challenge scheme (Digest, Negotiate) cannot be answered with a pasted key.
+    if (scheme.type === 'http' && typeof scheme.scheme === 'string' && STATIC_TOKEN_SCHEMES.has(scheme.scheme.toLowerCase())) {
+        const auth = { kind: 'apiKey' as const, in: 'header' as const, name: 'Authorization' };
+        return { auth: { ...auth, prefix: `${scheme.scheme} `, secretRef: secretRef(auth), ...withHint } };
     }
     return { error: `unsupported scheme ${name}` };
 }

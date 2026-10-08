@@ -104,14 +104,15 @@ afterEach(() => {
 // ============================================
 
 describe('AddApiDialog: a curated API (FRED)', () => {
-    it('finds FRED beside the directory, says its calls go through OmniOS, and installs it as broker reads', async () => {
+    it('finds FRED beside the directory, says its calls go through Flyspace, and installs it as broker reads', async () => {
         render(<Harness />);
         fireEvent.change(await screen.findByLabelText('Search APIs'), { target: { value: 'unemployment inflation' } });
-        expect(screen.getByText('· curated by OmniOS')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Review FRED Economic Data' }));
+        const fred = screen.getByRole('button', { name: 'Review FRED Economic Data' });
+        expect(fred.textContent).toContain('· curated by Flyspace');
+        fireEvent.click(fred);
 
-        expect(await screen.findByText(/Spec written by OmniOS from the provider/)).toBeTruthy();
-        expect(screen.getByText(/Sends requests to/).textContent).toContain('https://api.stlouisfed.org through OmniOS’s own server');
+        expect(await screen.findByText(/Spec written by Flyspace from the provider/)).toBeTruthy();
+        expect(screen.getByText(/Sends requests to/).textContent).toContain('https://api.stlouisfed.org through Flyspace’s own server');
         expect(screen.getByText(/refuses calls from a browser/)).toBeTruthy();
         const key = screen.getByLabelText('Key for https://api.stlouisfed.org').closest('label')!;
         expect(key.textContent).toContain('Request one at https://fredaccount.stlouisfed.org/apikeys');

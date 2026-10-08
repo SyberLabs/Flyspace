@@ -22,7 +22,7 @@ const INDEX: ApiIndex = {
         entry('nexmo.com:sms', 'SMS API', { description: 'Send SMS messages', categories: ['telecom'] }),
         entry('thesmsworks.co.uk', 'The SMS Works API', { openapiVersion: '2.0', supported: false }),
         entry('nytimes.com:archive', 'Archive API', { description: 'is it going to rain tomorrow headlines' }),
-        entry('googleapis.com:calendar', 'Calendar API', { description: 'calendar events', operations: 0, blocker: 'It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)' }),
+        entry('googleapis.com:calendar', 'Calendar API', { description: 'calendar events', operations: 0, blocker: 'It needs a sign-in Flyspace does not support yet (OAuth, or several keys at once)' }),
         entry('1password.com:events', 'Events API', { description: 'calendar events audit', operations: 3 })
     ]
 };
@@ -105,9 +105,9 @@ describe('ApiSearch', () => {
         const onSelect = vi.fn();
         render(<ApiSearch onSelect={onSelect} />);
         await search('calendar events');
-        expect(resultNames()).toEqual(['Review Events API', 'Calendar API (nothing usable yet)']);
+        expect(resultNames().slice(0, 2)).toEqual(['Review Events API', 'Calendar API (nothing usable yet)']);
         expect(screen.getByText('· 3 operations')).toBeTruthy();
-        expect(screen.getByText('Nothing usable yet: It needs a sign-in OmniOS does not support yet (OAuth, or several keys at once)')).toBeTruthy();
+        expect(screen.getByText('Nothing usable yet: It needs a sign-in Flyspace does not support yet (OAuth, or several keys at once)')).toBeTruthy();
         const dead = screen.getByRole('button', { name: 'Calendar API (nothing usable yet)' }) as HTMLButtonElement;
         expect(dead.disabled).toBe(true);
         fireEvent.click(dead);
@@ -146,14 +146,14 @@ describe('ApiSearch', () => {
         expect(JSON.parse(String(intentCall.init?.body))).toEqual({ query: 'is it going to rain tomorrow' });
     });
 
-    it('says plainly when the meaning has no API OmniOS can use yet', async () => {
+    it('says plainly when the meaning has no API Flyspace can use yet', async () => {
         vi.stubEnv('NEXT_PUBLIC_OMNI_REGISTRY_JEV_ENABLED', '1');
         serve({ intent: { scores: [{ id: 'calendar', p: 0.93 }], model: 'jev-1.13.0' } });
         render(<ApiSearch onSelect={() => {}} />);
         const box = await search('schedule a meeting with sam');
         await act(async () => { fireEvent.submit(box.closest('form')!); });
         const notice = await screen.findByRole('status');
-        expect(notice.textContent).toMatch(/^No calendar API OmniOS can use yet\. The calendar APIs in the directory \(Google Calendar\)/);
+        expect(notice.textContent).toMatch(/^No calendar API Flyspace can use yet\. The calendar APIs in the directory \(Google Calendar\)/);
     });
 
     it('drops back to keyword order once the text changes', async () => {

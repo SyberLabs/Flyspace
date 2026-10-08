@@ -7,7 +7,7 @@ import { fetchCatalogSpec, RegistryFetchError } from './registrySearch';
 
 const FRED = curatedApi('omni:fred')!;
 
-describe('FRED, as OmniOS ships it', () => {
+describe('FRED, as Flyspace ships it', () => {
     const { manifests, errors } = compileOpenApi(FRED.spec, { sourceLocator: FRED.entry.specUrl, brokerOrigins: FRED.brokerOrigins });
 
     it('compiles to the three reads its entry claims, all through the server broker', () => {
@@ -83,5 +83,46 @@ describe('a curated entry', () => {
 
     it('has ids no directory entry can take', () => {
         for (const api of CURATED_APIS) expect(api.entry.id.startsWith('omni:')).toBe(true);
+    });
+});
+
+describe('every curated API', () => {
+    it.each(CURATED_APIS.map(api => [api.entry.id, api] as const))('%s compiles to what its entry claims, routed as declared', (_id, api) => {
+        const { manifests, errors } = compileOpenApi(api.spec, { sourceLocator: api.entry.specUrl, brokerOrigins: api.brokerOrigins });
+        expect(errors).toEqual([]);
+        expect(manifests).toHaveLength(api.entry.operations!);
+        for (const manifest of manifests) {
+            expect(manifest.effect).toBe('read');
+            const access = manifest.transport.kind === 'http' ? manifest.transport.access : null;
+            expect(access).toBe(api.brokerOrigins.length > 0 ? 'server_broker' : 'browser_direct');
+            if (manifest.auth.kind !== 'none') expect(manifest.auth.hint?.length ?? 0, api.entry.id).toBeGreaterThan(20); // says where to get the key
+        }
+    });
+
+    it('needs no key for BLS, and sends Metaculus its token the way it asks', () => {
+        const bls = compileOpenApi(curatedApi('omni:bls')!.spec).manifests[0];
+        expect(bls.auth.kind).toBe('none');
+        const metaculus = compileOpenApi(curatedApi('omni:metaculus')!.spec).manifests[0];
+        expect(metaculus.auth).toMatchObject({ kind: 'apiKey', in: 'header', name: 'Authorization', prefix: 'Token ' });
+        const news = compileOpenApi(curatedApi('omni:newsapi')!.spec).manifests[0];
+        expect(news.auth).toMatchObject({ kind: 'apiKey', in: 'header', name: 'X-Api-Key' }); // kept out of the URL
+    });
+});
+
+describe('an http auth scheme that names a static token', () => {
+    const spec = (scheme: string) => ({
+        openapi: '3.0.0', info: { title: 'T', version: '1' }, servers: [{ url: 'https://api.example.test' }],
+        security: [{ s: [] }], components: { securitySchemes: { s: { type: 'http', scheme } } },
+        paths: { '/x': { get: { responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object' } } } } } } } }
+    });
+
+    it('becomes a key in Authorization under that scheme name', () => {
+        expect(compileOpenApi(spec('Token')).manifests[0].auth).toMatchObject({ kind: 'apiKey', name: 'Authorization', prefix: 'Token ' });
+        expect(compileOpenApi(spec('ApiKey')).manifests[0].auth).toMatchObject({ prefix: 'ApiKey ' });
+    });
+
+    it('is refused for a challenge scheme a pasted key cannot answer', () => {
+        expect(compileOpenApi(spec('Digest')).manifests).toEqual([]);
+        expect(compileOpenApi(spec('Negotiate')).manifests).toEqual([]);
     });
 });
