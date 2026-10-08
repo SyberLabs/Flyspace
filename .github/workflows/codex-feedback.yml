@@ -55,7 +55,7 @@ jobs:
             echo "::warning::Round cap reached on #$PR; a human decides."
             echo 'run=false' >> "$GITHUB_OUTPUT"
           else
-            gh pr comment "$PR" --repo "$OWNER/$REPO" --body "$(printf '<!-- codex-feedback-round -->\nCodex feedback round %s: answering %s finding(s).' "$((rounds + 1))" "$open")"
+            echo "round=$((rounds + 1))" >> "$GITHUB_OUTPUT"
             echo 'run=true' >> "$GITHUB_OUTPUT"
           fi
 
@@ -109,7 +109,18 @@ jobs:
             finding names, no comments beyond the ones above. If a fix would need more than a few small
             edits, do not attempt it: reply `Not fixed here: <one-line reason>`, leave the thread
             unresolved, and move on.
+            If anything stops you from answering a thread (a command fails, a tool is refused, the
+            test cannot run), post one pull request comment that starts with `Codex feedback could not
+            act:` and says exactly what failed, then stop.
           claude_args: |
             --model claude-sonnet-5-5
             --max-turns 40
-            --allowedTools "Read,Grep,Glob,Edit,Write,Bash(git:*),Bash(gh:*),Bash(npx vitest run:*),Bash(npm test:*)"
+            --allowedTools "Read,Grep,Glob,Edit,Write,Bash"
+
+      - name: Record the round
+        if: steps.gate.outputs.run == 'true' && success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" \
+            --body "$(printf '<!-- codex-feedback-round -->\nCodex feedback round %s answered the Codex findings on this pull request.' "${{ steps.gate.outputs.round }}")"
