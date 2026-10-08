@@ -40,12 +40,12 @@ export function TopBar({
         <header className="topbar">
             {/* Left: Logo */}
             <div className="flex items-center gap-4">
-                <h1 className="lockup" aria-label="SyberLabs OmniOS">
+                <h1 className="lockup" aria-label="SyberLabs Flyspace">
                     {/* eslint-disable-next-line @next/next/no-img-element -- 22px static brand mark */}
                     <img src="/syber-mark.png" alt="" width={22} height={24} className="lockup-mark" />
                     <span className="lockup-name hidden md:inline">SYBERLABS</span>
                     <span className="lockup-sep hidden md:inline" aria-hidden="true">/</span>
-                    <span className="lockup-product">OmniOS</span>
+                    <span className="lockup-product">Flyspace</span>
                     <Sigil size={16} className="lockup-sigil" />
                 </h1>
 

@@ -69,7 +69,7 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
 
     useEffect(() => () => routingAbort.current?.abort(), []);
 
-    // Curated APIs ship with OmniOS and are searched beside the directory.
+    // Curated APIs ship with Flyspace and are searched beside the directory.
     const entries = useMemo(() => (index ? [...CURATED_APIS.map(api => api.entry), ...index.entries] : []), [index]);
     const searcher = useMemo(() => (index ? createApiSearcher(entries) : null), [index, entries]);
     const byId = useMemo(() => new Map(entries.map(entry => [entry.id, entry])), [entries]);
@@ -131,7 +131,7 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                 </p>
                 {!routingBusy && nothingYet.length > 0 ? (
                     <p role="status" className="text-[11px] leading-4 text-[var(--truth-amber)] [overflow-wrap:anywhere]">
-                        {nothingYet.map(({ id, reason }) => `No ${intentLabel(id)} API OmniOS can use yet. ${reason}`).join(' ')}
+                        {nothingYet.map(({ id, reason }) => `No ${intentLabel(id)} API Flyspace can use yet. ${reason}`).join(' ')}
                     </p>
                 ) : null}
             </form>
@@ -177,7 +177,7 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                                         </span>
                                         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--text-muted)]">
                                             <span className="max-w-full truncate">{entry.id}</span>
-                                            {entry.curated ? <span>· curated by OmniOS</span> : <span>· spec {shortDate(entry.updated)}</span>}
+                                            {entry.curated ? <span>· curated by Flyspace</span> : <span>· spec {shortDate(entry.updated)}</span>}
                                             {source === 'intent' && intent ? <span>· matches “{intentLabel(intent)}”</span> : null}
                                             {entry.supported ? null : <span>· Swagger {entry.openapiVersion}, not supported yet</span>}
                                             {entry.operations ? <span>· {operationCount(entry.operations)}</span> : null}

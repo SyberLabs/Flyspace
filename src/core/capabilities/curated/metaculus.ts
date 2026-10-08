@@ -1,9 +1,9 @@
 // Metaculus forecasting questions.
 // Metaculus serves its API docs and schema only to signed-in users, so this
-// is written from the integration OmniOS ran before #60 (GET /api/posts/
+// is written from the integration Flyspace ran before #60 (GET /api/posts/
 // with limit and search; `Authorization: Token <token>`; results[] with id,
 // title, slug, status, nr_forecasters, question). Every request needs the
-// token, and Metaculus answers browsers without CORS headers, so OmniOS
+// token, and Metaculus answers browsers without CORS headers, so Flyspace
 // reaches it through its server broker.
 
 export const METACULUS_SPEC = {

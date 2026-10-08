@@ -1,4 +1,4 @@
-// APIs OmniOS ships a spec for, because the directory has none that works.
+// APIs Flyspace ships a spec for, because the directory has none that works.
 // Each is reviewed by hand in this repo. Search lists them beside the
 // directory, marked as curated. Only an entry here can route an API through
 // the server broker: that is the host's choice, never a pasted document's.

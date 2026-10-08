@@ -174,7 +174,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 {manifest ? <EffectPill effect={manifest.effect} /> : <span>not installed</span>}
                 {destination ? <span className="min-w-0 truncate font-mono" title={destination}>{destination}</span> : null}
                 {manifest?.transport.kind === 'http' && manifest.transport.access === 'server_broker' ? (
-                    <span className="shrink-0" title="Sent from OmniOS's own server: this API refuses browser calls">via server</span>
+                    <span className="shrink-0" title="Sent from Flyspace's own server: this API refuses browser calls">via server</span>
                 ) : null}
                 {sideEffect ? (
                     <span className="ml-auto shrink-0">{manifest?.approval === 'approved' ? 'approved' : 'needs approval'}</span>

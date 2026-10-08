@@ -128,7 +128,7 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
             if (abort.signal.aborted) return;
             const curated = entry.curated ? curatedApi(entry.id) : undefined;
             const subtitle = curated
-                ? `Spec written by OmniOS from the provider's docs · ${entry.updated}`
+                ? `Spec written by Flyspace from the provider's docs · ${entry.updated}`
                 : entry.updated ? `Spec updated ${entry.updated} · ${entry.id}` : entry.id;
             showProposals(document, entry.title, subtitle, entry.specUrl, curated?.brokerOrigins);
         } catch (err) {
@@ -295,7 +295,7 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                             onPlace={setPlaceId}
                                         />
                                         {review.proposals.length === 0 ? (
-                                            <p className="text-sm text-[var(--text-muted)]">This spec has no operations OmniOS can install.</p>
+                                            <p className="text-sm text-[var(--text-muted)]">This spec has no operations Flyspace can install.</p>
                                         ) : null}
                                         {review.issues.length > 0 ? (
                                             <details className="text-xs text-[var(--text-muted)]">
