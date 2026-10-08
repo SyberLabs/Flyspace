@@ -8,14 +8,35 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { BlockInstance, BlockConnection } from '../schemas/block.schema';
-import { ShellConfig, PersonaType, AestheticTheme } from '../schemas/shell.schema';
+import { ShellConfig, ShellBlockState, PersonaType, AestheticTheme } from '../schemas/shell.schema';
 import { DataWire, DEFAULT_WIRE_FILTERS } from '../schemas/wire.schema';
 import { vaultStorage } from '../vault';
-import { useWireStore } from './wireStore';
+import { admitField, admitRecords, type Shape } from '../vault/hydration';
+import { useWireStore, DATA_WIRE_SHAPE } from './wireStore';
 import { useBlockStore } from './blockStore';
 import { blockRegistry } from '../registry/BlockRegistry';
 import { newId } from '../id';
 import type { ShellTemplate } from '../shells/templates';
+
+/** What a persisted ShellConfig must carry to be read back (see vault/hydration). */
+const SHELL_CONFIG_SHAPE = {
+    id: 'string',
+    type: 'string',
+    name: 'string',
+    blocks: 'array',
+    wires: 'array',
+    persona: 'string',
+    aesthetic: 'string',
+    createdAt: 'number',
+    updatedAt: 'number'
+} as const satisfies Shape<ShellConfig>;
+
+const SHELL_BLOCK_SHAPE = {
+    blockId: 'string',
+    instanceId: 'string',
+    position: { x: 'number', y: 'number' },
+    dimensions: { width: 'number', height: 'number' }
+} as const satisfies Shape<ShellBlockState>;
 
 // ============================================
 // SHELL STORE
@@ -403,6 +424,30 @@ export const useShellStore = create<ShellState>()(
                     });
                 }
                 return persisted;
+            },
+            // A shell that is not a ShellConfig is dropped whole; a malformed
+            // block or wire inside a shell is dropped alone, the shell stays.
+            merge: (persistedState, currentState) => {
+                if (!persistedState) return currentState;
+                const persisted = persistedState as Record<string, unknown>;
+                const shells = admitRecords<ShellConfig>('omni-shells', 'shells', persisted.shells, SHELL_CONFIG_SHAPE)
+                    .map(shell => ({
+                        ...shell,
+                        blocks: admitRecords<ShellBlockState>('omni-shells', `${shell.id}.blocks`, shell.blocks, SHELL_BLOCK_SHAPE),
+                        wires: admitRecords<DataWire>('omni-shells', `${shell.id}.wires`, shell.wires, DATA_WIRE_SHAPE)
+                    }));
+                const activeShellId = admitField<string | null>('omni-shells', persisted, 'activeShellId', 'string|null');
+                return {
+                    ...currentState,
+                    shells,
+                    activeShellId: activeShellId === undefined ? currentState.activeShellId : activeShellId,
+                    hotkeySlots: admitField<Record<number, string>>('omni-shells', persisted, 'hotkeySlots', 'object')
+                        ?? currentState.hotkeySlots,
+                    currentPersona: admitField<PersonaType>('omni-shells', persisted, 'currentPersona', 'string')
+                        ?? currentState.currentPersona,
+                    currentAesthetic: admitField<AestheticTheme>('omni-shells', persisted, 'currentAesthetic', 'string')
+                        ?? currentState.currentAesthetic
+                };
             }
         }
     )
