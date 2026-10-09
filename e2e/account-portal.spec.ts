@@ -4,8 +4,9 @@ test('account doorway stays visible on mobile and only saves after a click', asy
     let writes = 0;
     await page.route('https://syberlabs.io/admin/api/v1/**', route => {
         const url = route.request().url();
-        const headers = { 'Access-Control-Allow-Origin': 'http://localhost:3000', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'content-type,x-syberlabs-account' };
+        const headers = { 'Access-Control-Allow-Origin': 'http://localhost:3000', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'content-type,x-syberlabs-account,x-syberlabs-expected-user' };
         if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+        if (!url.endsWith('/account')) expect(route.request().headers()['x-syberlabs-expected-user']).toBe('fixture-user');
         if (route.request().method() === 'POST') writes++;
         const response = url.endsWith('/account')
             ? { version: 1, user: { id: 'fixture-user', label: 'Orbit explorer' }, portalUrl: 'https://syberlabs.io/admin/' }

@@ -40,15 +40,23 @@ export function validateAccountSnapshot(payload: unknown): OmniVaultExport {
     validateStoreEnvelopes(payload);
     return prepareAccountSnapshot(payload);
 }
-export async function accountRequest<T>(path: string, body?: unknown): Promise<T> {
+export async function accountRequest<T>(path: string, body?: unknown, expectedUserId?: string): Promise<T> {
+    const isSave = path === 'saves' || path.startsWith('saves?') || path.startsWith('saves/');
+    if (isSave && !expectedUserId) throw new Error('Sign in again before accessing account backups. Your browser canvas is safe.');
     const response = await fetch(`${ACCOUNT_ORIGIN}/admin/api/v1/${path}`, {
         credentials: 'include', cache: 'no-store',
+        headers: {
+            ...(isSave ? { 'X-SyberLabs-Expected-User': expectedUserId! } : {}),
+            ...(body === undefined ? {} : { 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1' })
+        },
         ...(body === undefined ? {} : {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1' },
+            method: 'POST',
             body: JSON.stringify(body)
         })
     }).catch(() => { throw new Error('Account storage is unavailable. Your browser canvas is safe.'); });
     if (!response.ok) {
+        const failure = await response.json().catch(() => null);
+        if (failure?.error === 'account_changed') throw new Error('Your signed-in account changed. Reopen your account panel before continuing. Your browser canvas is safe.');
         const messages: Record<number, string> = {
             401: 'Sign in again to use your account.',
             403: 'Account access is unavailable from this address.',
