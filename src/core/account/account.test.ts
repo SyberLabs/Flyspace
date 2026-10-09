@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { accountRequest, prepareAccountSnapshot, validateAccountSnapshot, SIGN_IN_URL } from './account';
+import { captureLiveStores } from './snapshot';
 import type { OmniVaultExport } from '../vault/vaultExport';
 const snapshot: OmniVaultExport = { format: 'omni-vault-export', version: 1, exportedAt: 1, data: {
     'omni-blocks': '{"state":{"blocks":[]}}',
@@ -23,7 +24,16 @@ describe('private account snapshots', () => {
         expect(() => validateAccountSnapshot({ data: {} })).toThrow();
         expect(() => validateAccountSnapshot(snapshot)).toThrow();
         expect(() => validateAccountSnapshot({ ...snapshot, data: [] })).toThrow();
-        expect(validateAccountSnapshot(prepareAccountSnapshot(snapshot)).format).toBe('omni-vault-export');
+        expect(validateAccountSnapshot(captureLiveStores()).format).toBe('omni-vault-export');
+    });
+    it('rejects malformed and partial stores before local changes', () => {
+        const full = captureLiveStores();
+        localStorage.setItem('omni-blocks', 'original');
+        expect(() => validateAccountSnapshot({ ...full, data: { ...full.data, 'omni-blocks': 'null' } })).toThrow();
+        expect(() => validateAccountSnapshot({ ...full, data: {} })).toThrow();
+        const bad = { ...full, data: { ...full.data, 'omni-wires': JSON.stringify({version:2,state:{wires:[{}]}}) } };
+        expect(() => validateAccountSnapshot(bad)).toThrow();
+        expect(localStorage.getItem('omni-blocks')).toBe('original');
     });
     it('uses internal sealed return navigation', () => {
         expect(new URL(SIGN_IN_URL).searchParams.get('next')).toBe('/admin/return?app=omni');

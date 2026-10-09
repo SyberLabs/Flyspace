@@ -18,7 +18,7 @@ import { useWireStore } from './wireStore';
 import { findFreeSpot } from './placement';
 
 /** What a persisted BlockInstance must carry to be read back (see vault/hydration). */
-const BLOCK_INSTANCE_SHAPE = {
+export const BLOCK_INSTANCE_SHAPE = {
     instance_id: 'string',
     schema: {
         block_id: 'string',

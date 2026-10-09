@@ -1,4 +1,5 @@
-import { exportVault, isVaultExport, prepareVaultImport, type OmniVaultExport } from '../vault/vaultExport';
+import { captureLiveStores, validateStoreEnvelopes } from './snapshot';
+import { isVaultExport, prepareVaultImport, type OmniVaultExport } from '../vault/vaultExport';
 
 export const ACCOUNT_ORIGIN = 'https://syberlabs.io';
 export const SIGN_IN_URL = `${ACCOUNT_ORIGIN}/auth/signin?next=${encodeURIComponent('/admin/return?app=omni')}`;
@@ -22,13 +23,14 @@ export function prepareAccountSnapshot(snapshot: OmniVaultExport): OmniVaultExpo
     return { ...snapshot, data: prepareVaultImport({ ...snapshot, data }).data };
 }
 export async function captureAccountSnapshot(): Promise<OmniVaultExport> {
-    return prepareAccountSnapshot(await exportVault());
+    return prepareAccountSnapshot(captureLiveStores());
 }
 export function validateAccountSnapshot(payload: unknown): OmniVaultExport {
     if (!isVaultExport(payload) || Array.isArray(payload.data)
         || !Object.keys(payload.data).every(key => STORE_KEYS.has(key))) {
         throw new Error('This backup is not a compatible Flyspace canvas.');
     }
+    validateStoreEnvelopes(payload);
     return prepareAccountSnapshot(payload);
 }
 export async function accountRequest<T>(path: string, body?: unknown): Promise<T> {

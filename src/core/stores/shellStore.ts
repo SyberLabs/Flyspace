@@ -19,7 +19,7 @@ import { newId } from '../id';
 import type { ShellTemplate } from '../shells/templates';
 
 /** What a persisted ShellConfig must carry to be read back (see vault/hydration). */
-const SHELL_CONFIG_SHAPE = {
+export const SHELL_CONFIG_SHAPE = {
     id: 'string',
     type: 'string',
     name: 'string',
@@ -31,7 +31,7 @@ const SHELL_CONFIG_SHAPE = {
     updatedAt: 'number'
 } as const satisfies Shape<ShellConfig>;
 
-const SHELL_BLOCK_SHAPE = {
+export const SHELL_BLOCK_SHAPE = {
     blockId: 'string',
     instanceId: 'string',
     position: { x: 'number', y: 'number' },
