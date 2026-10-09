@@ -15,6 +15,7 @@ import {
     Layers
 } from 'lucide-react';
 import { useShellStore, useSettingsStore, useUIStore, useToolStore } from '@/core/stores';
+import { AccountPortal } from './AccountPortal';
 import { LlmStatusPill } from './LlmStatusPill';
 import { cn } from '@/lib/utils';
 import { useClientMounted } from '@/core/hooks';
@@ -53,7 +54,7 @@ export function TopBar({
                 {activeShell && (
                     <>
                         <div className="w-px h-6 bg-[var(--citadel-border)]" />
-                        <div className="topbar-pill px-3 gap-2">
+                        <div className="topbar-pill topbar-shell px-3 gap-2 hidden lg:flex">
                             <span className="text-xs text-[var(--text-muted)]">Shell:</span>
                             <span className="text-xs font-medium text-[var(--text-primary)]">
                                 {activeShell.name}
@@ -75,7 +76,7 @@ export function TopBar({
                 <div className="w-px h-6 bg-[var(--citadel-border)]" />
 
                 {/* Tool Strip */}
-                <div className="topbar-pill hidden sm:flex">
+                <div className="topbar-pill topbar-tools hidden sm:flex">
                     <button
                         onClick={() => setTool('navigate')}
                         className={cn(
@@ -106,7 +107,7 @@ export function TopBar({
             </div>
 
             {/* Center: Command Palette */}
-            <div className="flex-1 flex justify-center px-4">
+            <div className="flex-1 hidden md:flex justify-center px-4">
                 <button
                     onClick={openCommandPalette}
                     className="hidden md:flex items-center gap-2 px-4 min-h-9 bg-[color-mix(in_srgb,var(--citadel-void)_40%,transparent)] border border-[var(--citadel-border)] rounded-full hover:border-[var(--ice)] transition-colors group max-w-sm w-full"
@@ -162,6 +163,7 @@ export function TopBar({
                 >
                     <Settings className="w-4 h-4" />
                 </button>
+                <AccountPortal />
             </div>
         </header>
     );
