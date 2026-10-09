@@ -69,13 +69,58 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The one build: the vinext Workers bundle that deploys to
+      # omni.syberlabs.io. `dist/client` is what wrangler.jsonc serves as
+      # assets and `dist/server/wrangler.json` is what it deploys from. The dry
+      # run makes wrangler bundle the Worker exactly as a deploy would, without
+      # credentials, so a bundle that cannot be built fails here and not at
+      # deploy time.
       - name: Build
-        run: npm run build
+        run: |
+          set -euo pipefail
+          npm run build
+          test -s dist/server/wrangler.json
+          test -d dist/client
+          ./node_modules/.bin/wrangler deploy --config dist/server/wrangler.json --dry-run --outdir "$RUNNER_TEMP/worker-bundle"
+          test -s "$RUNNER_TEMP/worker-bundle/index.js"
+
+      # The release is the dist/ built above and the Worker bundle the dry run
+      # produced, both from this commit. The build is not byte-reproducible (a
+      # new build id and chunk hashes every run), so a deploy that wants to ship
+      # what this job tested downloads this artifact instead of rebuilding.
+      - name: Stage the tested release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          TESTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$TESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          printf '%s\n' "$TESTED_SHA" > dist/release.txt
+          mkdir -p "$RUNNER_TEMP/release/worker"
+          mv dist "$RUNNER_TEMP/release/dist"
+          cp "$RUNNER_TEMP/worker-bundle/index.js" "$RUNNER_TEMP/release/worker/index.js"
+
+      - name: Upload the tested release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: omnios-release-${{ github.sha }}
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
 
       # Golden-path e2e (apex A3): drives the real built app — spawn Investor
       # shell → blocks render → wires live → mock-LLM Think streams → persists
       # across reload. The LLM is the OMNI_E2E server double (no keys needed).
       # This guards the UI wiring layer where unit tests can't see.
+      #
+      # The harness is `next start`, not the Worker: the Worker bundle compiles
+      # demo mode in (vite.config.ts `define`), which turns /api/llm into a 503
+      # and so cannot run this path. Nothing deploys `.next`; it is a test rig.
+      - name: Build the e2e harness (Next server)
+        run: npm run build:next
+
       - name: Cache Playwright browser
         id: playwright-cache
         uses: actions/cache@v6
@@ -110,8 +155,10 @@ jobs:
   # No provider key may reach the browser.
   #
   # The property the whole server-proxy architecture exists for, asserted by
-  # machine instead of by memory. Builds with a unique canary value standing in
-  # for every secret env var, then fails if any canary is in `.next/static`.
+  # machine instead of by memory. Builds the deployed artefact (the same
+  # `npm run build` as above) with a unique canary value standing in for every
+  # secret env var, then fails if any canary is in `dist/client`, the directory
+  # wrangler.jsonc serves to browsers.
   #
   # Its own job because it needs a DIFFERENT build environment from the main
   # one: you cannot prove secrets stay out of the bundle without building with

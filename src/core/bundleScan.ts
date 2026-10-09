@@ -8,18 +8,19 @@
 //
 // This is the same check, mechanised. CI builds with a unique CANARY value
 // for every secret env var and then looks for those canaries in the client
-// bundle. A canary in `.next/static` means a real key would have been there
-// too: someone renamed a var to NEXT_PUBLIC_*, or inlined a secret into a
-// client component, or imported a server module from one.
+// bundle. A canary in `dist/client` means a real key would have been there
+// too: someone inlined a secret into a client component, imported a server
+// module from one, or added a `define` that bakes an env value in.
 //
 // Scanning for canaries rather than for variable NAMES matters: a name proves
 // nothing (the string "ANTHROPIC_API_KEY" appears harmlessly in server code),
 // and CI has no real keys to scan for.
 //
-// Scope is `.next/static` only, deliberately. Per FINDINGS.md, Turbopack's
-// local compile cache under `.next/cache` can inline env values; that cache is
-// inside the security boundary and is gitignored. `.next/static` is what a
-// browser is actually served.
+// Scope is `dist/client` only, deliberately: it is the `assets.directory`
+// in `wrangler.jsonc`, so it is exactly what a browser is served. The Worker
+// bundle under `dist/server` runs on the server and may legitimately name the
+// variables; a value in it would be a different defect (a build-time env
+// baked into a Worker), not a browser leak.
 // ============================================
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';

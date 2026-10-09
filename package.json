@@ -7,7 +7,8 @@
   },
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
-    "build": "next build",
+    "build": "vinext build",
+    "build:next": "next build",
     "start": "next start -H 127.0.0.1",
     "lint": "eslint",
     "postinstall": "node scripts/patch-eslint-react-filename.mjs",
@@ -18,7 +19,7 @@
     "db:migrate": "npx tsx scripts/migrate.ts",
     "scan:bundle": "npx tsx scripts/scan-client-bundle.ts",
     "dev:vinext": "vinext dev --port 3001",
-    "build:vinext": "vinext build",
+    "build:vinext": "npm run build",
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
     "catalog:build": "tsx scripts/build-api-index.ts",
