@@ -292,4 +292,26 @@ describe('PersonaBlockView — empty states', () => {
         expect(screen.getByText(/2 sources connected/i)).toBeTruthy();
         expect(screen.getByText(/Think, or ask a question/i)).toBeTruthy();
     });
+
+    it('in the public preview, a wired persona says AI answers are off instead of inviting a question', () => {
+        vi.stubEnv('NEXT_PUBLIC_OMNI_PUBLIC_DEMO', '1');
+        try {
+            useWireStore.setState({
+                wires: [{
+                    id: 'w1',
+                    sourceBlockId: 'src-markets',
+                    targetBlockId: PERSONA_ID,
+                    wireType: 'push',
+                    filters: { ...DEFAULT_WIRE_FILTERS },
+                    status: 'active',
+                    shellId: 'root'
+                }]
+            });
+            render(<PersonaBlockView instanceId={PERSONA_ID} />);
+            expect(screen.getByText(/AI answers are off in the public preview/i)).toBeTruthy();
+            expect(screen.queryByText(/Think, or ask a question/i)).toBeNull();
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
 });

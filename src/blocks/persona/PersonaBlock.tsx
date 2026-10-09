@@ -218,7 +218,9 @@ export function PersonaBlockView({ instanceId }: PersonaBlockViewProps) {
                                     {connectedWires.length} {connectedWires.length === 1 ? 'source' : 'sources'} connected
                                 </p>
                                 <p className="text-xs text-[var(--text-muted)]/70 mt-1">
-                                    Ready — Think, or ask a question
+                                    {process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1'
+                                        ? 'AI answers are off in the public preview'
+                                        : 'Ready — Think, or ask a question'}
                                 </p>
                             </>
                         )}
