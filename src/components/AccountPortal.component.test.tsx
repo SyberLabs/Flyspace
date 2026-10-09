@@ -28,7 +28,7 @@ describe('account doorway', () => {
         });
         render(<AccountPortal />);
         fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Restore', exact: true }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Restore$/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Restore canvas' }));
         await screen.findByText('This canvas backup is incomplete.');
         expect(importVault).not.toHaveBeenCalled();
