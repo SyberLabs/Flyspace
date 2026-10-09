@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createPushToTalk } from './pushToTalk';
 import { recognizerAdapter, type RecognitionLike } from './browserSpeechAdapter';
 import { scriptedSpeechAdapter } from './scriptedSpeechAdapter';
-import type { SpeechObservationV1 } from './speechObservation';
+import type { SpeechCapture, SpeechObservationV1 } from './speechObservation';
 
 function recognizer(overrides: Partial<RecognitionLike> = {}): RecognitionLike {
     return {
@@ -76,6 +76,29 @@ describe('push to talk', () => {
         expect(talk.held).toBe(false);
         await expect(talk.release()).resolves.toEqual({ transcript: '', heard: false });
         expect(adapter.stops).toBe(0);
+    });
+
+    it('cancel after release still aborts a capture that is starting, and nothing opens', async () => {
+        let resolve!: (capture: SpeechCapture) => void;
+        const signals: AbortSignal[] = [];
+        const cancelled = vi.fn(async () => undefined);
+        const stop = vi.fn(async () => null);
+        const talk = createPushToTalk({
+            id: 'slow', captureKind: 'synthetic',
+            start: ({ signal }) => {
+                signals.push(signal);
+                return new Promise(done => { resolve = done; });
+            }
+        });
+        void talk.press();
+        const released = talk.release();
+        // The control unmounts while the session is still starting.
+        talk.cancel();
+        expect(signals[0].aborted).toBe(true);
+        resolve({ provider: { kind: 'synthetic' } as unknown as SpeechCapture['provider'], transport: 'synthetic', stop, cancel: cancelled });
+        await expect(released).resolves.toEqual({ transcript: '', heard: false });
+        await vi.waitFor(() => expect(cancelled).toHaveBeenCalledTimes(1));
+        expect(stop).not.toHaveBeenCalled();
     });
 
     it('reports a start failure once, through release, when release came first', async () => {

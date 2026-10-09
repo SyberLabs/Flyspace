@@ -57,6 +57,9 @@ export function createPushToTalk(adapter: SpeechAdapter, options: PushToTalkOpti
     const now = options.now ?? Date.now;
     const newSessionId = options.newSessionId ?? createSpeechSessionId;
     let current: Pending | null = null;
+    // A released session still starting or finalizing. Cancel must reach it:
+    // until it settles, its secret request, microphone or peer can still open.
+    let releasing: Pending | null = null;
 
     function failed(error: unknown): Heard {
         return { transcript: '', heard: false, error: normalizeSpeechError(error) };
@@ -110,37 +113,52 @@ export function createPushToTalk(adapter: SpeechAdapter, options: PushToTalkOpti
             const entry = current;
             if (!entry) return { transcript: '', heard: false };
             current = null;
-            let capture: SpeechCapture;
+            releasing = entry;
             try {
-                capture = await entry.capture;
-            } catch (error) {
-                return failed(error);
+                return await settle(entry);
+            } finally {
+                if (releasing === entry) releasing = null;
             }
-            entry.timings.stopRequestedAtMs = now();
-            let final: SpeechObservationV1 | null;
-            try {
-                final = await capture.stop();
-            } catch (error) {
-                return { ...failed(error), timings: entry.timings };
-            }
-            if (!final || !final.final || final.sessionId !== entry.sessionId) {
-                return { transcript: '', heard: false, timings: entry.timings };
-            }
-            entry.timings.finalAtMs = now();
-            const transcript = final.transcript.trim();
-            return {
-                transcript,
-                heard: transcript.length > 0,
-                observation: transcript ? final : undefined,
-                timings: entry.timings
-            };
         },
         cancel() {
-            const entry = current;
+            const entries = [current, releasing].filter((item): item is Pending => item !== null);
             current = null;
-            if (!entry) return;
-            entry.abort.abort();
-            void entry.capture.then(capture => capture.cancel(), () => undefined).catch(() => undefined);
+            releasing = null;
+            for (const entry of entries) {
+                entry.abort.abort();
+                void entry.capture.then(capture => capture.cancel(), () => undefined).catch(() => undefined);
+            }
         }
     };
+
+    async function settle(entry: Pending): Promise<Heard & { timings?: PushToTalkTimings }> {
+        let capture: SpeechCapture;
+        try {
+            capture = await entry.capture;
+        } catch (error) {
+            if (entry.abort.signal.aborted) return { transcript: '', heard: false };
+            return failed(error);
+        }
+        // Cancelled while starting: cancel() already cancels this capture.
+        if (entry.abort.signal.aborted) return { transcript: '', heard: false };
+        entry.timings.stopRequestedAtMs = now();
+        let final: SpeechObservationV1 | null;
+        try {
+            final = await capture.stop();
+        } catch (error) {
+            return { ...failed(error), timings: entry.timings };
+        }
+        if (entry.abort.signal.aborted) return { transcript: '', heard: false, timings: entry.timings };
+        if (!final || !final.final || final.sessionId !== entry.sessionId) {
+            return { transcript: '', heard: false, timings: entry.timings };
+        }
+        entry.timings.finalAtMs = now();
+        const transcript = final.transcript.trim();
+        return {
+            transcript,
+            heard: transcript.length > 0,
+            observation: transcript ? final : undefined,
+            timings: entry.timings
+        };
+    }
 }
