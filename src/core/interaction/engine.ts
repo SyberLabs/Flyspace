@@ -264,14 +264,20 @@ export class InteractionEngine {
         });
     }
 
-    /** A wire dragged from an output handle onto a block. Same admission as spoken wiring. */
+    /**
+     * A wire dragged from an output handle onto a block. The canvas's own
+     * admission (wireStore.addWire -> admitWire) decides, so a projected wire
+     * such as Text Note -> Speak is admitted exactly as it was before the drag
+     * moved through the engine; a coarse port-type veto here would refuse it.
+     */
     pointerConnect(sourceId: string, targetId: string, timestampMs = Date.now()): SpatialCommand {
         const proposal = this.proposal('connect', [sourceId], {
             modalities: ['pointer'], confidence: 1, timestampMs, evidence: ['pointer-wire']
         });
         proposal.target = { id: targetId };
-        const admission = evaluateWireAdmission(this.canvas.getInstance(sourceId), this.canvas.getInstance(targetId));
-        if (!admission.ok) return this.refuse(proposal, admission.reason);
+        if (!this.canvas.getInstance(sourceId) || !this.canvas.getInstance(targetId)) {
+            return this.refuse(proposal, 'missing-block');
+        }
         const connected = this.canvas.connect(sourceId, targetId);
         if (!connected.ok) return this.refuse(proposal, connected.reason);
         const wireId = connected.wireId;

@@ -3,6 +3,7 @@
 
 import type { BlockInstance, PortSchema } from '@/core/schemas/block.schema';
 import type { CanvasMutator, KeptEntry, RemovedBlock } from './engine';
+import { evaluateWireAdmission } from './ports';
 import type { SpeechShellKind } from './speech';
 import type { CanvasBlockView } from './types';
 
@@ -84,7 +85,10 @@ export class MemoryCanvas implements CanvasMutator {
         return item ? { block: item, wires: [] } : undefined;
     }
     restore(removed: RemovedBlock) { this.blocks.push(removed.block); }
-    connect(sourceId: string, targetId: string) {
+    connect(sourceId: string, targetId: string): { ok: true; wireId: string } | { ok: false; reason: string } {
+        // Stands in for wireStore's admission (typed ports; no projections here).
+        const admission = evaluateWireAdmission(this.getInstance(sourceId), this.getInstance(targetId));
+        if (!admission.ok) return { ok: false, reason: admission.reason };
         const wireId = `wire_${this.wires.length + 1}`;
         this.wires.push({ id: wireId, source: sourceId, target: targetId });
         return { ok: true as const, wireId };
