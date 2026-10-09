@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/core/services/server/auth';
+import { readBoundedJson, RequestBodyTooLarge } from '@/core/services/server/boundedJson';
 import { mintRealtimeTranscriptionSecret, realtimeSpeechConfigured } from '@/core/services/server/realtimeSpeech';
 
 export const runtime = 'nodejs';
@@ -41,12 +42,13 @@ export async function POST(request: NextRequest) {
     }
     let locale: unknown;
     try {
-        const text = await request.text();
-        if (text.length > MAX_BODY_BYTES) return json(400, { error: 'Request body is too large.' });
-        const body: unknown = text ? JSON.parse(text) : {};
+        const body: unknown = request.body
+            ? await readBoundedJson(request, AbortSignal.any([request.signal, AbortSignal.timeout(5000)]), MAX_BODY_BYTES)
+            : {};
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400, { error: 'Invalid JSON' });
         locale = (body as Record<string, unknown>).locale;
-    } catch {
+    } catch (err) {
+        if (err instanceof RequestBodyTooLarge) return json(400, { error: 'Request body is too large.' });
         return json(400, { error: 'Invalid JSON' });
     }
 
