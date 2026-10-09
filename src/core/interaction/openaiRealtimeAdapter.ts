@@ -322,7 +322,7 @@ export function openaiRealtimeAdapter(
 
 /**
  * Uses the primary adapter when it is configured, otherwise the fallback.
- * Only `unconfigured` falls back: a refused microphone or a dropped provider is reported, not hidden.
+ * Only `unconfigured` and `unsupported` (no WebRTC) fall back: a refused microphone or a dropped provider is reported, not hidden.
  */
 export function fallbackSpeechAdapter(
     primary: SpeechAdapter & { probe?(): Promise<boolean> },
@@ -343,7 +343,9 @@ export function fallbackSpeechAdapter(
                 primaryState = 'configured';
                 return capture;
             } catch (error) {
-                if (!(error instanceof SpeechAdapterError) || error.code !== 'unconfigured') throw error;
+                if (!(error instanceof SpeechAdapterError)) throw error;
+                if (error.code === 'unsupported') return fallback.start(input);
+                if (error.code !== 'unconfigured') throw error;
                 primaryState = 'unconfigured';
                 return fallback.start(input);
             }
