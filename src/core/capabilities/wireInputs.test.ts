@@ -5,6 +5,7 @@ import { useWireStore } from '../stores/wireStore';
 import { clearCapabilities, ensureSpeechCapabilities, runInstalledCapability } from './registry';
 import { resolveWiredInputs } from './wireInputs';
 import { setSpeechEngine, type SpeechEngine } from './speech';
+import { spatialSession } from '../interaction/session';
 
 function fakeEngine(): SpeechEngine & { spoken: string[] } {
     const spoken: string[] = [];
@@ -115,5 +116,16 @@ describe('resolveWiredInputs', () => {
         });
         useWireStore.getState().addWire(source, speak);
         expect(resolveWiredInputs(speak)).toEqual({ text: 'from content' });
+    });
+});
+
+describe('a dragged wire (pointerConnect)', () => {
+    it('admits Text Note -> Speak with the projection the canvas admits', () => {
+        const note = place('text_note');
+        const speak = place('cap_speech_speak');
+        expect(spatialSession.pointerConnect(note, speak).lifecycle).toBe('committed');
+        expect(useWireStore.getState().wires).toEqual([
+            expect.objectContaining({ sourceBlockId: note, targetBlockId: speak })
+        ]);
     });
 });

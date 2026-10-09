@@ -97,3 +97,29 @@ describe('undo of a delete', () => {
         expect(warn).not.toHaveBeenCalled();
     });
 });
+
+describe('pointer close through the engine', () => {
+    beforeEach(() => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        useBlockStore.setState({ blocks: [block('src', [jsonOut]), block('dst', [anyIn])], activeShellId: 'root' });
+        useWireStore.setState({ wires: [], lastAdmissionRefusal: null });
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('undo of a close restores the block and its wires', () => {
+        const wireId = useWireStore.getState().addWire('src', 'dst');
+        expect(spatialSession.pointerDelete('dst').lifecycle).toBe('committed');
+        expect(useBlockStore.getState().getBlock('dst')).toBeUndefined();
+        expect(useWireStore.getState().wires).toHaveLength(0);
+
+        expect(spatialSession.undo()).toBe(true);
+
+        expect(useBlockStore.getState().getBlock('dst')?.instance_id).toBe('dst');
+        expect(useWireStore.getState().wires).toEqual([
+            expect.objectContaining({ id: wireId, sourceBlockId: 'src', targetBlockId: 'dst' })
+        ]);
+    });
+});

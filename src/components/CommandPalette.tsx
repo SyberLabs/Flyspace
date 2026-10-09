@@ -21,12 +21,13 @@ import {
 } from 'lucide-react';
 import { useUIStore, useShellStore, useBlockStore, useSettingsStore } from '@/core/stores';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
+import { spatialSession } from '@/core/interaction/session';
 import { BlockGlyph } from '@/components/blockIcons';
 
 export function CommandPalette() {
     const { commandPaletteOpen, closeCommandPalette, toggleCommandPalette } = useUIStore();
     const { shells, createShell, loadShell, setPersona } = useShellStore();
-    const { addBlock, clearCanvas } = useBlockStore();
+    const { clearCanvas } = useBlockStore();
     const { useMockData, toggleMockData, gridSnapping, updateSetting } = useSettingsStore();
 
     // Keyboard shortcut
@@ -50,12 +51,11 @@ export function CommandPalette() {
 
     // Command handlers
     const handleAddBlock = useCallback((blockId: string) => {
-        const schema = blockRegistry.get(blockId);
-        if (schema) {
-            addBlock(schema, { x: 350, y: 100 + Math.random() * 100 });
+        if (blockRegistry.has(blockId)) {
+            spatialSession.pointerCreate(blockId, { x: 350, y: 100 + Math.random() * 100 }, 'command-palette');
             closeCommandPalette();
         }
-    }, [addBlock, closeCommandPalette]);
+    }, [closeCommandPalette]);
 
     const handleCreateShell = useCallback(() => {
         const name = `Shell ${shells.length + 1}`;

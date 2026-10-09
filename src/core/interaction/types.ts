@@ -50,6 +50,20 @@ export type CommandLifecycle =
     | 'cancelled'
     | 'undone';
 
+/** Which speech observation produced a command. Provenance, never authority. */
+export interface SpeechEvidence {
+    observationId: string;
+    sessionId: string;
+    adapterId: string;
+    providerName?: string;
+    model?: string;
+    locale?: string;
+    startedAtMs: number;
+    endedAtMs?: number;
+    receivedAtMs: number;
+    confidence?: number;
+}
+
 export interface SpatialCommand {
     id: string;
     proposalId: string;
@@ -66,6 +80,7 @@ export interface SpatialCommand {
     summary?: string;
     shellId: string;
     timestampMs: number;
+    speech?: SpeechEvidence;
 }
 
 export interface InteractionTrace {
@@ -77,6 +92,9 @@ export interface InteractionTrace {
     to?: { x: number; y: number };
     modalities: InputModality[];
     committedAt: number;
+    speechObservationId?: string;
+    speechSessionId?: string;
+    speechAdapterId?: string;
 }
 
 export interface CanvasBlockView {
