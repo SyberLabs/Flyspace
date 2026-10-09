@@ -141,7 +141,7 @@ export const MUTATION_INVENTORY: InventoryEntry[] = [
             { write: 'updatePosition', in: 'createStoreMutator.move', reason: 'the engine CanvasMutator' },
             { write: 'addBlock', in: 'createStoreMutator.add', reason: 'the engine CanvasMutator' },
             { write: 'removeBlock', in: 'createStoreMutator.remove', reason: 'the engine CanvasMutator' },
-            { write: 'setState', in: 'createStoreMutator.restore', reason: 'the engine CanvasMutator (undo of delete)' },
+            { write: 'replaceWiresForShell', in: 'createStoreMutator.restore', reason: 'the engine CanvasMutator (undo of delete re-admits wires)' },
             { write: 'createWire', in: 'createStoreMutator.connect', reason: 'the engine CanvasMutator' },
             { write: 'removeWire', in: 'createStoreMutator.disconnect', reason: 'the engine CanvasMutator' },
             { write: 'setActiveShell', in: 'createStoreMutator.openShell', reason: 'the engine CanvasMutator' },

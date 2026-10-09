@@ -2,7 +2,7 @@
 // No stores, no persistence.
 
 import type { BlockInstance, PortSchema } from '@/core/schemas/block.schema';
-import type { CanvasMutator } from './engine';
+import type { CanvasMutator, KeptEntry, RemovedBlock } from './engine';
 import type { SpeechShellKind } from './speech';
 import type { CanvasBlockView } from './types';
 
@@ -25,10 +25,7 @@ export function memoryBlock(id: string, options: {
             block_id: options.blockId ?? id,
             display_name: options.name ?? id,
             category: 'workspace',
-            data_type: 'custom',
-            refresh_rate: 'manual',
             semantic_tags: options.tags ?? [],
-            wiring_logic: 'none',
             ports: options.ports ?? [JSON_OUT]
         },
         status: 'disconnected',
@@ -43,6 +40,7 @@ export function memoryBlock(id: string, options: {
 export class MemoryCanvas implements CanvasMutator {
     blocks: BlockInstance[] = [];
     wires: Array<{ id: string; source: string; target: string }> = [];
+    kept: Array<{ id: string; poolId: string; content: string }> = [];
     shell = 'root';
     private created = 0;
 
@@ -83,15 +81,23 @@ export class MemoryCanvas implements CanvasMutator {
     remove(id: string) {
         const item = this.getInstance(id);
         this.blocks = this.blocks.filter(entry => entry.instance_id !== id);
-        return item;
+        return item ? { block: item, wires: [] } : undefined;
     }
-    restore(entry: BlockInstance) { this.blocks.push(entry); }
+    restore(removed: RemovedBlock) { this.blocks.push(removed.block); }
     connect(sourceId: string, targetId: string) {
         const wireId = `wire_${this.wires.length + 1}`;
         this.wires.push({ id: wireId, source: sourceId, target: targetId });
         return { ok: true as const, wireId };
     }
     disconnect(wireId: string) { this.wires = this.wires.filter(wire => wire.id !== wireId); }
+    keep(poolId: string, entry: KeptEntry) {
+        const id = `kept_${this.kept.length + 1}`;
+        this.kept.push({ id, poolId, content: entry.content });
+        return id;
+    }
+    unkeep(poolId: string, entryId: string) {
+        this.kept = this.kept.filter(item => !(item.poolId === poolId && item.id === entryId));
+    }
     openShell(target: SpeechShellKind) {
         const previousShellId = this.shell;
         this.shell = target.kind === 'root' ? 'root' : target.id;
