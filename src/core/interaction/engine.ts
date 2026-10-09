@@ -38,7 +38,7 @@ export interface CanvasMutator {
     remove(id: string): RemovedBlock | undefined;
     /** Re-admits the wires; a wire the canvas would refuse now stays gone. */
     restore(removed: RemovedBlock): void;
-    connect(sourceId: string, targetId: string): { ok: true; wireId: string } | { ok: false; reason: string };
+    connect(sourceId: string, targetId: string): { ok: true; wireId: string; existed?: boolean } | { ok: false; reason: string };
     disconnect(wireId: string): void;
     /** Admit one entry into a Mind pool; returns the entry id so undo can remove it. */
     keep(poolId: string, entry: KeptEntry): string;
@@ -282,7 +282,7 @@ export class InteractionEngine {
             target: targetId,
             modalities: ['pointer'],
             committedAt: timestampMs
-        }, () => this.canvas.disconnect(wireId));
+        }, () => { if (!connected.existed) this.canvas.disconnect(wireId); });
     }
 
     private dropPendingFor(id: string): void {
@@ -725,7 +725,7 @@ export class InteractionEngine {
                 target: targetId,
                 modalities: ['speech'],
                 committedAt: timestampMs
-            }, () => this.canvas.disconnect(wireId));
+            }, () => { if (!connected.existed) this.canvas.disconnect(wireId); });
         }
 
         if (proposal.action === 'delete' && proposal.subjects[0]) {

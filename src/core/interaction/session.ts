@@ -69,11 +69,12 @@ function createStoreMutator(): CanvasMutator {
             useWireStore.getState().replaceWiresForShell(shellId, [...kept, ...missing]);
         },
         connect(sourceId, targetId) {
+            const existed = useWireStore.getState().wireExists(sourceId, targetId);
             const wireId = wireService.createWire(sourceId, targetId);
             if (!wireId) {
                 return { ok: false, reason: useWireStore.getState().lastAdmissionRefusal ?? 'refused' };
             }
-            return { ok: true, wireId };
+            return { ok: true, wireId, existed };
         },
         disconnect(wireId) {
             useWireStore.getState().removeWire(wireId);
