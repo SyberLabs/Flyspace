@@ -19,10 +19,14 @@ Rules for agents (and people) changing OmniOS. Read `README.md` first,
 
 ## Authority boundaries
 
-- **IndexedDB owns the canvas** (blocks, wires, shells, personas, memory) through
-  `src/core/vault/`. **Postgres owns only server-side run records**: inference
+- **IndexedDB owns the live canvas** (blocks, wires, shells, personas, memory) through
+  `src/core/vault/`. The owner explicitly authorized private account backup snapshots
+  on 2026-10-08 (MasterMind `docs/contracts/account-saves-v1.md`). These are only
+  uploaded by Save to account, never synchronized automatically; restore crosses
+  vault validators and resets capability approvals. The backup exception does not
+  move live canvas authority. **Postgres owns only server-side run records**: inference
   runs (`INFERENCE_LEDGER.md`) and the capability broker's execution rows
-  (`db/migrations/004_capability_execution.sql`). Do not move canvas state to a
+  (`db/migrations/004_capability_execution.sql`). Do not move live canvas authority to a
   server, and do not put canvas state in Postgres.
 - **A manifest never grants itself authority.** Compilers only propose a
   `CapabilityManifest`. `installProposal` registers it, write and destructive

@@ -50,7 +50,8 @@ export function AccountPortal() {
                 if (!pending.current) pending.current = { app: 'omni', name: name.trim(), payload: await captureAccountSnapshot(), requestId: crypto.randomUUID() };
                 await accountRequest('saves', pending.current);
                 pending.current = null;
-                await refresh(); setNotice('Private canvas backup saved to your account.');
+                setNotice('Private canvas backup saved to your account.');
+                try { await refresh(); } catch { setNotice('Your backup was saved. The list is unavailable; view saved things in your portal.'); }
             })}>Save to account</button><button disabled={busy} onClick={() => void perform(async () => { downloadSnapshot(await captureAccountSnapshot()); setNotice('Browser backup downloaded.'); })}>Download backup</button></div>
             {notice && <p role="status" className="account-notice">{notice}</p>}
             <h3>Saved canvases</h3>

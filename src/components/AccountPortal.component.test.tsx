@@ -34,6 +34,21 @@ describe('account doorway', () => {
         expect(importVault).not.toHaveBeenCalled();
         expect(localStorage.getItem('omni-blocks')).toBe('original');
     });
+    it('reports a completed save even when refreshing its list fails', async () => {
+        let posted = false;
+        vi.mocked(captureAccountSnapshot).mockResolvedValue({ format: 'omni-vault-export', version: 1, exportedAt: 1, data: {} });
+        vi.mocked(accountRequest).mockImplementation(async (path) => {
+            if (path === 'account') return { user: { id: '1', label: 'Seth' } } as never;
+            if (path.startsWith('saves?')) { if (posted) throw new Error('Offline'); return { saves: [] } as never; }
+            posted = true; return { save: { id: '1' } } as never;
+        });
+        render(<AccountPortal />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+        await screen.findByText('No account backups yet.');
+        fireEvent.click(screen.getByRole('button', { name: 'Save to account' }));
+        await screen.findByText('Your backup was saved. The list is unavailable; view saved things in your portal.');
+        expect(vi.mocked(accountRequest).mock.calls.filter(([path]) => path === 'saves')).toHaveLength(1);
+    });
     it('never uploads automatically and reuses a retry requestId after failure', async () => {
         const bodies: unknown[] = [];
         vi.mocked(captureAccountSnapshot).mockResolvedValue({ format: 'omni-vault-export', version: 1, exportedAt: 1, data: {} });
