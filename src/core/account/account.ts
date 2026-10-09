@@ -14,7 +14,14 @@ export function prepareAccountSnapshot(snapshot: OmniVaultExport): OmniVaultExpo
         if (!STORE_KEYS.has(key)) continue;
         const parsed = JSON.parse(value);
         if (parsed?.state && typeof parsed.state === 'object') {
-            if (key === 'omni-settings') delete parsed.state.apiKeys;
+            if (key === 'omni-settings') {
+                const { useMockData, gridSnapping, gridSize } = parsed.state;
+                parsed.state = { useMockData, gridSnapping, gridSize };
+            }
+            if (key === 'omni-capabilities') {
+                const { manifests, stale } = parsed.state;
+                parsed.state = { manifests, stale };
+            }
             if (key === 'omni-mind' && parsed.state.llmConfig) delete parsed.state.llmConfig.apiKey;
         }
         data[key] = JSON.stringify(parsed);

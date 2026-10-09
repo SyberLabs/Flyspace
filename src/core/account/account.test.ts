@@ -35,6 +35,19 @@ describe('private account snapshots', () => {
         expect(() => validateAccountSnapshot(bad)).toThrow();
         expect(localStorage.getItem('omni-blocks')).toBe('original');
     });
+    it('rejects malformed stale capabilities and removes default-store action overrides', () => {
+        const full = captureLiveStores();
+        const capabilityBlob = JSON.parse(full.data['omni-capabilities']);
+        capabilityBlob.state.stale = [null];
+        expect(() => validateAccountSnapshot({ ...full, data: { ...full.data, 'omni-capabilities': JSON.stringify(capabilityBlob) } })).toThrow();
+        capabilityBlob.state.stale = []; capabilityBlob.state.forgetStale = 'broken';
+        const settingsBlob = JSON.parse(full.data['omni-settings']);
+        settingsBlob.state.updateSetting = 'broken'; settingsBlob.state.toggleMockData = 'broken';
+        const validated = validateAccountSnapshot({ ...full, data: { ...full.data, 'omni-capabilities': JSON.stringify(capabilityBlob), 'omni-settings': JSON.stringify(settingsBlob) } });
+        expect(JSON.parse(validated.data['omni-settings']).state.updateSetting).toBeUndefined();
+        expect(JSON.parse(validated.data['omni-settings']).state.toggleMockData).toBeUndefined();
+        expect(JSON.parse(validated.data['omni-capabilities']).state.forgetStale).toBeUndefined();
+    });
     it('uses internal sealed return navigation', () => {
         expect(new URL(SIGN_IN_URL).searchParams.get('next')).toBe('/admin/return?app=omni');
     });

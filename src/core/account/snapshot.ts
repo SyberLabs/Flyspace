@@ -53,6 +53,6 @@ export function validateStoreEnvelopes(snapshot: OmniVaultExport): void {
     records(mind.personas, PERSONA_SHAPE, 'personas'); records(mind.contextPools, CONTEXT_POOL_SHAPE, 'contextPools');
     for (const pool of mind.contextPools as Record<string, unknown>[]) records(pool.entries, CONTEXT_ENTRY_SHAPE, 'pool.entries');
     check(states['omni-settings'], { useMockData: 'boolean', gridSnapping: 'boolean', gridSize: 'number' }, 'settings');
-    const capabilities = states['omni-capabilities']; check(capabilities.manifests, 'array', 'manifests'); check(capabilities.stale, 'array', 'stale');
+    const capabilities = states['omni-capabilities']; check(capabilities.manifests, 'array', 'manifests'); records(capabilities.stale, { id: 'string', title: 'string', reason: 'string', manifest: 'unknown' }, 'stale');
     for (const manifest of capabilities.manifests as unknown[]) if (!validateManifest(manifest).ok) throw new Error('A capability in this backup is invalid.');
 }
