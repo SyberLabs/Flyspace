@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccountPortal } from './AccountPortal';
 import { importVault } from '@/core/vault/vaultExport';
@@ -79,7 +79,7 @@ describe('account doorway', () => {
         });
         render(<AccountPortal />);
         fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Restore$/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Restore backup/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Restore canvas' }));
         await waitFor(() => expect(accountRequest).toHaveBeenCalledWith('saves/a-save', undefined, 'a'));
         cookieUser = 'b'; fireEvent(window, new Event('focus'));
@@ -102,7 +102,7 @@ describe('account doorway', () => {
         });
         render(<AccountPortal />);
         fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Restore$/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Restore backup/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Restore canvas' }));
         await screen.findByText('This canvas backup is incomplete.');
         expect(importVault).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('account doorway', () => {
         });
         render(<AccountPortal />);
         fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
-        await screen.findByText('No account backups yet.');
+        await screen.findByText(/^No account backups yet\./);
         fireEvent.click(screen.getByRole('button', { name: 'Save to account' }));
         await screen.findByText('Your backup was saved. The list is unavailable; view saved things in your portal.');
         expect(vi.mocked(accountRequest).mock.calls.filter(([path]) => path === 'saves')).toHaveLength(1);
@@ -133,7 +133,7 @@ describe('account doorway', () => {
         });
         render(<AccountPortal />);
         fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
-        await screen.findByText('No account backups yet.');
+        await screen.findByText(/^No account backups yet\./);
         expect(captureAccountSnapshot).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Save to account' }));
         await screen.findByText('Try again');
@@ -143,4 +143,69 @@ describe('account doorway', () => {
         expect(bodies[0]).toEqual(bodies[1]);
         expect(captureAccountSnapshot).toHaveBeenCalledTimes(1);
     });
+    it('distinguishes delayed loading, failed lists and a confirmed empty list without uploading', async () => {
+        let rejectList!: (error: Error) => void;
+        let calls = 0;
+        vi.mocked(accountRequest).mockImplementation(async path => {
+            if (path === 'account') return { user: { id: '1', label: 'Seth' } } as never;
+            calls++;
+            if (calls === 1) return new Promise((_resolve, reject) => { rejectList = reject; });
+            return { saves: [] } as never;
+        });
+        render(<AccountPortal />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+        await screen.findByText('Loading account backups…');
+        expect(screen.queryByText(/^No account backups/)).toBeNull();
+        await act(async () => rejectList(new Error('Offline')));
+        expect((await screen.findByRole('alert')).textContent).toContain('Offline');
+        expect(screen.queryByText(/^No account backups/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Reload backups' }));
+        await screen.findByText(/^No account backups yet\./);
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(captureAccountSnapshot).not.toHaveBeenCalled();
+        expect(calls).toBe(2);
+    });
+    it('focuses safe restore cancellation, previews metadata and returns focus after Escape', async () => {
+        const createdAt = Date.UTC(2026, 9, 8, 16, 30);
+        vi.mocked(accountRequest).mockImplementation(async path => path === 'account'
+            ? { user: { id: '1', label: 'Seth' } } as never
+            : { saves: [{ id: 'saved', name: 'Research orbit', app: 'omni', createdAt, bytes: 4096 }] } as never);
+        render(<AccountPortal />);
+        const accountButton = await screen.findByRole('button', { name: 'Account' });
+        fireEvent.click(accountButton);
+        expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Seth' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore backup Research orbit' }));
+        const preview = screen.getByRole('group', { name: 'Restore Research orbit' });
+        expect(preview.querySelector('time')?.dateTime).toBe(new Date(createdAt).toISOString());
+        expect(preview.textContent).toContain('4 KB');
+        expect(document.activeElement).toBe(within(preview).getByRole('button', { name: 'Cancel' }));
+        expect(importVault).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('group')).toBeNull();
+        expect(document.activeElement).toBe(accountButton);
+        expect(accountRequest).not.toHaveBeenCalledWith('saves/saved', undefined, '1');
+    });
+    it('announces a slow explicit save, ignores Escape while busy and avoids redundant list loads', async () => {
+        let finishSave!: (value: never) => void;
+        let lists = 0;
+        vi.mocked(captureAccountSnapshot).mockResolvedValue({ format: 'omni-vault-export', version: 1, exportedAt: 1, data: {} });
+        vi.mocked(accountRequest).mockImplementation(async path => {
+            if (path === 'account') return { user: { id: '1', label: 'Seth' } } as never;
+            if (path.startsWith('saves?')) { lists++; return { saves: [] } as never; }
+            return new Promise(resolve => { finishSave = resolve; });
+        });
+        render(<AccountPortal />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+        await screen.findByText(/^No account backups yet\./);
+        fireEvent.click(screen.getByRole('button', { name: 'Save to account' }));
+        await screen.findByText('Saving a private backup…');
+        expect((screen.getByRole('button', { name: 'Saving backup…' }) as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.getByRole('heading', { name: 'Seth' })).toBeTruthy();
+        expect(lists).toBe(1);
+        await act(async () => finishSave({ save: { id: 'saved' } } as never));
+        await screen.findByText('Private canvas backup saved to your account.');
+        expect(lists).toBe(2);
+    });
+
 });
