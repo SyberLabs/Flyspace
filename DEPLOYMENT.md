@@ -257,6 +257,13 @@ The versioned contract is `SyberLabs/MasterMind`
 Signing in returns through the sealed `/admin/return?app=omni` path; it does not
 enable paid inference or change the public-preview restrictions.
 
+All backup list, detail and create requests send `X-SyberLabs-Expected-User`
+with the account shown when the operation began. The producer rejects a cookie
+that changed to another account before accessing backup rows. A failed save
+retains its original account, payload and retry UUID; a different displayed
+account cannot take over that retry. Account changes invalidate old panel
+responses before a restore can write browser storage.
+
 Browser IndexedDB remains the live canvas. Save to account explicitly uploads a
 private backup including notes and conversation content. Only current store keys
 are included, legacy provider keys are stripped, and imported write/destructive

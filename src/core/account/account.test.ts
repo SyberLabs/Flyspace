@@ -57,10 +57,10 @@ describe('account protocol', () => {
         const fetch = vi.fn().mockResolvedValue(new Response('{"version":1,"save":{"id":"1"}}'));
         vi.stubGlobal('fetch', fetch);
         const body = { app: 'omni', requestId: 'id', payload: {} };
-        await accountRequest('saves', body);
+        await accountRequest('saves', body, 'user-a');
         expect(fetch).toHaveBeenCalledWith('https://syberlabs.io/admin/api/v1/saves', expect.objectContaining({
             credentials: 'include', method: 'POST', body: JSON.stringify(body),
-            headers: { 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1' }
+            headers: { 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1', 'X-SyberLabs-Expected-User': 'user-a' }
         }));
     });
     it('explains network failure', async () => {
@@ -70,7 +70,22 @@ describe('account protocol', () => {
     it('explains unavailable storage without changing local data', async () => {
         localStorage.setItem('omni-blocks', 'original');
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 503 })));
-        await expect(accountRequest('saves')).rejects.toThrow('Your browser canvas is safe');
+        await expect(accountRequest('saves', undefined, 'user-a')).rejects.toThrow('Your browser canvas is safe');
         expect(localStorage.getItem('omni-blocks')).toBe('original');
+    });
+    it('requires the captured identity for reads and never refreshes it from a changed cookie', async () => {
+        let cookieUser = 'user-b';
+        const fetch = vi.fn(async (_url, options) => {
+            const expected = options.headers['X-SyberLabs-Expected-User'];
+            return expected === cookieUser ? new Response('{"version":1,"saves":[]}') : new Response('{"version":1,"error":"account_changed"}', { status: 409 });
+        });
+        vi.stubGlobal('fetch', fetch);
+        await expect(accountRequest('saves?app=omni', undefined, 'user-a')).rejects.toThrow('account changed');
+        await expect(accountRequest('saves/id', undefined, 'user-a')).rejects.toThrow('account changed');
+        cookieUser = 'user-a';
+        await expect(accountRequest('saves', { requestId: 'original' }, 'user-b')).rejects.toThrow('account changed');
+        expect(fetch).toHaveBeenCalledTimes(3);
+        await expect(accountRequest('saves')).rejects.toThrow('Sign in again');
+        expect(fetch).toHaveBeenCalledTimes(3);
     });
 });
