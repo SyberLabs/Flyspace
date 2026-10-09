@@ -38,7 +38,7 @@ export async function accountRequest<T>(path: string, body?: unknown): Promise<T
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1' },
             body: JSON.stringify(body)
         })
-    });
+    }).catch(() => { throw new Error('Account storage is unavailable. Your browser canvas is safe.'); });
     if (!response.ok) {
         const messages: Record<number, string> = {
             401: 'Sign in again to use your account.',

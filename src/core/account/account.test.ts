@@ -40,6 +40,10 @@ describe('account protocol', () => {
             headers: { 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1' }
         }));
     });
+    it('explains network failure', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+        await expect(accountRequest('account')).rejects.toThrow('Your browser canvas is safe');
+    });
     it('explains unavailable storage without changing local data', async () => {
         localStorage.setItem('omni-blocks', 'original');
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 503 })));
