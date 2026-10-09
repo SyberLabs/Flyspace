@@ -1,0 +1,108 @@
+name: Deploy preview
+
+# Publishes the limited public preview (omni.syberlabs.io, a Cloudflare Worker)
+# after CI is green on main. DEPLOYMENT.md "Deploying the preview" is the
+# procedure this runs; do not change one without the other.
+#
+# Off until an admin turns it on: nothing here runs unless the repository
+# variable DEPLOY_PREVIEW is "true". It also needs:
+#   - secret   CLOUDFLARE_API_TOKEN   a token that can edit Workers scripts
+#                                     and the omni.syberlabs.io route, in the
+#                                     account that owns the omni-os Worker
+#   - variable CLOUDFLARE_ACCOUNT_ID  that account's id (wrangler.jsonc does
+#                                     not name one, and the person who deploys
+#                                     by hand can reach two accounts)
+# The job runs in the "preview-deploy" environment, so required reviewers
+# (GitHub: Settings, Environments) can gate each release.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Releases queue behind each other rather than cancel: a half-finished deploy
+# is worse than a late one.
+concurrency:
+  group: deploy-preview
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to omni.syberlabs.io
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: preview-deploy
+    # Only the push-to-main run of CI that passed, never a pull request's. A
+    # manual run deploys the head of main, whatever CI last said.
+    if: >-
+      vars.DEPLOY_PREVIEW == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'))
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      PREVIEW_URL: https://omni.syberlabs.io
+    steps:
+      - name: Check the deploy is configured
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::Secret CLOUDFLARE_API_TOKEN is not set"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::Variable CLOUDFLARE_ACCOUNT_ID is not set"; exit 1; }
+
+      # The commit CI tested, not whatever main has become since. A manual run
+      # has no CI run, so it takes main's head.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # No environment file reaches this build: the public Worker carries only
+      # the two demo-mode variables in wrangler.jsonc, and no key of any kind
+      # (DEPLOYMENT.md, "Limited public preview").
+      - name: Build and deploy the Worker
+        id: deploy
+        run: npm run deploy:vinext
+
+      - name: Check the deployed preview
+        run: |
+          check() {  # method path expected-status
+            code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' -X "$1" \
+              -H "Origin: $PREVIEW_URL" -H 'content-type: application/json' -d '{}' "$PREVIEW_URL$2")
+            echo "$1 $2 -> $code (want $3)"
+            [ "$code" = "$3" ]
+          }
+          verify() {
+            check GET / 200 &&
+            check POST /api/llm 503 &&
+            check POST /api/jev-persona 503 &&
+            check POST /api/capability-broker 503 &&
+            check POST /api/registry-intent 503 &&
+            check GET /api/inference-runs 503
+          }
+          # A new version can take a few seconds to reach every edge.
+          for attempt in 1 2 3 4 5 6; do
+            verify && exit 0
+            echo "attempt $attempt failed; retrying"
+            sleep 10
+          done
+          exit 1
+
+      # The checks above are the DEPLOYMENT.md gate: if the live host serves a
+      # paid route, restore the previous version before anything else.
+      - name: Roll back a release that failed its checks
+        if: failure() && steps.deploy.conclusion == 'success'
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: npx wrangler rollback --name omni-os --message "Auto rollback, release ${RELEASE_SHA} failed its post-deploy checks" --yes

@@ -90,6 +90,28 @@ Then run the route checks above against `https://omni.syberlabs.io`.
 address. To undo a bad release, `npx wrangler rollback` restores the prior
 version.
 
+### Automatic deploys (off until enabled)
+
+`.github/workflows/deploy-preview.yml` runs the steps above after CI passes
+on a push to `main`, or by hand from the Actions tab. It does nothing until an
+admin sets all of these in the repository:
+
+- variable `DEPLOY_PREVIEW` = `true`
+- variable `CLOUDFLARE_ACCOUNT_ID`: the account that owns the `omni-os` Worker.
+  `wrangler.jsonc` names none, and a person logged in to two accounts must
+  choose; the first deploy went to the account of the person who ran it.
+- secret `CLOUDFLARE_API_TOKEN`: a token that can edit Workers scripts and the
+  `omni.syberlabs.io` route in that account. Create it for this use only.
+- optionally, required reviewers on the `preview-deploy` environment, so each
+  release waits for a person.
+
+After the upload it checks the live host (page 200; `/api/llm`,
+`/api/jev-persona`, `/api/capability-broker`, `/api/registry-intent` and
+`/api/inference-runs` all 503) and runs `wrangler rollback` if any check fails.
+This is the route-check list above, run by a machine. Status: implemented and
+tested for its check script and YAML; not yet run on a runner, because no token
+is configured.
+
 This preview does not satisfy the controls for the full app. Keep the private
 deployment requirements below for any deployment that enables paid LLMs
 or the inference ledger.
