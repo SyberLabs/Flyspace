@@ -61,7 +61,7 @@ export default function CitadelApp() {
 
             {process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1' && (
                 <div className="demo-banner" role="note">
-                    Public preview: your canvas stays in this browser. AI answers and keyed data sources are disabled.
+                    Public preview: your canvas stays in this browser unless you save an account backup. AI answers and keyed data sources are disabled.
                 </div>
             )}
 

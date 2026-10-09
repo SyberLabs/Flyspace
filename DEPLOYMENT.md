@@ -247,3 +247,19 @@ Whatever the target, these carry over:
   deploy silently breaks it; a container on a host that can see Ollama does
   not. That is the main reason a Docker image beats Vercel here, despite
   Vercel being the obvious answer for a Next app.
+
+## SyberLabs private account backups
+
+The upper-right account control uses the host-only session at syberlabs.io via
+credentialed requests to `/admin/api/v1/account` and `/admin/api/v1/saves`.
+The versioned contract is `SyberLabs/MasterMind`
+`docs/contracts/account-saves-v1.md`. Deploy that producer before this consumer.
+Signing in returns through the sealed `/admin/return?app=omni` path; it does not
+enable paid inference or change the public-preview restrictions.
+
+Browser IndexedDB remains the live canvas. Save to account explicitly uploads a
+private backup including notes and conversation content. Only current store keys
+are included, legacy provider keys are stripped, and imported write/destructive
+capability approvals are reset. Restore requires confirmation, downloads the
+current canvas first, validates the backup, and uses the existing vault import
+path. Local downloads remain available if central storage is unavailable.

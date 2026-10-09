@@ -23,20 +23,20 @@ import { newId } from '../id';
 import { admitField, admitRecords, type Shape } from '../vault/hydration';
 
 // What each persisted record must carry to be read back (see vault/hydration).
-const LLM_CONFIG_SHAPE = {
+export const LLM_CONFIG_SHAPE = {
     provider: 'string',
     model: 'string',
     temperature: 'number',
     maxTokens: 'number'
 } as const satisfies Shape<LLMConfig>;
 
-const GRAPH_SHAPE = {
+export const GRAPH_SHAPE = {
     nodes: 'array',
     edges: 'array',
     lastUpdated: 'number'
 } as const satisfies Shape<KnowledgeGraph>;
 
-const PERSONA_SHAPE = {
+export const PERSONA_SHAPE = {
     id: 'string',
     name: 'string',
     description: 'string',
@@ -47,7 +47,7 @@ const PERSONA_SHAPE = {
     updatedAt: 'number'
 } as const satisfies Shape<PersonaConfig>;
 
-const CONTEXT_POOL_SHAPE = {
+export const CONTEXT_POOL_SHAPE = {
     id: 'string',
     name: 'string',
     description: 'string',
@@ -59,7 +59,7 @@ const CONTEXT_POOL_SHAPE = {
     updatedAt: 'number'
 } as const satisfies Shape<ContextPool>;
 
-const CONTEXT_ENTRY_SHAPE = {
+export const CONTEXT_ENTRY_SHAPE = {
     id: 'string',
     type: 'string',
     content: 'string',
