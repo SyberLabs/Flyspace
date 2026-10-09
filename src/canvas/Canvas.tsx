@@ -45,6 +45,9 @@ export function Canvas({ onBrowseShells }: CanvasProps) {
     const [dragDelta, setDragDelta] = useState<{ x: number; y: number } | null>(null);
 
     const hasMounted = useClientMounted();
+    // The public preview has no LLM (/api/llm answers 503), so its first
+    // screen must not promise answers.
+    const isPublicPreview = process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1';
 
     // Filter blocks by shell (only after mount to avoid hydration mismatch).
     // Wires are rendered by WireRenderer straight from the wire store.
@@ -214,10 +217,18 @@ export function Canvas({ onBrowseShells }: CanvasProps) {
                                 <div className="empty-state-title mb-3">
                                     Start with an environment
                                 </div>
-                                <p className="text-[var(--text-secondary)] text-base leading-relaxed mb-7">
-                                    A shell arrives pre-wired — live data blocks already connected to
-                                    personas, so you can ask a question immediately.
-                                </p>
+                                {isPublicPreview ? (
+                                    <p className="text-[var(--text-secondary)] text-base leading-relaxed mb-7">
+                                        A shell arrives pre-wired — live data blocks already connected to
+                                        personas. In this preview you can explore the live data and rewire
+                                        it; asking a persona needs Flyspace running with your own LLM.
+                                    </p>
+                                ) : (
+                                    <p className="text-[var(--text-secondary)] text-base leading-relaxed mb-7">
+                                        A shell arrives pre-wired — live data blocks already connected to
+                                        personas, ready for a question once an LLM is connected.
+                                    </p>
+                                )}
                                 {onBrowseShells && (
                                     <button
                                         onClick={onBrowseShells}
