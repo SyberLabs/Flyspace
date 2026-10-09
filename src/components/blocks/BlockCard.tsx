@@ -88,7 +88,9 @@ export function BlockCard({
 
     return (
         <motion.div
-            layout
+            // Size only: a position layout animation counter-translates the
+            // card while dnd-kit moves its wrapper, so it lags the cursor.
+            layout="size"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{
                 opacity: 1,

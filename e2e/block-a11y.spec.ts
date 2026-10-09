@@ -15,6 +15,11 @@ async function blockX(page: Page, name: string): Promise<number> {
     });
 }
 
+/** Where the card is drawn on screen, so a drag that only moves its wrapper is caught. */
+async function cardScreenX(page: Page, name: string): Promise<number> {
+    return page.getByRole('button', { name: `Move ${name}` }).evaluate((el) => el.closest('.block-card')?.getBoundingClientRect().x ?? NaN);
+}
+
 /** The in-flight dnd-kit x offset on the block's wrapper, 0 when not dragging. */
 async function dragOffsetX(page: Page, name: string): Promise<number> {
     return page.getByRole('button', { name: `Move ${name}` }).evaluate((el) => {
@@ -62,12 +67,15 @@ test('block a11y: the drag handle moves a block by pointer and by keyboard', asy
 
     // Pointer drag on the grip.
     const start = await blockX(page, 'World Bank');
+    const startScreen = await cardScreenX(page, 'World Bank');
     const box = (await handle.boundingBox())!;
     const y = box.y + box.height / 2;
     await page.mouse.move(box.x + box.width / 2, y);
     await page.mouse.down();
     await page.mouse.move(box.x + 60, y, { steps: 10 });
     await page.mouse.move(box.x + 120, y, { steps: 10 });
+    // The card itself follows the cursor mid-drag, not only once it is dropped.
+    expect(await cardScreenX(page, 'World Bank')).toBeGreaterThanOrEqual(startScreen + 80);
     await page.mouse.up();
     await expect.poll(() => blockX(page, 'World Bank')).toBeGreaterThanOrEqual(start + 80);
 
