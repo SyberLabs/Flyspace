@@ -7,7 +7,8 @@ import { importVault, type OmniVaultExport } from '@/core/vault/vaultExport';
 
 function BackupMetadata({ save }: { save: SavedCanvas }) {
     const date = new Date(save.createdAt);
-    return <small><time dateTime={date.toISOString()}>{date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time> · {Math.max(1, Math.ceil(save.bytes / 1024))} KB</small>;
+    const validDate = Number.isFinite(date.getTime());
+    return <small><time dateTime={validDate ? date.toISOString() : undefined}>{validDate ? date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Date unavailable'}</time> · {Number.isFinite(save.bytes) ? `${Math.max(1, Math.ceil(save.bytes / 1024))} KB` : 'Size unavailable'}</small>;
 }
 
 export function AccountPortal() {
@@ -70,12 +71,12 @@ export function AccountPortal() {
     useEffect(() => {
         if (!open || !account) return;
         const userId = account.user.id; const version = generation.current;
-        panelTitle.current?.focus();
         void refresh(userId, version).catch(() => {});
         const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busyRef.current) { generation.current++; setOpen(false); setRestore(null); trigger.current?.focus(); } };
         window.addEventListener('keydown', escape);
         return () => window.removeEventListener('keydown', escape);
     }, [open, account]);
+    useEffect(() => { if (open) panelTitle.current?.focus(); }, [open]);
     useEffect(() => { if (restore) cancelRestore.current?.focus(); }, [restore]);
     const close = () => { generation.current++; setOpen(false); setRestore(null); trigger.current?.focus(); };
     const perform = async (kind: 'saving' | 'downloading' | 'restoring', action: () => Promise<void>) => {
@@ -88,13 +89,13 @@ export function AccountPortal() {
     if (!account) return <a href={SIGN_IN_URL} className="account-entry"><UserRound size={15} aria-hidden="true" />Sign in</a>;
     return <div className="account-control">
         <button ref={trigger} className="account-entry" disabled={busy} onClick={() => { if (open) close(); else { generation.current++; setOpen(true); } }} aria-expanded={open} aria-controls="account-portal"><UserRound size={15} aria-hidden="true" />Account</button>
-        {open && <section id="account-portal" className="account-panel" aria-busy={busy} aria-label="Your SyberLabs account">
+        {open && <section id="account-portal" className="account-panel" aria-label="Your SyberLabs account">
             <div className="account-panel-heading"><div><small>SYBERLABS / YOUR ORBIT</small><h2 ref={panelTitle} tabIndex={-1}>{account.user.label}</h2></div><button aria-label="Close account panel" disabled={busy} onClick={close}><X size={18} /></button></div>
             <a className="account-portal-link" href="https://syberlabs.io/admin/">Enter your portal ↗</a>
             <p>Your canvas stays in this browser. Save a private backup to your account when you choose; notes and conversation content are included.</p>
             <label htmlFor="account-save-name">Backup name</label>
             <input id="account-save-name" autoComplete="off" disabled={busy} value={name} maxLength={100} onChange={event => { setName(event.target.value); pending.current = null; setRetryAvailable(false); }} />
-            <div className="account-actions"><button disabled={busy || !name.trim()} onClick={() => void perform('saving', async () => {
+            <div className="account-actions" aria-busy={busy}><button disabled={busy || !name.trim()} onClick={() => void perform('saving', async () => {
                 const userId = account.user.id; const version = generation.current;
                 if (pending.current && pending.current.userId !== userId) throw new Error('This retry belongs to your previous account. Sign back into that account to retry, or change the backup name to start a new save. Your browser canvas is safe.');
                 if (!pending.current) {
@@ -111,7 +112,7 @@ export function AccountPortal() {
             })}>{operation === 'saving' ? 'Saving backup…' : 'Save to account'}</button><button disabled={busy} onClick={() => void perform('downloading', async () => { downloadSnapshot(await captureAccountSnapshot()); setNotice('Browser backup downloaded.'); })}>{operation === 'downloading' ? 'Downloading…' : 'Download backup'}</button></div>
             <p role="status" className="account-notice">{operation ? { saving: 'Saving a private backup…', downloading: 'Preparing your browser backup…', restoring: 'Checking this backup and restoring your canvas…' }[operation] : notice}</p>
             {!busy && retryAvailable && <p className="account-retry">Retry saves the same captured canvas. Change the name to capture a new backup.</p>}
-            {restore && <div className="account-restore" role="group" aria-label={`Restore ${restore.name}`}><h3>Open this backup?</h3><BackupMetadata save={restore} /><p>Restore “{restore.name}” and replace this browser canvas? A local backup will download first. Imported write actions will need approval again.</p><div className="account-actions"><button disabled={busy} onClick={() => void perform('restoring', async () => {
+            {restore && <div className="account-restore" role="group" aria-label={`Restore ${restore.name}`}><h3>Open this backup?</h3><BackupMetadata save={restore} /><p>Restore “{restore.name}” and replace this browser canvas? A local backup will download first. Imported write actions will need approval again.</p><div className="account-actions" aria-busy={busy}><button disabled={busy} onClick={() => void perform('restoring', async () => {
                 const userId = account.user.id; const version = generation.current;
                 const result = await accountRequest<{ save: SavedCanvas }>(`saves/${encodeURIComponent(restore.id)}`, undefined, userId);
                 assertCurrent(userId, version);

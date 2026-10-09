@@ -198,7 +198,8 @@ describe('account doorway', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
         await screen.findByText(/^No account backups yet\./);
         fireEvent.click(screen.getByRole('button', { name: 'Save to account' }));
-        await screen.findByText('Saving a private backup…');
+        const progress = await screen.findByText('Saving a private backup…');
+        expect(progress.closest('[aria-busy="true"]')).toBeNull();
         expect((screen.getByRole('button', { name: 'Saving backup…' }) as HTMLButtonElement).disabled).toBe(true);
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(screen.getByRole('heading', { name: 'Seth' })).toBeTruthy();
@@ -206,6 +207,45 @@ describe('account doorway', () => {
         await act(async () => finishSave({ save: { id: 'saved' } } as never));
         await screen.findByText('Private canvas backup saved to your account.');
         expect(lists).toBe(2);
+    });
+
+    it('keeps unreadable backup metadata from crashing the account panel', async () => {
+        vi.mocked(accountRequest).mockImplementation(async path => path === 'account'
+            ? { user: { id: '1', label: 'Seth' } } as never
+            : { saves: [{ id: 'saved', name: 'Undated backup', app: 'omni', createdAt: 1e30, bytes: NaN }] } as never);
+        render(<AccountPortal />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+        await screen.findByText(/Date unavailable/);
+        fireEvent.click(screen.getByRole('button', { name: 'Restore backup Undated backup' }));
+        const preview = screen.getByRole('group', { name: 'Restore Undated backup' });
+        expect(preview.textContent).toContain('Date unavailable');
+        expect(preview.textContent).toContain('Size unavailable');
+        expect(preview.querySelector('time')?.hasAttribute('datetime')).toBe(false);
+        expect(importVault).not.toHaveBeenCalled();
+    });
+
+    it('preserves editing and safe Cancel focus when the same account refreshes on window focus', async () => {
+        let identityRequests = 0;
+        vi.mocked(accountRequest).mockImplementation(async path => {
+            if (path === 'account') { identityRequests++; return { user: { id: '1', label: 'Seth' } } as never; }
+            return { saves: [{ id: 'saved', name: 'Research orbit', app: 'omni', createdAt: 1, bytes: 1 }] } as never;
+        });
+        render(<AccountPortal />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+        const input = screen.getByLabelText('Backup name') as HTMLInputElement;
+        input.focus(); input.setSelectionRange(2, 5);
+        fireEvent(window, new Event('focus'));
+        await waitFor(() => expect(identityRequests).toBe(2));
+        expect(document.activeElement).toBe(input);
+        expect(input.selectionStart).toBe(2);
+        expect(input.selectionEnd).toBe(5);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore backup Research orbit' }));
+        const cancel = screen.getByRole('button', { name: 'Cancel' });
+        expect(document.activeElement).toBe(cancel);
+        fireEvent(window, new Event('focus'));
+        await waitFor(() => expect(identityRequests).toBe(3));
+        expect(document.activeElement).toBe(cancel);
+        expect(importVault).not.toHaveBeenCalled();
     });
 
 });
