@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { compileOpenApi } from './openapi';
 
-function spec(parameter: Record<string, unknown>) {
+function spec(parameter: Record<string, unknown>, method = 'get') {
     return {
         openapi: '3.0.3',
         info: { title: 'Events', version: '1' },
         servers: [{ url: 'https://events.example.test' }],
         paths: {
             '/events': {
-                get: {
+                [method]: {
                     operationId: 'events.list',
                     parameters: [
                         { name: 'q', in: 'query', schema: { type: 'string' } },
@@ -31,6 +31,12 @@ describe('compound query and header parameters', () => {
     it('leaves an optional object header out', () => {
         const { manifests } = compileOpenApi(spec({ name: 'X-Filter', in: 'header', schema: { type: 'object', properties: { a: { type: 'string' } } } }));
         expect(manifests[0].inputs.map(input => input.name)).toEqual(['q']);
+    });
+
+    it('still refuses a write with an optional compound parameter', () => {
+        const { manifests, errors } = compileOpenApi(spec({ name: 'tags', in: 'query', schema: { type: 'array', items: { type: 'string' } } }, 'post'));
+        expect(manifests).toEqual([]);
+        expect(errors[0].message).toBe('tags: compound query parameters are outside the supported subset');
     });
 
     it('still refuses an operation whose required parameter is compound', () => {
