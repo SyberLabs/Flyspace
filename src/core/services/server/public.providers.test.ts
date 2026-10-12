@@ -61,6 +61,12 @@ describe('fetchPublicProvider', () => {
         expect(calls[0].url).not.toMatch(/api[_-]?key/i);
     });
 
+    it('Frankfurter asks its current address, not the old one that answers 301', async () => {
+        const calls = captureFetch({ base: 'USD', rates: {} });
+        await fetchPublicProvider('frankfurter', {});
+        expect(new URL(calls[0].url).origin + new URL(calls[0].url).pathname).toBe('https://api.frankfurter.dev/v1/latest');
+    });
+
     it('GitHub search stays on api.github.com with a User-Agent', async () => {
         const calls = captureFetch({ items: [] });
         await fetchPublicProvider('github', { q: 'omni' });

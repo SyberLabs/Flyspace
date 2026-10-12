@@ -18,8 +18,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseApiIndex, type ApiIndexEntry } from '../src/core/capabilities/apiIndex';
 import { CURATED_APIS } from '../src/core/capabilities/curatedApis';
+import { SHELL_TEMPLATES } from '../src/core/shells/templates';
 
-const KIT = 'World Watch';
+/** The kit timed for "first live data"; every kit is checked for blocks live on the first try. */
+const TIMED_KIT = 'World Watch';
 /** How long a kit's blocks get to reach live data before they count as not running. */
 const SETTLE_MS = 20_000;
 
@@ -55,6 +57,51 @@ function catalog(): void {
     console.log(`| verified by the quality line | 0 | not built yet (APEX_PLAN 6.4) |`);
 }
 
+/** Open a fresh browser, take a kit, and return how long first live data took and each data block's status. */
+async function takeKit(browser: import('@playwright/test').Browser, url: string, kit: string): Promise<{ firstLive: number | null; statuses: string[] }> {
+    const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+    const page = await context.newPage();
+    try {
+        const started = Date.now();
+        await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
+        await page.getByTitle('Shell Manager').click();
+        await page.locator('.group').filter({ hasText: kit }).getByRole('button', { name: 'Use this shell' }).click();
+        const tookShell = Date.now();
+        let firstLive: number | null = null;
+        try {
+            await page.locator('.block-card[data-status="connected"]').first().waitFor({ timeout: SETTLE_MS });
+            firstLive = Date.now() - started;
+        } catch { /* nothing came live */ }
+        await page.waitForTimeout(Math.max(0, SETTLE_MS - (Date.now() - tookShell)));
+        // Persona and memory blocks wait for a question; only data blocks are expected to run.
+        const statuses = await page.locator('.block-card').evaluateAll(cards => cards
+            .filter(card => !/^(persona_|memory_)/.test(card.getAttribute('data-block-type') ?? ''))
+            .map(card => `${card.getAttribute('data-block-type')}:${card.getAttribute('data-status') ?? 'unknown'}`));
+        return { firstLive, statuses };
+    } finally {
+        await context.close();
+    }
+}
+
+async function kits(url: string): Promise<void> {
+    const { chromium } = await import('@playwright/test');
+    const browser = await chromium.launch();
+    console.log('## Kits: data blocks live on the first try');
+    console.log('');
+    console.log('| Kit | Live | Not live |');
+    console.log('| --- | --- | --- |');
+    try {
+        for (const template of SHELL_TEMPLATES) {
+            const { statuses } = await takeKit(browser, url, template.name);
+            const live = statuses.filter(s => s.endsWith(':connected'));
+            const notLive = statuses.filter(s => !s.endsWith(':connected'));
+            console.log(`| ${template.name} | ${live.length}/${statuses.length} | ${notLive.join(', ') || 'none'} |`);
+        }
+    } finally {
+        await browser.close();
+    }
+}
+
 async function firstRun(url: string, runs: number): Promise<void> {
     const { chromium } = await import('@playwright/test');
     const browser = await chromium.launch();
@@ -62,25 +109,11 @@ async function firstRun(url: string, runs: number): Promise<void> {
     const firstTry: string[] = [];
     try {
         for (let run = 1; run <= runs; run++) {
-            const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-            const page = await context.newPage();
-            const started = Date.now();
-            await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
-            await page.getByTitle('Shell Manager').click();
-            await page.locator('.group').filter({ hasText: KIT }).getByRole('button', { name: 'Use this shell' }).click();
-            const tookShell = Date.now();
-            await page.locator('.block-card[data-status="connected"]').first().waitFor({ timeout: SETTLE_MS });
-            const firstLive = Date.now() - started;
-            times.push(firstLive);
-            await page.waitForTimeout(Math.max(0, SETTLE_MS - (Date.now() - tookShell)));
-            // Persona blocks wait for a question; only data blocks are expected to run.
-            const statuses = await page.locator('.block-card').evaluateAll(cards => cards
-                .filter(card => !(card.getAttribute('data-block-type') ?? '').startsWith('persona_'))
-                .map(card => card.getAttribute('data-status') ?? 'unknown'));
-            const live = statuses.filter(s => s === 'connected').length;
+            const { firstLive, statuses } = await takeKit(browser, url, TIMED_KIT);
+            if (firstLive !== null) times.push(firstLive);
+            const live = statuses.filter(s => s.endsWith(':connected')).length;
             firstTry.push(`${live}/${statuses.length}`);
-            console.log(`run ${run}: first live data ${firstLive} ms; data blocks live after ${SETTLE_MS / 1000}s: ${live}/${statuses.length} (${statuses.join(', ')})`);
-            await context.close();
+            console.log(`run ${run}: first live data ${firstLive ?? 'never'} ms; data blocks live after ${SETTLE_MS / 1000}s: ${live}/${statuses.length} (${statuses.join(', ')})`);
         }
     } finally {
         await browser.close();
@@ -88,7 +121,7 @@ async function firstRun(url: string, runs: number): Promise<void> {
     const sorted = [...times].sort((a, b) => a - b);
     console.log('');
     console.log('## First run');
-    console.log(`Fresh browser, ${KIT} kit, ${runs} run(s) against ${url}.`);
+    console.log(`Fresh browser, ${TIMED_KIT} kit, ${runs} run(s) against ${url}.`);
     console.log(`Time to first live data: median ${sorted[Math.floor(sorted.length / 2)]} ms (runs: ${times.join(', ')} ms).`);
     console.log(`Data blocks live on the first try: ${firstTry.join(', ')}.`);
 }
@@ -99,6 +132,8 @@ async function main(): Promise<void> {
     if (url) {
         console.log('');
         await firstRun(url, Number(arg('runs') ?? 3));
+        console.log('');
+        await kits(url);
     }
 }
 
