@@ -398,6 +398,10 @@ function collectInputs(
             return { error: `parameter location ${String(location)} is unsupported` };
         }
         const converted = fromJsonSchema(isRecord(parameter.schema) || Array.isArray(parameter.schema) ? parameter.schema : { type: 'string' }, spec);
+        const rawSchema = deref(spec, parameter.schema);
+        const rawCompound = isRecord(rawSchema) && (rawSchema.type === 'array' || rawSchema.type === 'object');
+        const readOnly = method === 'GET' || method === 'HEAD';
+        if (!converted.ok && readOnly && location !== 'path' && parameter.required !== true && rawCompound) continue;
         if (!converted.ok) return { error: `${String(parameter.name)}: ${converted.error}` };
         if ((location === 'query' || location === 'header') && (converted.schema.kind === 'object' || converted.schema.kind === 'array')) {
             // An optional one can be left out of a read: the operation still
