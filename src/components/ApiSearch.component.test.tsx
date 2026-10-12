@@ -23,7 +23,9 @@ const INDEX: ApiIndex = {
         entry('thesmsworks.co.uk', 'The SMS Works API', { openapiVersion: '2.0', supported: false }),
         entry('nytimes.com:archive', 'Archive API', { description: 'is it going to rain tomorrow headlines' }),
         entry('googleapis.com:calendar', 'Calendar API', { description: 'calendar events', operations: 0, blocker: 'It needs a sign-in Flyspace does not support yet (OAuth, or several keys at once)' }),
-        entry('1password.com:events', 'Events API', { description: 'calendar events audit', operations: 3 })
+        entry('1password.com:events', 'Events API', { description: 'calendar events audit', operations: 3, credential: 'key' }),
+        entry('holidays.example', 'Holiday Dates', { description: 'public holiday dates', operations: 2, credential: 'none' }),
+        entry('holidays-pro.example', 'Holiday Planner Pro', { description: 'holiday planner', operations: 5, credential: 'key' })
     ]
 };
 
@@ -112,6 +114,18 @@ describe('ApiSearch', () => {
         expect(dead.disabled).toBe(true);
         fireEvent.click(dead);
         expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('says what each result needs to run, and filters to the ones that need no key', async () => {
+        serve();
+        render(<ApiSearch onSelect={() => {}} />);
+        await search('holiday');
+        expect(screen.getByRole('button', { name: 'Review Holiday Planner Pro' }).textContent).toContain('needs a key');
+        expect(screen.getByRole('button', { name: 'Review Holiday Dates' }).textContent).toContain('no key');
+
+        fireEvent.click(screen.getByRole('button', { name: 'No key needed' }));
+        expect(screen.getByRole('button', { name: 'No key needed' }).getAttribute('aria-pressed')).toBe('true');
+        expect(resultNames()).toEqual(['Review Holiday Dates']);
     });
 
     it('falls back to pasting when the directory cannot be loaded', async () => {

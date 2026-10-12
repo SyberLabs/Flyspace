@@ -24,6 +24,9 @@ function intentLabel(id: string): string {
 }
 
 /** `2023-03` — enough to tell a fresh spec from a stale one at a glance. */
+/** What a result needs to run, in a few words. */
+const CREDENTIAL_LABEL = { none: 'no key', partial: 'some need a key', key: 'needs a key' } as const;
+
 /** `12 operations`, or `100+ operations` at the compiler's cap. */
 function operationCount(count: number): string {
     return `${count}${count >= MAX_INDEXED_OPERATIONS ? '+' : ''} operation${count === 1 ? '' : 's'}`;
@@ -77,10 +80,13 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
     // Routing applies only to the query it was asked for. Typing on drops back
     // to keyword order until Enter asks again.
     const scores = routing && routing.query === query.trim() ? routing.scores : null;
-    const results = useMemo(
-        () => (searcher && query.trim() ? rankResults(query, searcher, byId, scores).slice(0, SHOWN) : []),
-        [searcher, byId, query, scores]
-    );
+    const [keylessOnly, setKeylessOnly] = useState(false);
+    const results = useMemo(() => {
+        if (!searcher || !query.trim()) return [];
+        // Rank a wider pool when filtering, so the filter does not empty the list.
+        const ranked = rankResults(query, searcher, byId, scores, keylessOnly ? { limit: SHOWN * 6 } : {});
+        return (keylessOnly ? ranked.filter(r => r.entry.credential === 'none') : ranked).slice(0, SHOWN);
+    }, [searcher, byId, query, scores, keylessOnly]);
     const understoodAs = routedIntents(scores).map(score => intentLabel(score.id));
     const nothingYet = unavailableIntents(scores);
 
@@ -129,6 +135,16 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                                 ? 'Enter searches by meaning. Your search text, and only that, is sent to TypeSafe (JEV).'
                                 : null}
                 </p>
+                <button
+                    type="button"
+                    aria-pressed={keylessOnly}
+                    onClick={() => setKeylessOnly(on => !on)}
+                    className={`rounded-full border px-2 py-0.5 text-[11px] ${keylessOnly
+                        ? 'border-[var(--citadel-primary)] text-[var(--text-primary)]'
+                        : 'border-[var(--citadel-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+                >
+                    No key needed
+                </button>
                 {!routingBusy && nothingYet.length > 0 ? (
                     <p role="status" className="text-[11px] leading-4 text-[var(--truth-amber)] [overflow-wrap:anywhere]">
                         {nothingYet.map(({ id, reason }) => `No ${intentLabel(id)} API Flyspace can use yet. ${reason}`).join(' ')}
@@ -181,6 +197,7 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                                             {source === 'intent' && intent ? <span>· matches “{intentLabel(intent)}”</span> : null}
                                             {entry.supported ? null : <span>· Swagger {entry.openapiVersion}, not supported yet</span>}
                                             {entry.operations ? <span>· {operationCount(entry.operations)}</span> : null}
+                                            {entry.credential ? <span>· {CREDENTIAL_LABEL[entry.credential]}</span> : null}
                                         </span>
                                         {entry.supported && entry.operations === 0 ? (
                                             <span className="mt-0.5 block text-[11px] text-[var(--truth-amber)] [overflow-wrap:anywhere]">

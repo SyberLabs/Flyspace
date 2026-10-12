@@ -7,6 +7,8 @@ import { useCapabilityStore } from '@/core/capabilities/store';
 import type { CapabilityManifest } from '@/core/capabilities/manifest';
 import { EffectPill, MethodBadge, destinationOf, operationParts } from './ApiReview';
 import { KeyField, keySlotOf, useHasKey } from './KeyField';
+import { keyGuideFor } from '@/core/capabilities/keyGuide';
+import { KeyGuideNote, TestKeyButton } from './KeyGuideNote';
 
 /**
  * One row per key slot. Operations of one API share a slot, so the key is
@@ -37,6 +39,7 @@ function KeyRow({ manifest, count }: { manifest: CapabilityManifest; count: numb
                         className="rounded border border-[var(--citadel-border)] px-2 py-0.5 hover:bg-[var(--citadel-elevated)]">
                         {hasKey ? 'Change key' : 'Enter key'}
                     </button>
+                    {hasKey && keyGuideFor(manifest) ? <TestKeyButton guide={keyGuideFor(manifest)!} manifest={manifest} /> : null}
                     {hasKey ? (
                         <button type="button" onClick={() => capabilitySecrets.revoke(ref)}
                             aria-label={`Forget key for ${destination?.origin ?? ref}`}

@@ -4,6 +4,7 @@
 // the server broker: that is the host's choice, never a pasted document's.
 
 import type { ApiIndexEntry } from './apiIndex';
+import type { KeyGuide } from './keyGuide';
 import { ALPHA_VANTAGE_SPEC } from './curated/alphaVantage';
 import { BLS_SPEC } from './curated/bls';
 import { FRED_SPEC } from './curated/fred';
@@ -15,6 +16,8 @@ export interface CuratedApi {
     spec: Record<string, unknown>;
     /** Origins reached through the server broker: the API refuses browser calls. */
     brokerOrigins: string[];
+    /** How to get its key, from the provider's own pages (checked 2026-10-12). */
+    keyGuide?: Omit<KeyGuide, 'source'>;
 }
 
 export const CURATED_APIS: readonly CuratedApi[] = [
@@ -33,6 +36,13 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             curated: true
         },
         spec: FRED_SPEC,
+        keyGuide: {
+            url: 'https://fredaccount.stlouisfed.org/apikeys',
+            requires: 'A free FRED account (fredaccount.stlouisfed.org); the key page needs you signed in.',
+            freeTier: 'Free.',
+            format: { pattern: '^[a-z0-9]{32}$', describe: '32 lowercase letters and digits' },
+            test: { operationId: 'getSeriesObservations', input: { series_id: 'GDP', file_type: 'json', limit: 1 } }
+        },
         brokerOrigins: ['https://api.stlouisfed.org']
     },
     {
@@ -68,6 +78,12 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             curated: true
         },
         spec: ALPHA_VANTAGE_SPEC,
+        keyGuide: {
+            url: 'https://www.alphavantage.co/support/#api-key',
+            requires: 'A short form: what describes you, your organization, and your email.',
+            freeTier: '25 requests a day.',
+            test: { operationId: 'query', input: { function: 'GLOBAL_QUOTE', symbol: 'IBM' } }
+        },
         // Alpha Vantage sends Access-Control-Allow-Origin: *, so the browser calls it.
         brokerOrigins: []
     },
@@ -86,6 +102,13 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             curated: true
         },
         spec: NEWS_API_SPEC,
+        keyGuide: {
+            url: 'https://newsapi.org/register',
+            requires: 'A free NewsAPI account.',
+            freeTier: '100 requests a day; articles arrive 24 hours late.',
+            caveat: 'NewsAPI allows its free plan for development and testing only, not in production.',
+            test: { operationId: 'topHeadlines', input: { country: 'us', pageSize: 1 } }
+        },
         brokerOrigins: ['https://newsapi.org']
     },
     {
@@ -103,6 +126,11 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             curated: true
         },
         spec: METACULUS_SPEC,
+        keyGuide: {
+            url: 'https://www.metaculus.com',
+            requires: 'A free Metaculus account; the API token is issued from your account.',
+            test: { operationId: 'listPosts', input: { limit: 1 } }
+        },
         brokerOrigins: ['https://www.metaculus.com']
     }
 ];

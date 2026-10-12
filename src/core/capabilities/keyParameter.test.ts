@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isKeyParameter } from './credentialName';
+import { isKeyParameter, operationNeedsCredential } from './credentialName';
 import { credentialSlot } from './identity';
 import { MAX_AUTH_HINT, validateManifest } from './manifest';
 import { compileOpenApi } from './openapi';
@@ -135,5 +135,25 @@ describe('running a block whose key came from a parameter', () => {
         expect(url.searchParams.get('license')).toBe('session-license');
         expect(url.searchParams.get('city')).toBe('Seattle');
         expect(JSON.stringify(useBlockStore.getState().blocks)).not.toContain('session-license');
+    });
+});
+
+describe('operationNeedsCredential', () => {
+    const op = (inputs: { name: string; in: string; required: boolean; description?: string }[], kind = 'none') => ({
+        auth: { kind },
+        inputs: inputs.map(i => ({ name: i.name, in: i.in, required: i.required, schema: { description: i.description } }))
+    });
+
+    it('counts a declared scheme, and a key left as an ordinary input', () => {
+        expect(operationNeedsCredential(op([], 'apiKey'))).toBe(true);
+        expect(operationNeedsCredential(op([{ name: 'key', in: 'query', required: true }]))).toBe(true); // Visual Crossing
+        expect(operationNeedsCredential(op([{ name: 'api_key', in: 'query', required: false }]))).toBe(true);
+    });
+
+    it('does not count a cursor, an optional ambiguous name, or a path segment', () => {
+        expect(operationNeedsCredential(op([{ name: 'page_token', in: 'query', required: true, description: 'Token for the next page' }]))).toBe(false);
+        expect(operationNeedsCredential(op([{ name: 'key', in: 'query', required: false }]))).toBe(false);
+        expect(operationNeedsCredential(op([{ name: 'key', in: 'path', required: true }]))).toBe(false);
+        expect(operationNeedsCredential(op([{ name: 'city', in: 'query', required: true }]))).toBe(false);
     });
 });

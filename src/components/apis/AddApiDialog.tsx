@@ -6,6 +6,8 @@ import { ApiSearch } from '@/components/ApiSearch';
 import type { ApiIndexEntry } from '@/core/capabilities/apiIndex';
 import { compileOpenApi } from '@/core/capabilities/openapi';
 import { curatedApi } from '@/core/capabilities/curatedApis';
+import { checkKeyFormat, keyGuideFor } from '@/core/capabilities/keyGuide';
+import { KeyGuideNote } from './KeyGuideNote';
 import { fetchCatalogSpec, RegistryFetchError } from '@/core/capabilities/registrySearch';
 import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/capabilities/secrets';
 import { installProposal } from '@/core/capabilities/registry';
@@ -308,8 +310,11 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                 <legend className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Keys</legend>
                                                 {[...secretSlots].map(([ref, manifest]) => {
                                                     const destination = destinationOf(manifest);
+                                                    const guide = keyGuideFor(manifest);
+                                                    const formatWarning = checkKeyFormat(guide, secrets[ref] ?? '');
                                                     return (
-                                                        <label key={ref} className="block text-xs text-[var(--text-muted)]">
+                                                        <div key={ref} className="space-y-1">
+                                                        <label className="block text-xs text-[var(--text-muted)]">
                                                             Key for <span className="font-mono text-[var(--text-secondary)]">{destination?.origin}</span>
                                                             {destination?.credential ? <span> · {destination.credential}</span> : null}
                                                             <input
@@ -320,13 +325,16 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                                 onChange={event => setSecrets(prev => ({ ...prev, [ref]: event.target.value }))}
                                                                 className="mt-1 w-full rounded-lg border border-[var(--citadel-border)] bg-[var(--citadel-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
                                                             />
-                                                            {manifest.auth.hint ? (
+                                                            {formatWarning ? <span className="mt-0.5 block text-[11px] text-[var(--truth-amber)]">{formatWarning}</span> : null}
+                                                            {manifest.auth.hint && guide?.source !== 'provider' ? (
                                                                 <span className="mt-0.5 block text-[11px] text-[var(--text-secondary)] [overflow-wrap:anywhere]">
                                                                     The API says: {manifest.auth.hint}
                                                                 </span>
                                                             ) : null}
                                                             <span className="mt-0.5 block text-[10px]">Kept for this session only, never saved with your canvas.</span>
                                                         </label>
+                                                        {guide ? <KeyGuideNote guide={guide} /> : null}
+                                                        </div>
                                                     );
                                                 })}
                                             </fieldset>

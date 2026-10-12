@@ -3,7 +3,9 @@
 import { useState, useSyncExternalStore } from 'react';
 import type { CapabilityManifest } from '@/core/capabilities/manifest';
 import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/capabilities/secrets';
+import { checkKeyFormat, keyGuideFor } from '@/core/capabilities/keyGuide';
 import { destinationOf } from './ApiReview';
+import { KeyGuideNote } from './KeyGuideNote';
 
 /** The slot a person can fill by hand: a key, bearer token, or user:password. OAuth is bound by its connect flow. */
 export function keySlotOf(manifest: CapabilityManifest | undefined): string | null {
@@ -40,6 +42,8 @@ export function KeyField({ manifest, onSaved, onCancel, autoFocus, compact }: Ke
     const [error, setError] = useState<string | null>(null);
     const ref = keySlotOf(manifest);
     const destination = destinationOf(manifest);
+    const guide = keyGuideFor(manifest);
+    const formatWarning = checkKeyFormat(guide, value);
     if (!ref) return null;
 
     const save = () => {
@@ -85,7 +89,9 @@ export function KeyField({ manifest, onSaved, onCancel, autoFocus, compact }: Ke
                     className="mt-1 w-full rounded-md border border-[var(--citadel-border)] bg-[var(--citadel-elevated)] px-2 py-1 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--citadel-primary)] focus:outline-none"
                 />
             </label>
-            {manifest.auth.hint ? (
+            {formatWarning ? <p className="text-[10px] text-[var(--truth-amber)]">{formatWarning}</p> : null}
+            {guide ? <KeyGuideNote guide={guide} /> : null}
+            {manifest.auth.hint && guide?.source !== 'provider' ? (
                 <p className="text-[10px] text-[var(--text-secondary)] [overflow-wrap:anywhere]">The API says: {manifest.auth.hint}</p>
             ) : null}
             {error ? <p role="alert" className="text-[10px] text-[var(--truth-red)]">{error}</p> : null}
