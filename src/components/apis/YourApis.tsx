@@ -9,6 +9,7 @@ import { EffectPill, MethodBadge, destinationOf, operationParts } from './ApiRev
 import { KeyField, keySlotOf, useHasKey } from './KeyField';
 import { keyGuideFor } from '@/core/capabilities/keyGuide';
 import { KeyGuideNote, TestKeyButton } from './KeyGuideNote';
+import { RememberKeysToggle } from './RememberKeys';
 
 /**
  * One row per key slot. Operations of one API share a slot, so the key is
@@ -93,7 +94,7 @@ export function YourApis({ onPlace }: YourApisProps) {
             {slots.size > 0 ? (
                 <section aria-label="Keys" className="space-y-1.5">
                     <h4 className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Keys</h4>
-                    <p className="text-[10px] text-[var(--text-muted)]">Kept for this session only, never saved with your canvas. Enter them again after a reload.</p>
+                    <RememberKeysToggle />
                     <ul className="space-y-1.5">
                         {[...slots].map(([ref, entry]) => <KeyRow key={ref} manifest={entry.manifest} count={entry.count} />)}
                     </ul>

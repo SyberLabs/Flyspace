@@ -6,6 +6,7 @@ import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/ca
 import { checkKeyFormat, keyGuideFor } from '@/core/capabilities/keyGuide';
 import { destinationOf } from './ApiReview';
 import { KeyGuideNote } from './KeyGuideNote';
+import { useKeyKeepingNote } from './RememberKeys';
 
 /** The slot a person can fill by hand: a key, bearer token, or user:password. OAuth is bound by its connect flow. */
 export function keySlotOf(manifest: CapabilityManifest | undefined): string | null {
@@ -43,6 +44,7 @@ export function KeyField({ manifest, onSaved, onCancel, autoFocus, compact }: Ke
     const ref = keySlotOf(manifest);
     const destination = destinationOf(manifest);
     const guide = keyGuideFor(manifest);
+    const keepingNote = useKeyKeepingNote();
     const formatWarning = checkKeyFormat(guide, value);
     if (!ref) return null;
 
@@ -102,7 +104,7 @@ export function KeyField({ manifest, onSaved, onCancel, autoFocus, compact }: Ke
                 {onCancel ? (
                     <button type="button" onClick={onCancel} className="text-[11px] text-[var(--text-muted)] underline">Cancel</button>
                 ) : null}
-                {compact ? null : <span className="text-[10px] text-[var(--text-muted)]">Kept for this session only.</span>}
+                {compact ? null : <span className="text-[10px] text-[var(--text-muted)]">{keepingNote}</span>}
             </div>
         </form>
     );

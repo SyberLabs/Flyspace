@@ -42,6 +42,11 @@ export const capabilitySecrets = {
         return removed;
     },
 
+    /** The slots that hold a value, for the opt-in device vault (keyVault.ts). */
+    refs(): string[] {
+        return [...slots.keys()];
+    },
+
     /** Whether a slot holds a value. The value itself is never handed to a view. */
     has(ref: string): boolean {
         return slots.has(ref);

@@ -13,6 +13,7 @@ import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
 import { EffectPill } from '@/components/apis/ApiReview';
 import { KeyField, keySlotOf, useHasKey } from '@/components/apis/KeyField';
+import { useRememberingKeys } from '@/components/apis/RememberKeys';
 import { argumentsFrom, CapabilityInputs, constantOf, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
 
@@ -85,6 +86,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const [changingKey, setChangingKey] = useState(false);
     const keySlot = keySlotOf(manifest);
     const hasKey = useHasKey(keySlot);
+    const remembering = useRememberingKeys();
     // Keys live for the session, so after a reload a keyed block asks again.
     const needsKey = keySlot !== null && !hasKey;
 
@@ -185,7 +187,9 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 {needsKey && manifest ? (
                     <div className="space-y-1 rounded-md border border-[var(--truth-amber)]/40 p-2">
                         <p className="text-xs text-[var(--text-primary)]">This API needs its key.</p>
-                        <p className="text-[10px] text-[var(--text-muted)]">Keys are kept for this session only, so enter it again after a reload.</p>
+                        <p className="text-[10px] text-[var(--text-muted)]">
+                            {remembering ? 'This key was not remembered on this device yet.' : 'Keys are kept for this session only, so enter it again after a reload, or turn on Remember keys in Your APIs.'}
+                        </p>
                         <KeyField manifest={manifest} compact />
                     </div>
                 ) : null}

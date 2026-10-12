@@ -13,8 +13,12 @@ Rules for agents (and people) changing OmniOS. Read `README.md` first,
   and the Garden was deleted (2026-09-01). Do not add a parallel app to this repo.
 - Local-first and single-user. LLM and built-in data-provider keys are read
   server-side from `process.env`. A credential you enter for a compiled API lives
-  in browser memory for the session only (`src/core/capabilities/secrets.ts`), is
-  never persisted, and is attached to the capability's own request. A deployed
+  in browser memory for the session (`src/core/capabilities/secrets.ts`) and is
+  attached to the capability's own request. It is persisted only if the person
+  turns on "Remember keys on this device": then it is sealed with AES-GCM under a
+  non-extractable browser key in its own IndexedDB database
+  (`src/core/capabilities/keyVault.ts`), never in a canvas or account backup and
+  never on a server. A deployed
   instance goes on a private network (`DEPLOYMENT.md`).
 
 ## Authority boundaries
