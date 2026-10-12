@@ -153,7 +153,7 @@ async function main(): Promise<void> {
     writeFileSync(reportPath, report, 'utf8');
     console.log(`Wrote ${path.relative(process.cwd(), reportPath)}${spec ? ` and ${path.relative(process.cwd(), specPath)}` : ''}.`);
     for (const r of live) console.log(`  ${r.title}: ${r.status} ${r.detail}`);
-    if (problems.length > 0) process.exit(1);
+    if (problems.length > 0 || live.some(r => r.status === 'failed')) process.exit(1);
 }
 
 main().catch((err: unknown) => {
