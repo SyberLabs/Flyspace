@@ -93,6 +93,8 @@ this order:
    section 4 for curated sources only; runs on local and private deployments
    first. Turning it on for the public preview is a separate owner decision
    under DEPLOYMENT.md (AGENTS.md stop condition 5).
+   Status: implemented and tested with stubs. The owner opts APIs in by id
+   (`OMNI_HOUSE_KEYS`); none is opted in, so nothing changed for anyone yet.
 8. **Connect.** OAuth sign-in for providers that require it, Google first
    (504 directory APIs are blocked only by OAuth). Needs an OAuth client the
    owner registers.

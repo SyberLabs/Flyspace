@@ -29,6 +29,7 @@ import {
 } from './asyncRuntime';
 import { readCapability } from './state';
 import { capabilitySecrets } from './secrets';
+import { houseKeyCovers } from './houseKeys';
 import {
     projectError,
     projectSuccess,
@@ -670,6 +671,9 @@ function applyAuth(manifest: CapabilityManifest): { headers: Record<string, stri
     const auth = manifest.auth;
     if (auth.kind === 'none') return { headers, query };
     const secret = auth.secretRef ? capabilitySecrets.get(auth.secretRef) : undefined;
+    // No key of the person's own, but the server holds one for this exact
+    // curated manifest: the broker attaches it (dataPlant.ts).
+    if (!secret && houseKeyCovers(manifest)) return { headers, query };
     if (!secret) {
         return {
             error: failure(manifest.id, 'AUTH_UNBOUND', `Secret slot ${auth.secretRef ?? '(missing)'} is empty`, false)

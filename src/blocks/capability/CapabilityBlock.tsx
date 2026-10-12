@@ -12,7 +12,7 @@ import { triggerIdempotencyKey } from '@/core/capabilities/triggers';
 import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
 import { EffectPill } from '@/components/apis/ApiReview';
-import { KeyField, keySlotOf, useHasKey } from '@/components/apis/KeyField';
+import { KeyField, keySlotOf, useHasKey, useHouseKeyCovers } from '@/components/apis/KeyField';
 import { useRememberingKeys } from '@/components/apis/RememberKeys';
 import { argumentsFrom, CapabilityInputs, constantOf, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
@@ -87,8 +87,11 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const keySlot = keySlotOf(manifest);
     const hasKey = useHasKey(keySlot);
     const remembering = useRememberingKeys();
+    // The server may hold its own key for this curated API (dataPlant.ts).
+    const houseKey = useHouseKeyCovers(manifest);
+    const onHouseKey = houseKey && keySlot !== null && !hasKey;
     // Keys live for the session, so after a reload a keyed block asks again.
-    const needsKey = keySlot !== null && !hasKey;
+    const needsKey = keySlot !== null && !hasKey && !houseKey;
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
     const params = isPlainParams(block?.params) ? block.params : {};
@@ -205,7 +208,13 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                         ) : null}
                     </p>
                 ) : null}
-                {changingKey && manifest && hasKey ? (
+                {onHouseKey && !changingKey ? (
+                    <p className="text-[10px] text-[var(--text-muted)]">
+                        Runs on this server&apos;s key. It is shared, so an answer can be up to 5 minutes old and there is a daily limit.{' '}
+                        <button type="button" onClick={() => setChangingKey(true)} className="underline">Use my own key</button>
+                    </p>
+                ) : null}
+                {changingKey && manifest && (hasKey || onHouseKey) ? (
                     <KeyField manifest={manifest} compact autoFocus onSaved={() => setChangingKey(false)} onCancel={() => setChangingKey(false)} />
                 ) : null}
 

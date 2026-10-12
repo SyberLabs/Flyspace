@@ -6,6 +6,7 @@ import { lookup } from 'node:dns/promises';
 import { NextRequest, NextResponse } from 'next/server';
 import { admitBrokerCaller, BROKER_DEADLINE_MS, handleCapabilityBroker } from '@/core/services/server/capabilityBroker';
 import { clientKey } from '@/core/services/server/clientKey';
+import { serverDataPlant } from '@/core/services/server/dataPlant';
 import { openServerLedger } from '@/core/services/server/capability.ledger';
 import { pinnedFetch } from '@/core/services/server/pinnedFetch';
 import { readBoundedJson, RequestBodyTooLarge } from '@/core/services/server/boundedJson';
@@ -51,7 +52,19 @@ export async function POST(request: NextRequest) {
         fetch: pinnedFetch,
         signal,
         caller,
-        admission
+        admission,
+        plant: serverDataPlant()
     });
     return reply(result.status, result.body);
+}
+
+// GET /api/capability-broker
+// Which curated manifests this server can run on its own key (dataPlant.ts):
+// their digests (hashes of specs this repo ships) and API ids, never a key.
+// Unavailable in the public preview, like POST.
+export async function GET() {
+    if (process.env.OMNI_PUBLIC_DEMO === '1') {
+        return reply(503, { error: 'The capability broker is unavailable in the public preview.' });
+    }
+    return reply(200, serverDataPlant().coverage());
 }

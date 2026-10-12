@@ -11,6 +11,7 @@ import { KeyGuideNote } from './KeyGuideNote';
 import { useKeyKeepingNote } from './RememberKeys';
 import { fetchCatalogSpec, RegistryFetchError } from '@/core/capabilities/registrySearch';
 import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/capabilities/secrets';
+import { houseKeyCovers } from '@/core/capabilities/houseKeys';
 import { installProposal } from '@/core/capabilities/registry';
 import { useCapabilityStore } from '@/core/capabilities/store';
 import type { CapabilityManifest } from '@/core/capabilities/manifest';
@@ -165,7 +166,8 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
 
     const installSelected = () => {
         const refs = [...secretSlots.keys()];
-        const missing = refs.filter(ref => !secrets[ref]?.trim() && !capabilitySecrets.get(ref));
+        // A slot the server's own key covers may be left empty (dataPlant.ts).
+        const missing = refs.filter(ref => !secrets[ref]?.trim() && !capabilitySecrets.get(ref) && !houseKeyCovers(secretSlots.get(ref)));
         if (missing.length > 0) {
             setErrors(missing.map(ref => `Enter the key for ${destinationOf(secretSlots.get(ref)!)?.origin ?? ref}`));
             return;
@@ -327,6 +329,9 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                                 onChange={event => setSecrets(prev => ({ ...prev, [ref]: event.target.value }))}
                                                                 className="mt-1 w-full rounded-lg border border-[var(--citadel-border)] bg-[var(--citadel-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
                                                             />
+                                                            {houseKeyCovers(manifest) ? (
+                                                                <span className="mt-0.5 block text-[11px] text-[var(--text-secondary)]">Optional: this server has its own key for this API. Leave it empty to use that, shared and capped daily.</span>
+                                                            ) : null}
                                                             {formatWarning ? <span className="mt-0.5 block text-[11px] text-[var(--truth-amber)]">{formatWarning}</span> : null}
                                                             {manifest.auth.hint && guide?.source !== 'provider' ? (
                                                                 <span className="mt-0.5 block text-[11px] text-[var(--text-secondary)] [overflow-wrap:anywhere]">
