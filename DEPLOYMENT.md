@@ -184,8 +184,11 @@ Google" for blocks that read the person's own Google data
 2. Configure the OAuth consent screen. While it is in Testing, only the test
    users you list can sign in, and Google shows them an unverified-app notice.
 3. Create an OAuth client of type "Web application" with the authorized
-   redirect URI `<origin>/api/oauth/google/callback`. Set `OMNI_OAUTH_ORIGIN`
-   when the server cannot see its public origin.
+   redirect URI `<origin>/api/oauth/google/callback` for every origin people
+   open Flyspace at. Google matches it exactly: for local use add both
+   `http://localhost:3000/api/oauth/google/callback` and
+   `http://127.0.0.1:3000/api/oauth/google/callback`. Set
+   `OMNI_OAUTH_ORIGIN` when the server cannot see its public origin.
 
 Flyspace only asks for scopes ending in `.readonly`, checks that the person
 granted them, requests no refresh token, and stores nothing on the server. The

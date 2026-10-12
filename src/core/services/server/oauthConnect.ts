@@ -165,7 +165,11 @@ export async function finishConnect(args: {
     if (!flow || flow.provider !== provider.id) return { ok: false, error: 'This sign-in was not started in this browser' };
     if ((args.now ?? Date.now()) > flow.exp) return { ok: false, nonce: flow.nonce, error: 'This sign-in took too long; try again' };
     const state = args.query.get('state') ?? '';
-    const stateMatches = state.length === flow.state.length && timingSafeEqual(Buffer.from(state), Buffer.from(flow.state));
+    // Compared as bytes: a non-ASCII state of the same length in characters
+    // is a different length in bytes, and timingSafeEqual throws on that.
+    const given = Buffer.from(state);
+    const expected = Buffer.from(flow.state);
+    const stateMatches = given.length === expected.length && timingSafeEqual(given, expected);
     if (!stateMatches) return { ok: false, nonce: flow.nonce, error: 'This sign-in was not started in this browser' };
     if (args.query.get('error')) {
         return { ok: false, nonce: flow.nonce, error: args.query.get('error') === 'access_denied' ? 'Sign-in was cancelled' : 'The provider refused the sign-in' };
