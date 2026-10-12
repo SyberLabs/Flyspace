@@ -20,7 +20,7 @@ export const METACULUS_SPEC = {
             metaculusToken: {
                 type: 'http',
                 scheme: 'Token',
-                description: 'Your Metaculus API token (free with an account). Find it in your Metaculus account settings, under API access.'
+                description: 'Your Metaculus API token (free). Create an account at https://www.metaculus.com; the token is issued from your account.'
             }
         }
     },
