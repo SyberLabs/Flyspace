@@ -1,6 +1,7 @@
 // ============================================
 // FRANKFURTER — ECB FX reference rates
-// Public API, fetched via /api/public. Follows the 301 to api.frankfurter.app.
+// Public API, fetched via /api/public from api.frankfurter.dev/v1 (the old
+// api.frankfurter.app address redirects there, and the relay follows no redirect).
 // ============================================
 
 import {

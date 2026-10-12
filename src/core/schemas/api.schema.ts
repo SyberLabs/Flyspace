@@ -272,7 +272,7 @@ export const API_CATALOG: ApiProvider[] = [
     {
         id: 'frankfurter',
         name: 'Frankfurter FX',
-        baseUrl: 'https://api.frankfurter.app',
+        baseUrl: 'https://api.frankfurter.dev/v1',
         requiresAuth: false,
         blockIds: ['frankfurter_fx'],
         integration: {

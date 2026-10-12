@@ -48,7 +48,9 @@ function buildCustomUrl(id: PublicProviderId, params: Params): string | null {
         return url.toString();
     }
     if (id === 'frankfurter') {
-        const url = new URL('https://api.frankfurter.app/latest');
+        // api.frankfurter.app/latest now answers 301 to this address, and the
+        // relay does not follow redirects (checked 2026-10-12).
+        const url = new URL('https://api.frankfurter.dev/v1/latest');
         url.searchParams.set('from', str(params, 'from', 'USD'));
         return url.toString();
     }
