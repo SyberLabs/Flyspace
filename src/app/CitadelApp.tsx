@@ -19,6 +19,7 @@ import { useMindShellSync, useShellNavigation } from '@/core/hooks';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { startKeyVault } from '@/core/capabilities/keyVault';
 import { loadHouseKeys } from '@/core/capabilities/houseKeys';
+import { loadConnectProviders } from '@/core/capabilities/connect';
 
 export default function CitadelApp() {
     // The removed API Dashboard stored client-side keys under this key; drop any that remain.
@@ -34,6 +35,7 @@ export default function CitadelApp() {
     // Which curated APIs this server answers on its own key, if the owner set any.
     useEffect(() => {
         void loadHouseKeys();
+        void loadConnectProviders();
     }, []);
 
     const { activeTool, selection, captureSelection, clearSelection } = useToolStore();

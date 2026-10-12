@@ -174,6 +174,26 @@ and the 5-minute shared cache are per process, and a caller is the address
 `clientKey()` sees. The public preview runs no broker, so it uses no house key;
 turning one on there is an owner decision under this checklist.
 
+### Connect (OAuth sign-in)
+
+`OMNI_GOOGLE_CLIENT_ID` and `OMNI_GOOGLE_CLIENT_SECRET` turn on "Sign in with
+Google" for blocks that read the person's own Google data
+(`src/core/services/server/oauthConnect.ts`). To set it up:
+
+1. In Google Cloud, enable each API you want (Calendar, Drive, YouTube Data).
+2. Configure the OAuth consent screen. While it is in Testing, only the test
+   users you list can sign in, and Google shows them an unverified-app notice.
+3. Create an OAuth client of type "Web application" with the authorized
+   redirect URI `<origin>/api/oauth/google/callback`. Set `OMNI_OAUTH_ORIGIN`
+   when the server cannot see its public origin.
+
+Flyspace only asks for scopes ending in `.readonly`, checks that the person
+granted them, requests no refresh token, and stores nothing on the server. The
+access token goes to the page that started the sign-in and lasts that session
+(about an hour); the device vault never keeps it. The public preview has no
+sign-in. Anyone who can reach a deployment with a client configured can sign
+in to their own Google account through it, so keep it on a private network.
+
 Hosted inference also requires `DATABASE_URL` and migration 003. Each paid
 request carries `Idempotency-Key`; the ledger stores owner, key, and digest
 with the `running` attempt before provider dispatch. Reusing a key with the

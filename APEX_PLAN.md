@@ -98,3 +98,7 @@ this order:
 8. **Connect.** OAuth sign-in for providers that require it, Google first
    (504 directory APIs are blocked only by OAuth). Needs an OAuth client the
    owner registers.
+   Status: implemented and tested with stubs, for Google, read operations
+   with read-only scopes only. No live sign-in has been run (no client is
+   registered). The API index still counts Google APIs as unusable until it
+   is rebuilt (`npm run catalog:build`).

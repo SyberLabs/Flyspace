@@ -4,6 +4,7 @@
 
 import { isKeyParameter, looksLikeKey } from './credentialName';
 import { canonicalCapabilityId, credentialSlot } from './identity';
+import { connectProvider, providerForAuthorizationUrl, providerForBaseUrl } from './connectProviders';
 import { fromJsonSchema } from './jsonSchema';
 import {
     approvalForEffect,
@@ -176,7 +177,7 @@ function compileOperation(args: {
     const effectChoice = chooseEffect(args.method, args.operation);
     if ('error' in effectChoice) return effectChoice;
 
-    const auth = resolveAuth(args.spec, args.operation, args.baseUrl);
+    const auth = resolveAuth(args.spec, args.operation, args.baseUrl, effectChoice.effect);
     if ('error' in auth) return auth;
 
     const collected = collectInputs(args.spec, args.path, args.pathItem, args.operation, args.method);
@@ -294,7 +295,8 @@ function stripTrailingSlash(url: string): string {
 function resolveAuth(
     spec: Record<string, unknown>,
     operation: Record<string, unknown>,
-    baseUrl: string
+    baseUrl: string,
+    effect: CapabilityManifest['effect']
 ): { auth: CapabilityManifest['auth'] } | { error: string } {
     const requirements = operation.security !== undefined ? operation.security : spec.security;
     if (!Array.isArray(requirements) || requirements.length === 0) return { auth: { kind: 'none' } };
@@ -304,9 +306,18 @@ function resolveAuth(
         : {};
 
     let refused: string | undefined;
+    // Sign-in alternatives, bound only if no key scheme is offered.
+    const signIns: string[][] = [];
+    let signInRefused: string | undefined;
     for (const requirement of requirements) {
         if (!isRecord(requirement)) continue;
         const names = Object.keys(requirement);
+        const signIn = oauthRequirement(names, requirement, schemes, baseUrl);
+        if (signIn) {
+            if ('error' in signIn) signInRefused ??= signIn.error;
+            else signIns.push(signIn.scopes);
+            continue;
+        }
         if (names.length !== 1) return { error: 'requirements that combine several schemes are unsupported' };
         const name = names[0];
         const scheme = schemes[name];
@@ -318,8 +329,61 @@ function resolveAuth(
         }
         return binding;
     }
+    if (signIns.length > 0 || signInRefused) return oauthBinding(signIns, signInRefused, baseUrl, effect);
     // A scheme refused for a stated reason says more than "none supported".
     return { error: refused && /must be signed/.test(refused) ? refused : 'no supported security scheme (apiKey, http bearer, http basic)' };
+}
+
+/**
+ * One security requirement made only of oauth2 schemes. Google's specs pair an
+ * implicit and an authorizationCode scheme over the same scopes in every
+ * requirement; both are the same sign-in, so they bind as one. Null: not
+ * oauth2. The provider must be one Flyspace can connect to, and the API must
+ * be on that provider's own hosts, so its token never goes anywhere else.
+ */
+function oauthRequirement(
+    names: string[],
+    requirement: Record<string, unknown>,
+    schemes: Record<string, unknown>,
+    baseUrl: string
+): { scopes: string[] } | { error: string } | null {
+    if (names.length === 0 || !names.every(name => isRecord(schemes[name]) && (schemes[name] as Record<string, unknown>).type === 'oauth2')) return null;
+    const providers = new Set<string>();
+    for (const name of names) {
+        const flows = (schemes[name] as Record<string, unknown>).flows;
+        const urls = isRecord(flows)
+            ? [flows.authorizationCode, flows.implicit].filter(isRecord).map(flow => flow.authorizationUrl)
+            : [];
+        const provider = urls.map(providerForAuthorizationUrl).find(Boolean);
+        if (!provider) return { error: 'It needs an OAuth sign-in Flyspace cannot connect to yet' };
+        providers.add(provider.id);
+    }
+    const provider = providers.size === 1 ? connectProvider([...providers][0]) : undefined;
+    if (!provider) return { error: 'requirements that combine several schemes are unsupported' };
+    if (providerForBaseUrl(baseUrl)?.id !== provider.id) {
+        return { error: `its ${provider.title} sign-in is declared for a server that is not ${provider.title}'s` };
+    }
+    const scopes = [...new Set(names.flatMap(name => Array.isArray(requirement[name]) ? requirement[name] as unknown[] : []))]
+        .filter((scope): scope is string => typeof scope === 'string');
+    if (scopes.length === 0) return { error: 'its OAuth requirement names no scope' };
+    if (!scopes.every(scope => provider.isReadOnlyScope(scope))) return { error: READ_ONLY_SIGN_IN };
+    return { scopes: scopes.sort() };
+}
+
+const READ_ONLY_SIGN_IN = 'It needs a sign-in that can change your data; Flyspace only asks for read-only access';
+
+/** The narrowest read-only alternative, for a read operation only (AGENTS.md stop condition 3). */
+function oauthBinding(
+    alternatives: string[][],
+    refused: string | undefined,
+    baseUrl: string,
+    effect: CapabilityManifest['effect']
+): { auth: CapabilityManifest['auth'] } | { error: string } {
+    if (effect !== 'read') return { error: 'Signed-in operations are read-only in Flyspace; this one can change data' };
+    const narrowest = [...alternatives].sort((a, b) => a.length - b.length || a.join(' ').localeCompare(b.join(' ')))[0];
+    if (!narrowest) return { error: refused ?? READ_ONLY_SIGN_IN };
+    const auth = { kind: 'oauth' as const, scopes: narrowest };
+    return { auth: { ...auth, secretRef: credentialSlot(baseUrl, auth) } };
 }
 
 /** HTTP auth scheme names that carry a static key, sent as `Authorization: <Scheme> <key>`. */

@@ -58,9 +58,13 @@ execution fails `ASYNC_START_REJECTED`. Only the run lookup by id is implemented
 `providers/managedProvider.ts` is a `managed_integration` provider: a
 Pipedream- or Composio-style catalog entry becomes an http proposal against the
 SaaS API itself, with `oauth` auth. An `oauth` binding carries scopes and a
-slot (one slot per origin and scope set); the token enters the slot through a
-host connect flow that does not exist yet, so until then execution is
-`AUTH_UNBOUND`. `oauth` is http-only and never rides `server_broker`.
+slot (one slot per origin and scope set); the token enters the slot through the
+host connect flow (`connect.ts`, `server/oauthConnect.ts`), and until then
+execution is `AUTH_UNBOUND`. `oauth` is http-only and never rides
+`server_broker`. `compileOpenApi` binds an OpenAPI oauth2 scheme only for a
+provider in `connectProviders.ts` (Google), only when the API is on that
+provider's own hosts, and only for a read operation with a read-only scope;
+a write that needs a sign-in is refused.
 `providers/managed.decision.ts` rejects both vendors as dependencies.
 Admission
 does not place blocks or wires. The OpenAPI install panel still calls

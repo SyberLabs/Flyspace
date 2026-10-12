@@ -99,6 +99,8 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
         const slots = new Map<string, CapabilityManifest>();
         for (const manifest of proposals) {
             if (!install[manifest.id]) continue;
+            // A sign-in is not typed in: the block offers it after placing (connect.ts).
+            if (manifest.auth.kind === 'oauth') continue;
             const ref = manifest.auth.secretRef;
             if (ref && !slots.has(ref)) slots.set(ref, manifest);
         }
@@ -308,6 +310,11 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                 <summary className="cursor-pointer">{review.issues.length} operation{review.issues.length === 1 ? '' : 's'} could not be compiled</summary>
                                                 <ul className="mt-1 space-y-0.5">{review.issues.map(issue => <li key={issue}>{issue}</li>)}</ul>
                                             </details>
+                                        ) : null}
+                                        {proposals.some(manifest => install[manifest.id] && manifest.auth.kind === 'oauth') ? (
+                                            <p className="text-xs text-[var(--text-muted)]">
+                                                These operations read your own account, so they need a sign-in with read-only access. Place them, then sign in from the block.
+                                            </p>
                                         ) : null}
                                         {secretSlots.size > 0 ? (
                                             <fieldset className="space-y-2">
