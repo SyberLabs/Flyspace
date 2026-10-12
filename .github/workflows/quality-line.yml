@@ -1,0 +1,53 @@
+name: Quality line
+
+# APEX_PLAN 6.4. Every night, call every curated API through the real
+# runtime (`npm run verify:curated`) and fail if one stopped answering or
+# its answer no longer matches the spec Flyspace ships. A red run is the
+# signal to fix the spec before a person's block breaks.
+#
+# Keys are optional repository secrets (FRED_API_KEY, ALPHA_VANTAGE_API_KEY,
+# NEWSAPI_KEY, METACULUS_API_KEY). Without one, that API's keyed operations
+# are reported as skipped, not failed. The report is kept as an artifact;
+# committing public/curated-quality.json stays a person's step.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-line
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify curated APIs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+      NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+      METACULUS_API_KEY: ${{ secrets.METACULUS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Call every curated operation
+        run: npm run verify:curated -- --write | tee "$RUNNER_TEMP/quality.md"
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: curated-quality-${{ github.run_id }}
+          path: |
+            public/curated-quality.json
+            ${{ runner.temp }}/quality.md
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,64 @@
+{
+  "format": "flyspace-curated-quality",
+  "version": 1,
+  "checkedAt": "2026-10-12T21:31:53.965Z",
+  "results": [
+    {
+      "api": "omni:fred",
+      "operationId": "getSeriesObservations",
+      "title": "Values of an economic series over time",
+      "status": "skipped",
+      "detail": "no key (set FRED_API_KEY)"
+    },
+    {
+      "api": "omni:fred",
+      "operationId": "searchSeries",
+      "title": "Find economic series by keyword",
+      "status": "skipped",
+      "detail": "no key (set FRED_API_KEY)"
+    },
+    {
+      "api": "omni:fred",
+      "operationId": "getSeries",
+      "title": "Describe one economic series",
+      "status": "skipped",
+      "detail": "no key (set FRED_API_KEY)"
+    },
+    {
+      "api": "omni:bls",
+      "operationId": "getSeries",
+      "title": "Values of a labor statistics series",
+      "status": "ok",
+      "detail": "answered with data matching its declared output schema",
+      "ms": 355
+    },
+    {
+      "api": "omni:alpha-vantage",
+      "operationId": "query",
+      "title": "Stock quote or price history",
+      "status": "skipped",
+      "detail": "no key (set ALPHA_VANTAGE_API_KEY)"
+    },
+    {
+      "api": "omni:newsapi",
+      "operationId": "topHeadlines",
+      "title": "Top headlines now",
+      "status": "skipped",
+      "detail": "no key (set NEWSAPI_KEY)"
+    },
+    {
+      "api": "omni:newsapi",
+      "operationId": "everything",
+      "title": "Search news articles",
+      "status": "skipped",
+      "detail": "no key (set NEWSAPI_KEY)"
+    },
+    {
+      "api": "omni:metaculus",
+      "operationId": "listPosts",
+      "title": "Forecasting questions",
+      "status": "skipped",
+      "detail": "no key (set METACULUS_API_KEY)"
+    }
+  ]
+}

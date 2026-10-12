@@ -39,9 +39,10 @@ export const ALPHA_VANTAGE_SPEC = {
                         in: 'query',
                         required: true,
                         description: 'GLOBAL_QUOTE: the latest price. TIME_SERIES_DAILY / TIME_SERIES_MONTHLY: price history.',
+                        example: 'GLOBAL_QUOTE',
                         schema: { type: 'string', enum: ['GLOBAL_QUOTE', 'TIME_SERIES_DAILY', 'TIME_SERIES_MONTHLY'] }
                     },
-                    { name: 'symbol', in: 'query', required: true, description: 'Ticker, e.g. IBM, AAPL, TSCO.LON.', example: 'IBM', schema: { type: 'string' } },
+                                        { name: 'symbol', in: 'query', required: true, description: 'Ticker, e.g. MSFT, AAPL, TSCO.LON.', example: 'MSFT', schema: { type: 'string' } },
                     { name: 'outputsize', in: 'query', description: 'compact: the latest 100 points. full: everything (premium for some series).', schema: { type: 'string', enum: ['compact', 'full'], default: 'compact' } }
                 ],
                 responses: {

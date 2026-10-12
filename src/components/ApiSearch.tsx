@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isUsableEntry, MAX_INDEXED_OPERATIONS, type ApiIndex, type ApiIndexEntry } from '@/core/capabilities/apiIndex';
 import { CURATED_APIS } from '@/core/capabilities/curatedApis';
+import { verificationOf, type Verification } from '@/core/capabilities/curatedQuality';
 import { createApiSearcher, loadApiIndex } from '@/core/capabilities/registrySearch';
 import { fetchIntentScores, rankResults, routedIntents, unavailableIntents, type IntentScore } from '@/core/capabilities/registryRanking';
 
@@ -24,6 +25,13 @@ function intentLabel(id: string): string {
 }
 
 /** `2023-03` — enough to tell a fresh spec from a stale one at a glance. */
+/** What the quality line last found, in a few words. */
+function verificationLabel(verification: Verification): string {
+    if (verification.status === 'verified') return `verified ${verification.checkedAt.slice(0, 10)}`;
+    if (verification.status === 'failing') return `failing since ${verification.checkedAt.slice(0, 10)}`;
+    return `not verified (${verification.reason})`;
+}
+
 /** What a result needs to run, in a few words. */
 const CREDENTIAL_LABEL = { none: 'no key', partial: 'some need a key', key: 'needs a key' } as const;
 
@@ -194,6 +202,7 @@ export function ApiSearch({ selectedId, onSelect, autoFocus }: ApiSearchProps) {
                                         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--text-muted)]">
                                             <span className="max-w-full truncate">{entry.id}</span>
                                             {entry.curated ? <span>· curated by Flyspace</span> : <span>· spec {shortDate(entry.updated)}</span>}
+                                            {entry.curated ? <span>· {verificationLabel(verificationOf(entry.id))}</span> : null}
                                             {source === 'intent' && intent ? <span>· matches “{intentLabel(intent)}”</span> : null}
                                             {entry.supported ? null : <span>· Swagger {entry.openapiVersion}, not supported yet</span>}
                                             {entry.operations ? <span>· {operationCount(entry.operations)}</span> : null}
