@@ -86,6 +86,12 @@ describe('Connect: finishing a sign-in', () => {
         expect(await finish({ state: `${state.slice(0, -1)}x`, cookie })).toMatchObject({ ok: false, error: 'This sign-in was not started in this browser' });
     });
 
+    it('refuses a non-ASCII state of the same length without throwing', async () => {
+        const { cookie, state } = started();
+        const result = await finish({ state: 'é'.repeat(state.length), cookie });
+        expect(result).toMatchObject({ ok: false, error: 'This sign-in was not started in this browser' });
+    });
+
     it('refuses a flow older than ten minutes', async () => {
         const { cookie, state } = started(0);
         expect(await finish({ state, cookie, now: 10 * 60_000 + 1 })).toMatchObject({ ok: false, nonce: NONCE, error: 'This sign-in took too long; try again' });
