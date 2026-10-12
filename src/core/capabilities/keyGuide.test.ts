@@ -81,8 +81,16 @@ describe('testKey', () => {
     }
 
     it('says the key works when the API answers with data', async () => {
-        const guide = keyGuideFor(compiled(alpha)[0])!;
+        const guide = { ...keyGuideFor(compiled(alpha)[0])!, test: { operationId: 'query', input: { function: 'GLOBAL_QUOTE', symbol: 'MSFT' } } };
         expect(await testKey(guide, installAlpha())).toEqual({ ok: true, message: 'The key works: the API answered the test call.' });
+    });
+
+    it('does not claim the key is yours when the provider answers any key (Alpha Vantage)', async () => {
+        const guide = keyGuideFor(compiled(alpha)[0])!;
+        expect(await testKey(guide, installAlpha())).toEqual({
+            ok: true,
+            message: 'The API answered. It accepts any key on this call, so this does not prove the key is yours.'
+        });
     });
 
     it('reports a refusal', async () => {

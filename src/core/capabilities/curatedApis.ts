@@ -18,6 +18,8 @@ export interface CuratedApi {
     brokerOrigins: string[];
     /** How to get its key, from the provider's own pages (checked 2026-10-12). */
     keyGuide?: Omit<KeyGuide, 'source'>;
+    /** The environment variable the quality line reads its key from (scripts/verify-curated.ts). */
+    keyEnv?: string;
 }
 
 export const CURATED_APIS: readonly CuratedApi[] = [
@@ -36,6 +38,7 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             curated: true
         },
         spec: FRED_SPEC,
+        keyEnv: 'FRED_API_KEY',
         keyGuide: {
             url: 'https://fredaccount.stlouisfed.org/apikeys',
             requires: 'A free FRED account (fredaccount.stlouisfed.org); the key page needs you signed in.',
@@ -78,11 +81,14 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             curated: true
         },
         spec: ALPHA_VANTAGE_SPEC,
+        keyEnv: 'ALPHA_VANTAGE_API_KEY',
         keyGuide: {
             url: 'https://www.alphavantage.co/support/#api-key',
             requires: 'A short form: what describes you, your organization, and your email.',
             freeTier: '25 requests a day.',
-            test: { operationId: 'query', input: { function: 'GLOBAL_QUOTE', symbol: 'IBM' } }
+            // Alpha Vantage answers any non-empty key with data (checked 2026-10-12): only a missing
+            // key is refused. A test call shows the API answers; it cannot show a key is yours.
+            test: { operationId: 'query', input: { function: 'GLOBAL_QUOTE', symbol: 'MSFT' }, provesKey: false }
         },
         // Alpha Vantage sends Access-Control-Allow-Origin: *, so the browser calls it.
         brokerOrigins: []
@@ -102,6 +108,7 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             curated: true
         },
         spec: NEWS_API_SPEC,
+        keyEnv: 'NEWSAPI_KEY',
         keyGuide: {
             url: 'https://newsapi.org/register',
             requires: 'A free NewsAPI account.',
@@ -126,6 +133,7 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             curated: true
         },
         spec: METACULUS_SPEC,
+        keyEnv: 'METACULUS_API_KEY',
         keyGuide: {
             url: 'https://www.metaculus.com',
             requires: 'A free Metaculus account; the API token is issued from your account.',
