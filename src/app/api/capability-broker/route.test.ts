@@ -30,7 +30,7 @@ vi.mock('@/core/capabilities/manifest', async (importOriginal) => {
     };
 });
 
-import { POST } from './route';
+import { GET, POST } from './route';
 
 const SITE = 'http://localhost:3000';
 const originalDatabaseUrl = process.env.DATABASE_URL;
@@ -154,5 +154,21 @@ describe('/api/capability-broker request admission', () => {
         } finally {
             parse.mockRestore();
         }
+    });
+});
+
+describe('GET /api/capability-broker: house-key coverage', () => {
+    it('lists digests and API ids, never a key', async () => {
+        const response = await GET();
+        expect(response.status).toBe(200);
+        const body = await response.json() as { apis: unknown; digests: unknown };
+        expect(Array.isArray(body.apis)).toBe(true);
+        expect(Array.isArray(body.digests)).toBe(true);
+    });
+
+    it('is unavailable in the public preview', async () => {
+        process.env.OMNI_PUBLIC_DEMO = '1';
+        const response = await GET();
+        expect(response.status).toBe(503);
     });
 });

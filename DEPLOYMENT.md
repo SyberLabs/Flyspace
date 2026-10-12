@@ -166,6 +166,14 @@ the broker is enabled there, and `proxy` only behind your own reverse proxy
 that overwrites, not appends to, the headers it forwards. A bare `next dev`,
 `next start` or `wrangler dev` has no owning ingress; leave it unset.
 
+House keys (`OMNI_HOUSE_KEYS`, `src/core/services/server/dataPlant.ts`) spend
+the owner's provider quota on behalf of every caller of the broker. Opt an API
+in only after reading its terms, and only on a deployment whose callers you
+trust: the daily caps (200 answers per caller, 500 upstream calls per provider)
+and the 5-minute shared cache are per process, and a caller is the address
+`clientKey()` sees. The public preview runs no broker, so it uses no house key;
+turning one on there is an owner decision under this checklist.
+
 Hosted inference also requires `DATABASE_URL` and migration 003. Each paid
 request carries `Idempotency-Key`; the ledger stores owner, key, and digest
 with the `running` attempt before provider dispatch. Reusing a key with the

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useSyncExternalStore } from 'react';
+import { houseKeyCovers, subscribeHouseKeys } from '@/core/capabilities/houseKeys';
 import type { CapabilityManifest } from '@/core/capabilities/manifest';
 import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/capabilities/secrets';
 import { checkKeyFormat, keyGuideFor } from '@/core/capabilities/keyGuide';
@@ -22,6 +23,11 @@ export function useHasKey(ref: string | null): boolean {
         () => (ref ? capabilitySecrets.has(ref) : false),
         () => false
     );
+}
+
+/** Whether this server's own key answers the manifest when no key is entered. */
+export function useHouseKeyCovers(manifest: CapabilityManifest | undefined): boolean {
+    return useSyncExternalStore(subscribeHouseKeys, () => houseKeyCovers(manifest), () => false);
 }
 
 export interface KeyFieldProps {

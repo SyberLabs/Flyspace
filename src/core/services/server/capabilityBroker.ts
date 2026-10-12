@@ -11,6 +11,7 @@ import { redact } from '@/core/capabilities/redact';
 import { validateManifest, type CapabilityManifest } from '@/core/capabilities/manifest';
 import { MAX_SECRET_BYTES } from '@/core/capabilities/secrets';
 import { isBlockedDestination } from './egressBlockList';
+import type { DataPlant, HouseKey, Served } from './dataPlant';
 import type { PinnedRequest, PinnedResponse } from './pinnedFetch';
 import type { ServerExecution, ServerLedger } from './capability.ledger';
 
@@ -96,6 +97,8 @@ export interface BrokerDeps {
     limiter?: BrokerRateLimiter;
     /** From `admitBrokerCaller`, when the request was counted before its body was read. */
     admission?: BrokerAdmission;
+    /** The server's own keys for opted-in curated APIs. Absent: no house keys. */
+    plant?: DataPlant;
 }
 
 export async function handleCapabilityBroker(
@@ -135,8 +138,28 @@ export async function handleCapabilityBroker(
     // is added: the ledger holds nothing derived from the secret.
     const inputDigest = sha256(canonicalize({ method: manifest.transport.method, url: url.toString() }));
 
-    if (manifest.auth.kind === 'apiKey' && manifest.auth.in === 'query' && manifest.auth.name && secret) {
-        url.searchParams.set(manifest.auth.name, `${manifest.auth.prefix ?? ''}${secret}`);
+    // A person's own key always wins. Without one, the server's key for this
+    // exact curated manifest, if the owner opted it in (dataPlant.ts).
+    const house: HouseKey | null = !secret && deps.plant ? deps.plant.keyFor(manifest) : null;
+    const now = deps.now?.() ?? Date.now();
+    const cacheKey = `${manifest.digest}|${inputDigest}`;
+    if (house && deps.plant) {
+        if (!deps.plant.admitCaller(caller, now)) {
+            return json(429, { error: { code: 'HOUSE_KEY_LIMIT', message: 'You have used today\'s share of this server\'s key. Add your own key to keep going.' } });
+        }
+        const hit = deps.plant.cached(cacheKey, now);
+        if (hit) {
+            const served: Served = { key: 'house', cached: true, fetchedAt: new Date(hit.fetchedAt).toISOString() };
+            return json(200, { executionStatus: 'succeeded', value: hit.value, served });
+        }
+        if (!deps.plant.admitProvider(house.apiId, now)) {
+            return json(429, { error: { code: 'HOUSE_KEY_LIMIT', message: 'This server\'s key for this API has reached today\'s limit. Add your own key to keep going.' } });
+        }
+    }
+    const key = secret ?? house?.secret;
+
+    if (manifest.auth.kind === 'apiKey' && manifest.auth.in === 'query' && manifest.auth.name && key) {
+        url.searchParams.set(manifest.auth.name, `${manifest.auth.prefix ?? ''}${key}`);
     }
 
     const host = url.hostname.replace(/^\[|\]$/g, '');
@@ -180,7 +203,7 @@ export async function handleCapabilityBroker(
         return json(504, { runId: admission.row.runId, executionStatus: 'canceled', error: { code: 'DEADLINE', message: DEADLINE_PASSED } });
     }
     await deps.ledger.markDispatched(admission.row.runId);
-    const headers = applyAuth(manifest, secret);
+    const headers = applyAuth(manifest, key);
     const method = manifest.transport.method;
     try {
         const response = await untilAborted(() => deps.fetch({
@@ -193,24 +216,29 @@ export async function handleCapabilityBroker(
         }), signal);
         if (response.status >= 300 && response.status < 400) {
             await deps.ledger.finish(admission.row.runId, 'failed', 'HTTP_REDIRECT_REFUSED');
-            return failed(502, admission.row.runId, 'HTTP_REDIRECT_REFUSED', 'Redirects are not followed', secret);
+            return failed(502, admission.row.runId, 'HTTP_REDIRECT_REFUSED', 'Redirects are not followed', key);
         }
         if (response.status < 200 || response.status >= 300) {
             await deps.ledger.finish(admission.row.runId, 'failed', 'HTTP_ERROR');
-            return failed(502, admission.row.runId, 'HTTP_ERROR', `HTTP ${response.status}`, secret);
+            return failed(502, admission.row.runId, 'HTTP_ERROR', `HTTP ${response.status}`, key);
         }
         const value = response.text.trim() === '' ? null : JSON.parse(response.text) as unknown;
         await deps.ledger.finish(admission.row.runId, 'succeeded');
+        if (house && deps.plant) {
+            deps.plant.store(cacheKey, value, now);
+            const served: Served = { key: 'house', cached: false, fetchedAt: new Date(now).toISOString() };
+            return json(200, { runId: admission.row.runId, executionStatus: 'succeeded', value, served });
+        }
         return json(200, { runId: admission.row.runId, executionStatus: 'succeeded', value });
     } catch {
         if (signal.aborted) {
             await deps.ledger.finish(admission.row.runId, 'failed', 'DEADLINE');
-            return failed(504, admission.row.runId, 'DEADLINE', DEADLINE_PASSED, secret);
+            return failed(504, admission.row.runId, 'DEADLINE', DEADLINE_PASSED, key);
         }
         // The transport's own error text describes the destination's network
         // (refused, reset, certificate). None of it goes back to the caller.
         await deps.ledger.finish(admission.row.runId, 'failed', 'UPSTREAM_ERROR');
-        return failed(502, admission.row.runId, 'UPSTREAM_ERROR', UPSTREAM_FAILED, secret);
+        return failed(502, admission.row.runId, 'UPSTREAM_ERROR', UPSTREAM_FAILED, key);
     }
 }
 
