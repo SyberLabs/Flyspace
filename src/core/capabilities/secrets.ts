@@ -2,6 +2,8 @@
 // name (secretRef). Nothing in this module is persisted.
 
 const slots = new Map<string, string>();
+/** Slots the device vault never keeps: a sign-in token lasts one session (connect.ts). */
+const sessionOnly = new Set<string>();
 const listeners = new Set<() => void>();
 
 function changed(): void {
@@ -20,13 +22,15 @@ export function secretByteLength(value: string): number {
 }
 
 export const capabilitySecrets = {
-    set(ref: string, value: string): void {
+    set(ref: string, value: string, options: { sessionOnly?: boolean } = {}): void {
         if (!ref || typeof value !== 'string' || value.length === 0) {
             throw new Error('A secret slot needs a name and a value');
         }
         if (secretByteLength(value) > MAX_SECRET_BYTES) {
             throw new Error(`A secret value is at most ${MAX_SECRET_BYTES} bytes`);
         }
+        if (options.sessionOnly) sessionOnly.add(ref);
+        else sessionOnly.delete(ref);
         slots.set(ref, value);
         changed();
     },
@@ -38,13 +42,14 @@ export const capabilitySecrets = {
     /** Unbind one slot. The capability stays installed; its next run is AUTH_UNBOUND. */
     revoke(ref: string): boolean {
         const removed = slots.delete(ref);
+        sessionOnly.delete(ref);
         if (removed) changed();
         return removed;
     },
 
-    /** The slots that hold a value, for the opt-in device vault (keyVault.ts). */
+    /** The slots the opt-in device vault may keep (keyVault.ts): every one but a sign-in. */
     refs(): string[] {
-        return [...slots.keys()];
+        return [...slots.keys()].filter(ref => !sessionOnly.has(ref));
     },
 
     /** Whether a slot holds a value. The value itself is never handed to a view. */
@@ -62,6 +67,7 @@ export const capabilitySecrets = {
 
     clear(): void {
         slots.clear();
+        sessionOnly.clear();
         changed();
     }
 };

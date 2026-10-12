@@ -14,6 +14,7 @@ import type { OmniItem } from '@/core/gateway';
 import { EffectPill } from '@/components/apis/ApiReview';
 import { KeyField, keySlotOf, useHasKey, useHouseKeyCovers } from '@/components/apis/KeyField';
 import { useRememberingKeys } from '@/components/apis/RememberKeys';
+import { SignInPrompt, useSignIn } from '@/components/apis/SignIn';
 import { argumentsFrom, CapabilityInputs, constantOf, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
 
@@ -92,6 +93,10 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const onHouseKey = houseKey && keySlot !== null && !hasKey;
     // Keys live for the session, so after a reload a keyed block asks again.
     const needsKey = keySlot !== null && !hasKey && !houseKey;
+    // An oauth API needs a sign-in instead (connect.ts), for this session.
+    const signIn = useSignIn(manifest);
+    const needsSignIn = signIn !== null && !signIn.signedIn;
+    const needsCredential = needsKey || needsSignIn;
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
     const params = isPlainParams(block?.params) ? block.params : {};
@@ -101,7 +106,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const trigger = manifest?.trigger ?? { kind: 'manual' as const };
 
     const run = (idempotencyKey?: string, confirmedRun?: string) => {
-        if (!manifest || running || needsKey) return;
+        if (!manifest || running || needsCredential) return;
         if (sideEffect && (manifest.approval !== 'approved' || !confirmedRun)) return;
         const key = idempotencyKey ?? attemptKey.current ?? `click_${newId()}`;
         attemptKey.current = key;
@@ -198,10 +203,16 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 ) : null}
 
                 {/* What you look at after Run comes first: the error or the result. */}
-                {block?.error && !(needsKey && isUnboundKeyError(block.error)) ? (
+                {needsSignIn && manifest && signIn ? <SignInPrompt manifest={manifest} signIn={signIn} /> : null}
+
+                {block?.error && !(needsCredential && isUnboundKeyError(block.error)) ? (
                     <p role="alert" className="rounded-md border border-[var(--truth-red)]/40 px-2 py-1 text-xs text-[var(--truth-red)] [overflow-wrap:anywhere]">
                         {block.error}
                         {errorHint(block.error) ? <span className="block text-[var(--text-muted)]">{errorHint(block.error)}</span> : null}
+                        {signIn?.signedIn && isRefusal(block.error) && !changingKey ? (
+                            <button type="button" onClick={() => setChangingKey(true)}
+                                className="mt-1 block text-[11px] text-[var(--text-secondary)] underline">Sign in again</button>
+                        ) : null}
                         {keySlot && hasKey && isRefusal(block.error) && !changingKey ? (
                             <button type="button" onClick={() => setChangingKey(true)}
                                 className="mt-1 block text-[11px] text-[var(--text-secondary)] underline">Change key</button>
@@ -213,6 +224,9 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                         Runs on this server&apos;s key. It is shared, so an answer can be up to 5 minutes old and there is a daily limit.{' '}
                         <button type="button" onClick={() => setChangingKey(true)} className="underline">Use my own key</button>
                     </p>
+                ) : null}
+                {changingKey && manifest && signIn?.signedIn ? (
+                    <SignInPrompt manifest={manifest} signIn={signIn} again onDone={() => setChangingKey(false)} />
                 ) : null}
                 {changingKey && manifest && (hasKey || onHouseKey) ? (
                     <KeyField manifest={manifest} compact autoFocus onSaved={() => setChangingKey(false)} onCancel={() => setChangingKey(false)} />
@@ -294,7 +308,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 <button
                     type="button"
                     onClick={requestRun}
-                    disabled={!manifest || running || blocked || needsKey || missing.length > 0}
+                    disabled={!manifest || running || blocked || needsCredential || missing.length > 0}
                     className="shrink-0 rounded-md bg-[var(--citadel-primary)] px-2 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[var(--citadel-elevated)] disabled:text-[var(--text-muted)]"
                 >
                     {running
@@ -303,6 +317,8 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                             ? 'Needs approval'
                             : needsKey
                                 ? 'Enter the key'
+                                : needsSignIn
+                                ? 'Sign in first'
                                 : missing.length > 0
                                 ? `Enter ${missing.map(input => input.name).join(', ')}`
                                 : 'Run'}

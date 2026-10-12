@@ -31,6 +31,8 @@ export const SECRET_ENV_VARS = [
     'BLS_API_KEY',
     'ALPHA_VANTAGE_API_KEY',
     'METACULUS_API_KEY',
+    // Connect: the OAuth client secret (oauthConnect.ts)
+    'OMNI_GOOGLE_CLIENT_SECRET',
     // The inference ledger's connection string, which rides along on pg errors
     'DATABASE_URL',
     // Test-only scratch database. Never set in production, but it is still a
