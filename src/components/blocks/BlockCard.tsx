@@ -105,6 +105,8 @@ export function BlockCard({
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             data-cited={isCited ? 'true' : 'false'}
+            data-status={block.status}
+            data-block-type={block.schema.block_id}
             className={cn(
                 "block-card flex flex-col group",
                 isDragging && "ring-2 ring-[var(--citadel-primary)]",

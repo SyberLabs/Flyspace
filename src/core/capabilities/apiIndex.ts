@@ -47,10 +47,26 @@ export interface ApiIndexEntry {
     /** Why nothing compiled, in plain words. Only when `operations` is 0. */
     blocker?: string;
     /**
+     * What its compiled operations need to run: `none` (no credential),
+     * `partial` (some operations need one), `key` (every operation needs a key,
+     * token, or login). Only when `operations` is above 0.
+     */
+    credential?: CredentialNeed;
+    /**
      * Shipped with Flyspace (curatedApis.ts), not from the directory. Never
      * present in the built index: parseApiIndex refuses it there.
      */
     curated?: true;
+}
+
+export type CredentialNeed = 'none' | 'partial' | 'key';
+const CREDENTIAL_NEEDS: readonly CredentialNeed[] = ['none', 'partial', 'key'];
+
+/** Summarise what a set of compiled operations needs to run, from each one's auth kind. */
+export function credentialNeedOf(authKinds: readonly string[]): CredentialNeed {
+    const keyless = authKinds.filter(kind => kind === 'none').length;
+    if (keyless === authKinds.length) return 'none';
+    return keyless > 0 ? 'partial' : 'key';
 }
 
 /** The compiler stops after this many operations, so the index counts no higher. */
@@ -192,7 +208,9 @@ export function buildApiIndexEntries(raw: unknown): { entries: ApiIndexEntry[]; 
 
 /** `operations` is a count the builder can have made; `blocker` only explains a zero. */
 function validCompileStatus(entry: Record<string, unknown>): boolean {
-    const { operations, blocker } = entry;
+    const { operations, blocker, credential } = entry;
+    if (credential !== undefined
+        && (typeof operations !== 'number' || operations === 0 || !CREDENTIAL_NEEDS.includes(credential as CredentialNeed))) return false;
     if (operations === undefined) return blocker === undefined;
     if (entry.supported !== true) return false;
     if (typeof operations !== 'number' || !Number.isInteger(operations) || operations < 0 || operations > MAX_INDEXED_OPERATIONS) return false;

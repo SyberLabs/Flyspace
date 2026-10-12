@@ -24,6 +24,7 @@ import path from 'node:path';
 import {
     buildApiIndexEntries,
     CATALOG_SOURCE_URL,
+    credentialNeedOf,
     describeCompileBlocker,
     parseApiIndex,
     type ApiIndex,
@@ -79,7 +80,7 @@ async function previousCounts(compiler: string): Promise<Map<string, ApiIndexEnt
     }
 }
 
-async function compileStatus(entry: ApiIndexEntry): Promise<Pick<ApiIndexEntry, 'operations' | 'blocker'>> {
+async function compileStatus(entry: ApiIndexEntry): Promise<Pick<ApiIndexEntry, 'operations' | 'blocker' | 'credential'>> {
     const response = await fetch(entry.specUrl, {
         redirect: 'error',
         headers: { Accept: 'application/json' },
@@ -87,7 +88,7 @@ async function compileStatus(entry: ApiIndexEntry): Promise<Pick<ApiIndexEntry, 
     });
     if (!response.ok) throw new Error(`spec returned ${response.status}`);
     const { manifests, errors } = compileOpenApi(JSON.parse(await readBounded(response, MAX_SPEC_BYTES)), { sourceLocator: entry.specUrl });
-    if (manifests.length > 0) return { operations: manifests.length };
+    if (manifests.length > 0) return { operations: manifests.length, credential: credentialNeedOf(manifests.map(m => m.auth.kind)) };
     return { operations: 0, blocker: describeCompileBlocker(errors.map(error => error.message)) };
 }
 
@@ -102,6 +103,7 @@ async function addCompileStatus(entries: ApiIndexEntry[], compiler: string): Pro
         if (before && before.specUrl === entry.specUrl && before.updated === entry.updated && entry.updated !== '') {
             entry.operations = before.operations;
             if (before.blocker !== undefined) entry.blocker = before.blocker;
+            if (before.credential !== undefined) entry.credential = before.credential;
             reused += 1;
         } else {
             todo.push(entry);
