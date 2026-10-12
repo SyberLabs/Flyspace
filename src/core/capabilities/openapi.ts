@@ -462,8 +462,16 @@ function collectInputs(
             return { error: `parameter location ${String(location)} is unsupported` };
         }
         const converted = fromJsonSchema(isRecord(parameter.schema) || Array.isArray(parameter.schema) ? parameter.schema : { type: 'string' }, spec);
+        const rawSchema = deref(spec, parameter.schema);
+        const rawCompound = isRecord(rawSchema) && (rawSchema.type === 'array' || rawSchema.type === 'object');
+        const readOnly = method === 'GET' || method === 'HEAD';
+        if (!converted.ok && readOnly && location !== 'path' && parameter.required !== true && rawCompound) continue;
         if (!converted.ok) return { error: `${String(parameter.name)}: ${converted.error}` };
         if ((location === 'query' || location === 'header') && (converted.schema.kind === 'object' || converted.schema.kind === 'array')) {
+            // An optional one can be left out of a read: the operation still
+            // works without it (Google Calendar's events.list and eventTypes).
+            // Not of a write, which would add write surface (AGENTS.md stop condition 3).
+            if (parameter.required !== true && (method === 'GET' || method === 'HEAD')) continue;
             return { error: `${String(parameter.name)}: compound ${location} parameters are outside the supported subset` };
         }
         const name = String(parameter.name);
