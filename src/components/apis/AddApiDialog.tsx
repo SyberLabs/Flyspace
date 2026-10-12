@@ -8,6 +8,7 @@ import { compileOpenApi } from '@/core/capabilities/openapi';
 import { curatedApi } from '@/core/capabilities/curatedApis';
 import { checkKeyFormat, keyGuideFor } from '@/core/capabilities/keyGuide';
 import { KeyGuideNote } from './KeyGuideNote';
+import { useKeyKeepingNote } from './RememberKeys';
 import { fetchCatalogSpec, RegistryFetchError } from '@/core/capabilities/registrySearch';
 import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/capabilities/secrets';
 import { installProposal } from '@/core/capabilities/registry';
@@ -71,6 +72,7 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
     const [install, setInstall] = useState<Record<string, boolean>>({});
     const [placeId, setPlaceId] = useState<string | null>(null);
     const [secrets, setSecrets] = useState<Record<string, string>>({});
+    const keepingNote = useKeyKeepingNote();
     const [errors, setErrors] = useState<string[]>([]);
     const [specText, setSpecText] = useState('');
     const fetchAbort = useRef<AbortController | null>(null);
@@ -331,7 +333,7 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                                     The API says: {manifest.auth.hint}
                                                                 </span>
                                                             ) : null}
-                                                            <span className="mt-0.5 block text-[10px]">Kept for this session only, never saved with your canvas.</span>
+                                                            <span className="mt-0.5 block text-[10px]">{keepingNote}</span>
                                                         </label>
                                                         {guide ? <KeyGuideNote guide={guide} /> : null}
                                                         </div>

@@ -17,11 +17,17 @@ import { ContextCaptureModal } from '@/components/mind/ContextCaptureModal';
 import { useToolStore } from '@/core/stores';
 import { useMindShellSync, useShellNavigation } from '@/core/hooks';
 import { VoiceControl } from '@/components/voice/VoiceControl';
+import { startKeyVault } from '@/core/capabilities/keyVault';
 
 export default function CitadelApp() {
     // The removed API Dashboard stored client-side keys under this key; drop any that remain.
     useEffect(() => {
         try { localStorage.removeItem('omni-api-vault'); } catch { /* storage unavailable */ }
+    }, []);
+
+    // Put back keys remembered on this device, if the person turned that on.
+    useEffect(() => {
+        void startKeyVault();
     }, []);
 
     const { activeTool, selection, captureSelection, clearSelection } = useToolStore();
