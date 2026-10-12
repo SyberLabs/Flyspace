@@ -21,8 +21,12 @@ export interface KeyGuide {
     caveat?: string;
     /** The documented key format, for a warning on paste. Never blocks saving. */
     format?: { pattern: string; describe: string };
-    /** A cheap read that proves the key works once the API is installed. */
-    test?: { operationId: string; input: Record<string, unknown> };
+    /**
+     * A cheap read that proves the key works once the API is installed.
+     * `provesKey: false` when the provider answers any key, so a pass only
+     * shows the API answers.
+     */
+    test?: { operationId: string; input: Record<string, unknown>; provesKey?: boolean };
     /** `provider`: written from the provider's pages. `spec`: a link from the API's own description. */
     source: 'provider' | 'spec';
 }
@@ -68,7 +72,8 @@ export type KeyTestResult = { ok: true; message: string } | { ok: false; message
 /** Fields some APIs use to refuse a key while answering 200 (Alpha Vantage). */
 const NOTICE_FIELDS = ['Error Message', 'Information', 'Note', 'error', 'message'];
 
-function noticeIn(value: unknown): string | null {
+/** A notice some APIs send instead of data with a 200 (Alpha Vantage's `Information`), or null. */
+export function noticeIn(value: unknown): string | null {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
     const record = value as Record<string, unknown>;
     // A notice is the whole answer: one or two fields, one of them a known notice field.
@@ -95,6 +100,9 @@ export async function testKey(
     if (!result.ok || result.error) return { ok: false, message: `The API refused the test call: ${result.error?.message ?? 'no answer'}` };
     const notice = noticeIn(result.typed?.value);
     if (notice) return { ok: false, message: `The API answered with a notice instead of data: ${notice.slice(0, 200)}` };
+    if (guide.test.provesKey === false) {
+        return { ok: true, message: 'The API answered. It accepts any key on this call, so this does not prove the key is yours.' };
+    }
     return { ok: true, message: 'The key works: the API answered the test call.' };
 }
 

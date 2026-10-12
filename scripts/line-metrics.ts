@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseApiIndex, type ApiIndexEntry } from '../src/core/capabilities/apiIndex';
 import { CURATED_APIS } from '../src/core/capabilities/curatedApis';
+import { verificationOf } from '../src/core/capabilities/curatedQuality';
 
 const KIT = 'World Watch';
 /** How long a kit's blocks get to reach live data before they count as not running. */
@@ -52,7 +53,9 @@ function catalog(): void {
     console.log(`| every operation needs a key, token or login | ${by(usable, 'key')} | ${pct(by(usable, 'key'), usable.length)} |`);
     if (unknown > 0) console.log(`| not recorded (index predates credential needs) | ${unknown} | ${pct(unknown, usable.length)} |`);
     console.log(`| curated by Flyspace | ${curated.length} (${by(curated, 'none')} keyless) | |`);
-    console.log(`| verified by the quality line | 0 | not built yet (APEX_PLAN 6.4) |`);
+    const verified = curated.filter(entry => verificationOf(entry.id).status === 'verified').length;
+    const failing = curated.filter(entry => verificationOf(entry.id).status === 'failing').length;
+    console.log(`| curated verified by the quality line | ${verified} of ${curated.length}${failing ? `, ${failing} failing` : ''} | |`);
 }
 
 async function firstRun(url: string, runs: number): Promise<void> {
