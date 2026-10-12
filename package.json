@@ -25,6 +25,7 @@
     "catalog:build": "tsx scripts/build-api-index.ts",
     "metrics:line": "tsx scripts/line-metrics.ts",
     "verify:curated": "tsx --conditions=react-server scripts/verify-curated.ts",
+    "forge:spec": "tsx --conditions=react-server --env-file-if-exists=.env scripts/forge-spec.ts",
     "eval:registry-jev": "tsx --conditions=react-server --env-file=.env scripts/eval-registry-jev.ts"
   },
   "dependencies": {
@@ -48,6 +49,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@cloudflare/vite-plugin": "^1.62.5",
     "@modelcontextprotocol/server": "2.3.0",
     "@playwright/test": "^1.63.0",
