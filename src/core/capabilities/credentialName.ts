@@ -20,6 +20,21 @@ const SAYS_KEY = /\b(api[ -]?key|licen[cs]e key|access key|access token|subscrip
 /** Words that make a "token" a cursor, not a credential. */
 const SAYS_CURSOR = /\b(next page|page token|pagination|paging|cursor|continuation|offset)\b/i;
 
+/**
+ * Whether an operation needs a credential to run: a declared scheme, or a key
+ * passed as an ordinary input that the compiler left as a field (Visual
+ * Crossing's required `key`). A required key-like input counts; an optional
+ * one counts only under an unambiguous name (`api_key`, `X-API-Key`).
+ */
+export function operationNeedsCredential(operation: {
+    auth: { kind: string };
+    inputs: readonly { name: string; in: string; required: boolean; schema: { description?: string } }[];
+}): boolean {
+    if (operation.auth.kind !== 'none') return true;
+    return operation.inputs.some(input => (input.in === 'query' || input.in === 'header')
+        && ((input.required && looksLikeKey(input.name, input.schema.description)) || KEY_NAME.test(input.name)));
+}
+
 export interface KeyParameterCandidate {
     name: string;
     in: string;

@@ -30,6 +30,7 @@ import {
     type ApiIndex,
     type ApiIndexEntry
 } from '../src/core/capabilities/apiIndex';
+import { operationNeedsCredential } from '../src/core/capabilities/credentialName';
 import { compileOpenApi } from '../src/core/capabilities/openapi';
 
 /** The list is ~8.8 MB today. Refuse a response far outside that rather than buffer it. */
@@ -88,7 +89,10 @@ async function compileStatus(entry: ApiIndexEntry): Promise<Pick<ApiIndexEntry, 
     });
     if (!response.ok) throw new Error(`spec returned ${response.status}`);
     const { manifests, errors } = compileOpenApi(JSON.parse(await readBounded(response, MAX_SPEC_BYTES)), { sourceLocator: entry.specUrl });
-    if (manifests.length > 0) return { operations: manifests.length, credential: credentialNeedOf(manifests.map(m => m.auth.kind)) };
+    if (manifests.length > 0) {
+        const kinds = manifests.map(m => (operationNeedsCredential(m) ? 'key' : 'none'));
+        return { operations: manifests.length, credential: credentialNeedOf(kinds) };
+    }
     return { operations: 0, blocker: describeCompileBlocker(errors.map(error => error.message)) };
 }
 

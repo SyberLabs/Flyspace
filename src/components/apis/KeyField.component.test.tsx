@@ -188,3 +188,13 @@ describe('Your APIs: keys', () => {
         expect(screen.getByRole('region', { name: 'Keys' }).textContent).toContain('Entered for this session');
     });
 });
+
+describe('the key concierge', () => {
+    it('shows where to get the key, from the API’s own description, on the block', () => {
+        const { instanceId } = placeWeather();
+        render(<CapabilityBlockView instanceId={instanceId} />);
+        const guide = screen.getByTestId('key-guide');
+        expect(guide.querySelector('a')!.getAttribute('href')).toBe('https://www.interzoid.com/register');
+        expect(guide.textContent).toContain('Link from the API');
+    });
+});
