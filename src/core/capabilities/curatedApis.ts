@@ -29,6 +29,7 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             supported: true,
             updated: '2026-10-07',
             operations: 3,
+            credential: 'key',
             curated: true
         },
         spec: FRED_SPEC,
@@ -45,6 +46,7 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             supported: true,
             updated: '2026-10-07',
             operations: 1,
+            credential: 'none',
             curated: true
         },
         spec: BLS_SPEC,
@@ -62,6 +64,7 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             supported: true,
             updated: '2026-10-07',
             operations: 1,
+            credential: 'key',
             curated: true
         },
         spec: ALPHA_VANTAGE_SPEC,
@@ -79,6 +82,7 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             supported: true,
             updated: '2026-10-07',
             operations: 2,
+            credential: 'key',
             curated: true
         },
         spec: NEWS_API_SPEC,
@@ -95,6 +99,7 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             supported: true,
             updated: '2026-10-07',
             operations: 1,
+            credential: 'key',
             curated: true
         },
         spec: METACULUS_SPEC,

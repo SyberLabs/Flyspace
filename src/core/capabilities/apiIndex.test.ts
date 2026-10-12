@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildApiIndexEntries,
+    credentialNeedOf,
     describeCompileBlocker,
     isCatalogSpecUrl,
     isUsableEntry,
@@ -188,5 +189,26 @@ describe('compile status', () => {
         expect(describeCompileBlocker(['transport.baseUrl must be https'])).toBe('Its server address is not a fixed https URL');
         expect(describeCompileBlocker(['getThing: something new went wrong'])).toBe('something new went wrong');
         expect(describeCompileBlocker([])).toBe('No operations it describes can be used yet');
+    });
+});
+
+describe('credential needs', () => {
+    it('summarises what compiled operations need to run', () => {
+        expect(credentialNeedOf(['none', 'none'])).toBe('none');
+        expect(credentialNeedOf(['none', 'apiKey'])).toBe('partial');
+        expect(credentialNeedOf(['apiKey', 'bearer', 'basic'])).toBe('key');
+    });
+
+    it('accepts a need only beside a usable count', () => {
+        const index = (entries: unknown[]) => ({
+            format: 'omni-api-index', version: 1,
+            source: { url: 'https://api.apis.guru/v2/list.json', license: 'CC0-1.0', etag: null, lastModified: null },
+            builtAt: '2026-10-12T00:00:00.000Z', entries
+        });
+        const good = buildApiIndexEntries(Object.fromEntries([GOOD])).entries[0];
+        expect(parseApiIndex(index([{ ...good, operations: 4, credential: 'key' }]))).not.toBeNull();
+        expect(parseApiIndex(index([{ ...good, operations: 0, blocker: 'x', credential: 'none' }]))).toBeNull();
+        expect(parseApiIndex(index([{ ...good, credential: 'none' }]))).toBeNull();
+        expect(parseApiIndex(index([{ ...good, operations: 4, credential: 'maybe' }]))).toBeNull();
     });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildApiIndexEntries, parseApiIndex } from './apiIndex';
+import { buildApiIndexEntries, credentialNeedOf, parseApiIndex } from './apiIndex';
 import { CURATED_APIS, curatedApi } from './curatedApis';
 import { FRED_SPEC } from './curated/fred';
 import { compileOpenApi } from './openapi';
@@ -124,5 +124,12 @@ describe('an http auth scheme that names a static token', () => {
     it('is refused for a challenge scheme a pasted key cannot answer', () => {
         expect(compileOpenApi(spec('Digest')).manifests).toEqual([]);
         expect(compileOpenApi(spec('Negotiate')).manifests).toEqual([]);
+    });
+});
+
+describe('a curated entry says what it needs to run', () => {
+    it.each(CURATED_APIS.map(api => [api.entry.id, api] as const))('%s records the credential need its spec compiles to', (_id, api) => {
+        const kinds = compileOpenApi(api.spec, { brokerOrigins: api.brokerOrigins }).manifests.map(m => m.auth.kind);
+        expect(api.entry.credential).toBe(credentialNeedOf(kinds));
     });
 });
