@@ -125,7 +125,9 @@ async function firstRun(url: string, runs: number): Promise<void> {
     console.log('');
     console.log('## First run');
     console.log(`Fresh browser, ${TIMED_KIT} kit, ${runs} run(s) against ${url}.`);
-    console.log(`Time to first live data: median ${sorted[Math.floor(sorted.length / 2)]} ms (runs: ${times.join(', ')} ms).`);
+    const failed = runs - times.length;
+    console.log(`Time to first live data: median ${sorted.length ? sorted[Math.floor(sorted.length / 2)] : 'n/a'} ms (runs: ${times.join(', ')} ms; ${failed} of ${runs} never went live).`);
+    if (failed > 0) process.exitCode = 1;
     console.log(`Data blocks live on the first try: ${firstTry.join(', ')}.`);
 }
 
