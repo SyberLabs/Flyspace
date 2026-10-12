@@ -61,3 +61,38 @@ on 2026-09-01. It was a separate product of roughly 15,000 lines whose central
 value depended on longitudinal history that had not been built. Keeping it
 alongside the canvas added a second architecture and unfinished surface without
 delivering that value. The canvas is the product; Garden plans are retired.
+
+## 6. Industrialization (planned 2026-10-12)
+
+Goal: a new person gets a working answer from live data without hunting for
+API keys. About two-thirds of the APIs Flyspace can use need a credential
+(62 usable APIs in a 200-spec directory sample: 18 keyless, 4 partly keyless,
+40 keyed), so the key is the main place people stop. The plan supplies data
+and guidance, not shared credentials: no automated sign-ups and no pooled
+free-tier keys (both break provider terms). One work package per item, in
+this order:
+
+1. **Line metrics.** A baseline before any change: catalog coverage (usable,
+   keyless, keyed by kind, curated, verified) and time to a first answer from
+   a fresh browser.
+2. **Key concierge.** Each keyed API shows how to get its key: a direct link,
+   honest time and requirements (email, phone, card), the free-tier limit, a
+   format check on paste, and a live test call. Search can filter to APIs
+   that need no key.
+3. **Local key vault.** Opt-in, encrypted, browser-only storage so keys
+   survive a reload. Never part of an account backup (#144) or a server.
+4. **Quality line.** A nightly run calls every curated API and records when
+   each was last verified; drift fails loudly instead of surfacing to a user.
+5. **Kits.** Shells built only from verified parts that need no key, so a
+   first run always works.
+6. **Spec forge.** A developer tool that drafts a curated spec from provider
+   docs, checks it against live calls, and leaves a person to approve it.
+7. **Data plant.** Server-side house keys, used only where a provider's terms
+   allow an application key, behind a shared cache with per-user quotas and
+   provenance on every value. Lifts the "broad provider catalog" cut in
+   section 4 for curated sources only; runs on local and private deployments
+   first. Turning it on for the public preview is a separate owner decision
+   under DEPLOYMENT.md (AGENTS.md stop condition 5).
+8. **Connect.** OAuth sign-in for providers that require it, Google first
+   (504 directory APIs are blocked only by OAuth). Needs an OAuth client the
+   owner registers.
