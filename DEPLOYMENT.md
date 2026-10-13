@@ -172,7 +172,9 @@ in only after reading its terms, and only on a deployment whose callers you
 trust: the daily caps (200 answers per caller, 500 upstream calls per provider)
 and the 5-minute shared cache are per process, and a caller is the address
 `clientKey()` sees. The public preview runs no broker, so it uses no house key;
-turning one on there is an owner decision under this checklist.
+turning one on there is an owner decision under this checklist. FRED's terms require
+every app other people use to show its notice and a link to its API terms; each
+FRED block and the FRED install review do (`attribution` in `curatedApis.ts`).
 
 ### Connect (OAuth sign-in)
 

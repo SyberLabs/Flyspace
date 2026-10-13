@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { ApiSearch } from '@/components/ApiSearch';
 import type { ApiIndexEntry } from '@/core/capabilities/apiIndex';
 import { compileOpenApi } from '@/core/capabilities/openapi';
-import { curatedApi } from '@/core/capabilities/curatedApis';
+import { attributionFor, curatedApi } from '@/core/capabilities/curatedApis';
 import { checkKeyFormat, keyGuideFor } from '@/core/capabilities/keyGuide';
 import { KeyGuideNote } from './KeyGuideNote';
 import { useKeyKeepingNote } from './RememberKeys';
@@ -19,6 +19,7 @@ import { spatialSession } from '@/core/interaction/session';
 import { useUIStore } from '@/core/stores/uiStore';
 import { ApiReview, destinationOf } from './ApiReview';
 import { isUserInstalled, YourApis } from './YourApis';
+import { ProviderAttribution } from './ProviderAttribution';
 
 /** A capability block's default footprint, used to center it on the canvas. */
 const BLOCK_SIZE = { width: 320, height: 240 };
@@ -311,6 +312,10 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                 <ul className="mt-1 space-y-0.5">{review.issues.map(issue => <li key={issue}>{issue}</li>)}</ul>
                                             </details>
                                         ) : null}
+                                        {(() => {
+                                            const attribution = proposals.map(attributionFor).find(Boolean);
+                                            return attribution ? <ProviderAttribution attribution={attribution} /> : null;
+                                        })()}
                                         {proposals.some(manifest => install[manifest.id] && manifest.auth.kind === 'oauth') ? (
                                             <p className="text-xs text-[var(--text-muted)]">
                                                 These operations read your own account, so they need a sign-in with read-only access. Place them, then sign in from the block.

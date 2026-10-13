@@ -114,6 +114,8 @@ describe('AddApiDialog: a curated API (FRED)', () => {
         expect(await screen.findByText(/Spec written by Flyspace from the provider/)).toBeTruthy();
         expect(screen.getByText(/Sends requests to/).textContent).toContain('https://api.stlouisfed.org through Flyspace’s own server');
         expect(screen.getByText(/refuses calls from a browser/)).toBeTruthy();
+        // FRED's terms: its notice and terms link, shown before installing.
+        expect(screen.getByTestId('provider-attribution').textContent).toContain('is not endorsed or certified by the Federal Reserve Bank of St. Louis');
         // Where to get the key, from FRED's own pages, and the documented format checked on paste.
         const guide = screen.getByTestId('key-guide');
         expect(guide.textContent).toContain('Get a key at fredaccount.stlouisfed.org/apikeys');
