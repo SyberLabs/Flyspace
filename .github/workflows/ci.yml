@@ -42,10 +42,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v7.1.0
         with:
           # .nvmrc is the single source of truth, so a contributor's local
           # Node and CI's cannot drift apart silently.
@@ -171,10 +171,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -237,10 +237,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -278,10 +278,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
