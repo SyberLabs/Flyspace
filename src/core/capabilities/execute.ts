@@ -180,7 +180,7 @@ function prepareRun(manifest: CapabilityManifest, args: Readonly<Record<string, 
                 return { error: `${entry.name} carries the credential and cannot be supplied as an input` };
             }
             const value = args[entry.name];
-            if (entry.in === 'query') setQueryParam(target.url.searchParams, entry.name, value);
+            if (entry.in === 'query') setQueryParam(target.url.searchParams, entry.name, value, manifest.effect);
             else if (entry.in === 'header') headers[entry.name] = stringifyParam(value);
             else if (entry.in === 'body') body = JSON.stringify(value);
         }
@@ -656,6 +656,10 @@ function checkInput(
             continue;
         }
         errors.push(...validateValue(entry.schema, copied.value, entry.name));
+        // An empty list would send nothing at all: a required one is missing.
+        if (entry.required && entry.in === 'query' && Array.isArray(copied.value) && copied.value.length === 0) {
+            errors.push(`${entry.name} needs at least one value`);
+        }
         args[entry.name] = copied.value;
     }
     if (errors.length === 0 && manifest.transport.kind === 'http') {

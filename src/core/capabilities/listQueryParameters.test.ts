@@ -54,8 +54,16 @@ describe('compiling a list-valued query parameter', () => {
 describe('sending a list in the query', () => {
     it('repeats the name once per element, in order', () => {
         const params = new URLSearchParams('part=old');
-        setQueryParam(params, 'part', ['snippet', 'statistics']);
+        setQueryParam(params, 'part', ['snippet', 'statistics'], 'read');
         expect(params.toString()).toBe('part=snippet&part=statistics');
+    });
+
+    it('keeps sending one JSON value for anything but a read, as before', () => {
+        for (const effect of ['compute', 'write', 'destructive'] as const) {
+            const params = new URLSearchParams();
+            setQueryParam(params, 'tags', ['a', 'b'], effect);
+            expect(params.getAll('tags')).toEqual(['["a","b"]']);
+        }
     });
 
     beforeEach(() => {
@@ -77,6 +85,17 @@ describe('sending a list in the query', () => {
         const result = await executeCapability(manifest.id, { part: ['snippet'] });
         expect(result.error).toBeUndefined();
         expect(new URL(fetchMock.mock.calls[0][0]).searchParams.getAll('part')).toEqual(['snippet']);
+    });
+
+    it('refuses an empty required list instead of leaving it out', async () => {
+        const [manifest] = compileOpenApi(spec(LIST)).manifests;
+        expect(installProposal(manifest).ok).toBe(true);
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const result = await executeCapability(manifest.id, { part: [] });
+        expect(result.error?.code).toBe('INPUT_INVALID');
+        expect(result.error?.message).toContain('part needs at least one value');
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('through the broker', async () => {

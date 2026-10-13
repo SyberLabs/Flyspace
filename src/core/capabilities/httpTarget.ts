@@ -2,6 +2,7 @@
 // A path argument fills one segment of the template and nothing else: the
 // resolved pathname must be exactly the expanded template.
 
+import type { CapabilityEffect } from './manifest';
 import type { ValueType } from './valueType';
 
 export function joinUrl(baseUrl: string, path: string): URL {
@@ -17,11 +18,13 @@ export function isPlainList(schema: ValueType): boolean {
 }
 
 /**
- * Put one query argument on a URL. A list is sent the OpenAPI default way for
- * a query (form, exploded): one `name=value` per element, in order.
+ * Put one query argument on a URL. On a read, a list is sent the OpenAPI
+ * default way for a query (form, exploded): one `name=value` per element, in
+ * order. Any other capability keeps sending one JSON value, as it always did:
+ * repeated lists are read-only surface (AGENTS.md stop condition 3).
  */
-export function setQueryParam(params: URLSearchParams, name: string, value: unknown): void {
-    if (Array.isArray(value)) {
+export function setQueryParam(params: URLSearchParams, name: string, value: unknown, effect: CapabilityEffect): void {
+    if (Array.isArray(value) && effect === 'read') {
         params.delete(name);
         for (const element of value) params.append(name, stringifyParam(element));
         return;

@@ -316,7 +316,7 @@ function buildUrl(manifest: CapabilityManifest, input: Record<string, unknown>):
     const url = target.url;
     for (const entry of manifest.inputs) {
         if (!Object.hasOwn(input, entry.name) || input[entry.name] === undefined || entry.in !== 'query') continue;
-        setQueryParam(url.searchParams, entry.name, input[entry.name]);
+        setQueryParam(url.searchParams, entry.name, input[entry.name], manifest.effect);
     }
     return url;
 }
