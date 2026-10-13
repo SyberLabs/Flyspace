@@ -2,6 +2,7 @@
 // FLYSPACE: SPEC FORGE
 //
 //     npm run forge:spec -- --slug openlibrary --docs https://openlibrary.org/dev/docs/api/search [--docs <url> ...] [--key-env NAME]
+//                           [--provider anthropic|openai|google] [--model NAME]
 //
 // APEX_PLAN 6.6. Drafts a curated OpenAPI spec from a provider's own docs,
 // checks it mechanically (specDraft.ts: compiles, reads only, every required
@@ -15,17 +16,20 @@
 // It never registers anything. A person reads the draft against the docs,
 // then adds it to curatedApis.ts by hand; that review is the approval.
 //
-// Needs Anthropic credentials (ANTHROPIC_API_KEY, or an `ant auth login`
-// profile). The fetched docs are sent to Claude as data; nothing else is.
+// The draft comes from Claude (ANTHROPIC_API_KEY, or an `ant auth login`
+// profile), OpenAI (OPENAI_API_KEY) or Gemini (GOOGLE_API_KEY): --provider
+// picks one, otherwise the first with a key, in that order (scripts/lib/drafters.ts).
+// The fetched docs are sent to that provider as data; nothing else is.
+// Whatever drafts it, the same checks and live calls decide whether it passes.
 // ============================================
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { checkDraft, docsText, jsonObjectIn } from '../src/core/capabilities/specDraft';
+import { chooseProvider, draftSession, DraftRefused } from './lib/drafters';
 import { verifySpec } from './lib/verifySpec';
 
-const MODEL = 'claude-opus-5-5';
 const MAX_DOC_CHARS = 150_000;
 const MAX_DOCS = 5;
 const REPAIR_ROUNDS = 2;
@@ -66,28 +70,6 @@ async function fetchDoc(url: string): Promise<{ url: string; text: string }> {
     return { url, text: text.slice(0, MAX_DOC_CHARS) };
 }
 
-async function ask(client: Anthropic, messages: Anthropic.Beta.BetaMessageParam[]): Promise<Anthropic.Beta.BetaMessage> {
-    const stream = client.beta.messages.stream({
-        model: MODEL,
-        max_tokens: 64_000,
-        system: SYSTEM,
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'high' },
-        // On a policy decline, re-run on a suitable model instead of stopping.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        messages
-    } as Parameters<typeof client.beta.messages.stream>[0]);
-    const message = await stream.finalMessage();
-    if (message.stop_reason === 'refusal') throw new Error('Claude declined to draft this spec');
-    if (message.stop_reason === 'max_tokens') throw new Error('the draft ran past max_tokens');
-    return message;
-}
-
-function replyText(message: Anthropic.Beta.BetaMessage): string {
-    return message.content.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('\n');
-}
-
 async function main(): Promise<void> {
     const slug = arg('slug');
     const urls = args('docs').slice(0, MAX_DOCS);
@@ -99,23 +81,19 @@ async function main(): Promise<void> {
     const docs = await Promise.all(urls.map(fetchDoc));
     console.log(`Read ${docs.length} page(s): ${docs.map(d => `${d.url} (${d.text.length} chars)`).join(', ')}`);
 
-    const client = new Anthropic();
-    const messages: Anthropic.Beta.BetaMessageParam[] = [{
-        role: 'user',
-        content: [
-            ...docs.map(doc => ({ type: 'text' as const, text: `<document source="${doc.url}">\n${doc.text}\n</document>` })),
-            { type: 'text' as const, text: 'Write the spec for this API from these documents.' }
-        ]
-    }];
+    const session = draftSession(chooseProvider(arg('provider')), SYSTEM, { model: arg('model') });
+    console.log(`Drafting with ${session.provider} (${session.model}).`);
+    let turn = [
+        ...docs.map(doc => `<document source="${doc.url}">\n${doc.text}\n</document>`),
+        'Write the spec for this API from these documents.'
+    ];
 
     let spec: unknown = null;
     let problems: string[] = [];
     for (let round = 0; round <= REPAIR_ROUNDS; round++) {
-        const reply = await ask(client, messages);
-        // Keep the whole reply, thinking included, so the next turn continues the same conversation.
-        messages.push({ role: 'assistant', content: reply.content });
+        const reply = await session.send(turn);
         try {
-            spec = jsonObjectIn(replyText(reply));
+            spec = jsonObjectIn(reply);
             problems = checkDraft(spec);
         } catch (err) {
             spec = null;
@@ -123,7 +101,7 @@ async function main(): Promise<void> {
         }
         console.log(`round ${round + 1}: ${problems.length === 0 ? 'passes the checks' : `${problems.length} problem(s)`}`);
         if (problems.length === 0 || round === REPAIR_ROUNDS) break;
-        messages.push({ role: 'user', content: `The spec has these problems. Fix them using the documents, then output the whole corrected spec:\n- ${problems.join('\n- ')}` });
+        turn = [`The spec has these problems. Fix them using the documents, then output the whole corrected spec:\n- ${problems.join('\n- ')}`];
     }
 
     const live = spec && problems.length === 0 ? await verifySpec(`draft:${slug}`, spec, `omni:drafts/${slug}`, keyEnv) : [];
@@ -135,7 +113,7 @@ async function main(): Promise<void> {
     const report = [
         `# Draft spec: ${slug}`,
         '',
-        `Drafted ${new Date().toISOString()} by ${MODEL} from:`,
+        `Drafted ${new Date().toISOString()} by ${session.provider} ${session.model} from:`,
         ...docs.map(d => `- ${d.url}`),
         '',
         '## Mechanical checks',
@@ -158,7 +136,8 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
     const noCredentials = err instanceof Error && /resolve authentication method/i.test(err.message);
-    if (err instanceof Anthropic.AuthenticationError || noCredentials) console.error('forge:spec: no valid Anthropic credentials (set ANTHROPIC_API_KEY in .env, or run `ant auth login`).');
+    if (err instanceof Anthropic.AuthenticationError || noCredentials) console.error('forge:spec: no valid Anthropic credentials (set ANTHROPIC_API_KEY in .env, run `ant auth login`, or pick --provider openai|google).');
+    else if (err instanceof DraftRefused) console.error(`forge:spec: ${err.message}`);
     else if (err instanceof Anthropic.RateLimitError) console.error('forge:spec: rate limited by the Claude API; try again shortly.');
     else if (err instanceof Anthropic.APIError) console.error(`forge:spec: Claude API error ${err.status}: ${err.message}`);
     else console.error('forge:spec failed:', err instanceof Error ? err.message : err);
