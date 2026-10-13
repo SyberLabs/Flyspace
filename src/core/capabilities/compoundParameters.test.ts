@@ -22,8 +22,9 @@ function spec(parameter: Record<string, unknown>, method = 'get') {
 }
 
 describe('compound query and header parameters', () => {
-    it('leaves an optional array parameter out, and keeps the operation', () => {
-        const { manifests, errors } = compileOpenApi(spec({ name: 'eventTypes', in: 'query', style: 'form', explode: true, schema: { type: 'array', items: { type: 'string' } } }));
+    it('leaves an optional list it cannot send out, and keeps the operation', () => {
+        // Comma-joined (explode: false) is not sent; a plain exploded list is (listQueryParameters.test.ts).
+        const { manifests, errors } = compileOpenApi(spec({ name: 'eventTypes', in: 'query', style: 'form', explode: false, schema: { type: 'array', items: { type: 'string' } } }));
         expect(errors).toEqual([]);
         expect(manifests[0].inputs.map(input => input.name)).toEqual(['q']);
     });
@@ -40,8 +41,23 @@ describe('compound query and header parameters', () => {
     });
 
     it('still refuses an operation whose required parameter is compound', () => {
-        const { manifests, errors } = compileOpenApi(spec({ name: 'ids', in: 'query', required: true, schema: { type: 'array', items: { type: 'string' } } }));
+        const { manifests, errors } = compileOpenApi(spec({ name: 'ids', in: 'query', required: true, schema: { type: 'array', items: { type: 'object', properties: { a: { type: 'string' } } } } }));
         expect(manifests).toEqual([]);
         expect(errors[0].message).toBe('ids: compound query parameters are outside the supported subset');
+    });
+});
+
+describe('optional parameters whose name cannot be an input', () => {
+    const xgafv = { name: '$.xgafv', in: 'query', schema: { type: 'string', enum: ['1', '2'] } };
+
+    it('leaves the Google $.xgafv parameter out of a read', () => {
+        const { manifests, errors } = compileOpenApi(spec(xgafv));
+        expect(errors).toEqual([]);
+        expect(manifests[0].inputs.map(input => input.name)).toEqual(['q']);
+    });
+
+    it('still refuses it on a write, and when it is required', () => {
+        expect(compileOpenApi(spec(xgafv, 'post')).manifests).toEqual([]);
+        expect(compileOpenApi(spec({ ...xgafv, required: true })).manifests).toEqual([]);
     });
 });

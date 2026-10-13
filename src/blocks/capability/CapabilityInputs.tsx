@@ -3,6 +3,7 @@
 import type { CapabilityInput } from '@/core/capabilities/manifest';
 import { looksLikeKey } from '@/core/capabilities/credentialName';
 import type { ValueType } from '@/core/capabilities/valueType';
+import { isPlainList } from '@/core/capabilities/httpTarget';
 
 export { looksLikeKey };
 
@@ -59,6 +60,20 @@ export function coerceInput(input: CapabilityInput, draft: unknown): unknown {
         const value = Number(draft);
         return Number.isFinite(value) ? value : draft;
     }
+    if (isPlainList(input.schema) && !draft.trim().startsWith('[')) {
+        // "snippet, statistics": a list of plain values is typed comma-separated.
+        const itemKind = input.schema.items?.kind;
+        const parts = draft.split(',').map(part => part.trim()).filter(Boolean);
+        if (parts.length === 0) return undefined;
+        return parts.map(part => {
+            if (itemKind === 'number' || itemKind === 'integer') {
+                const value = Number(part);
+                return Number.isFinite(value) ? value : part;
+            }
+            if (itemKind === 'boolean') return part === 'true' ? true : part === 'false' ? false : part;
+            return part;
+        });
+    }
     if (kind === 'object' || kind === 'array') {
         try {
             return JSON.parse(draft);
@@ -98,6 +113,7 @@ export function argumentsFrom(inputs: readonly CapabilityInput[], params: Record
 function draftOf(value: unknown): FieldDraft {
     if (typeof value === 'boolean') return value;
     if (value === undefined || value === null) return '';
+    if (Array.isArray(value) && value.every(element => typeof element !== 'object' && !String(element).includes(','))) return value.join(', ');
     if (typeof value === 'object') return JSON.stringify(value);
     return String(value);
 }
@@ -231,6 +247,18 @@ function Field({ input, idPrefix, value, wiredValue, onChange, disabled }: {
                         <option key={String(option)} value={String(option)}>{String(option)}</option>
                     ))}
                 </select>
+            ) : isPlainList(input.schema) ? (
+                <input
+                    id={id}
+                    type="text"
+                    value={typeof draft === 'string' ? draft : ''}
+                    placeholder={placeholder || 'one, two, three'}
+                    disabled={disabled}
+                    autoComplete="off"
+                    aria-describedby={describedBy}
+                    onChange={event => onChange(event.target.value)}
+                    className={FIELD_CLASS}
+                />
             ) : input.schema.kind === 'object' || input.schema.kind === 'array' ? (
                 <textarea
                     id={id}

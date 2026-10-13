@@ -5,12 +5,14 @@
 import { isKeyParameter, looksLikeKey } from './credentialName';
 import { canonicalCapabilityId, credentialSlot } from './identity';
 import { connectProvider, providerForAuthorizationUrl, providerForBaseUrl } from './connectProviders';
+import { isPlainList } from './httpTarget';
 import { fromJsonSchema } from './jsonSchema';
 import {
     approvalForEffect,
     effectAllowedForMethod,
     effectForMethod,
     isInputHint,
+    isInputName,
     isRecord,
     sealManifest,
     validateManifest,
@@ -467,14 +469,23 @@ function collectInputs(
         const readOnly = method === 'GET' || method === 'HEAD';
         if (!converted.ok && readOnly && location !== 'path' && parameter.required !== true && rawCompound) continue;
         if (!converted.ok) return { error: `${String(parameter.name)}: ${converted.error}` };
-        if ((location === 'query' || location === 'header') && (converted.schema.kind === 'object' || converted.schema.kind === 'array')) {
+        const read = method === 'GET' || method === 'HEAD';
+        // A list of plain values in the query, sent the OpenAPI default way
+        // (form, exploded: `part=a&part=b`), is supported on a read: YouTube's
+        // list operations require one. Comma-joined lists (explode: false) are not.
+        const plainList = location === 'query' && read && isPlainList(converted.schema)
+            && (parameter.style === undefined || parameter.style === 'form') && parameter.explode !== false;
+        if (!plainList && (location === 'query' || location === 'header') && (converted.schema.kind === 'object' || converted.schema.kind === 'array')) {
             // An optional one can be left out of a read: the operation still
             // works without it (Google Calendar's events.list and eventTypes).
             // Not of a write, which would add write surface (AGENTS.md stop condition 3).
-            if (parameter.required !== true && (method === 'GET' || method === 'HEAD')) continue;
+            if (parameter.required !== true && read) continue;
             return { error: `${String(parameter.name)}: compound ${location} parameters are outside the supported subset` };
         }
         const name = String(parameter.name);
+        // Google's optional `$.xgafv` (error format) cannot be an input name.
+        // Left out of a read like an unsendable optional; anything else refuses.
+        if (!isInputName(name) && parameter.required !== true && read && location !== 'path') continue;
         const schema = withParameterDescription(converted.schema, parameter.description);
         const hints = looksLikeKey(name, schema.description) ? {} : inputHints(parameter, deref(spec, parameter.schema));
         inputs.push({

@@ -6,7 +6,7 @@
 
 import { assessEgress } from '@/core/capabilities/egress';
 import { canonicalize, sha256 } from '@/core/capabilities/hash';
-import { resolveHttpPath } from '@/core/capabilities/httpTarget';
+import { resolveHttpPath, setQueryParam } from '@/core/capabilities/httpTarget';
 import { redact } from '@/core/capabilities/redact';
 import { validateManifest, type CapabilityManifest } from '@/core/capabilities/manifest';
 import { MAX_SECRET_BYTES } from '@/core/capabilities/secrets';
@@ -316,8 +316,7 @@ function buildUrl(manifest: CapabilityManifest, input: Record<string, unknown>):
     const url = target.url;
     for (const entry of manifest.inputs) {
         if (!Object.hasOwn(input, entry.name) || input[entry.name] === undefined || entry.in !== 'query') continue;
-        const value = input[entry.name];
-        url.searchParams.set(entry.name, typeof value === 'string' ? value : JSON.stringify(value));
+        setQueryParam(url.searchParams, entry.name, input[entry.name]);
     }
     return url;
 }
