@@ -1,6 +1,10 @@
 // JSON Schema (the subset OpenAPI and MCP actually share) → ValueType.
 // Schemas we cannot represent honestly come back as an error so callers
 // can fail the operation instead of pretending the contract is `any`.
+// One exception, for responses only (ConvertOptions): a field below the top
+// that declares no type is typed `any`. The API does return it; saying so is
+// honest, and an `any` source is never assignable to a typed input, so it
+// cannot carry an unknown value into a typed wire.
 
 import { isRecord, type ValueType } from './valueType';
 
@@ -10,11 +14,19 @@ export type SchemaConversion =
     | { ok: true; schema: ValueType }
     | { ok: false; error: string };
 
+export interface ConvertOptions {
+    /** 'any': an untyped schema below the top level is `any` (responses). Default: refused. */
+    untypedBelowTop?: 'any';
+    /** Internal: whether this schema is a property, item, or map value of another. */
+    nested?: boolean;
+}
+
 export function fromJsonSchema(
     schema: unknown,
     root: unknown = schema,
     seen: string[] = [],
-    depth = 0
+    depth = 0,
+    options: ConvertOptions = {}
 ): SchemaConversion {
     if (depth > MAX_DEPTH) return { ok: false, error: 'schema exceeds max depth' };
     if (!isRecord(schema)) return { ok: false, error: 'schema must be an object' };
@@ -25,15 +37,15 @@ export function fromJsonSchema(
         }
         const resolved = resolveRef(root, schema.$ref);
         if (!resolved) return { ok: false, error: `unresolved $ref ${schema.$ref}` };
-        return fromJsonSchema(resolved, root, [...seen, schema.$ref], depth + 1);
+        return fromJsonSchema(resolved, root, [...seen, schema.$ref], depth + 1, options);
     }
 
     if (Array.isArray(schema.allOf)) {
-        return mergeAllOf(schema.allOf, root, seen, depth);
+        return mergeAllOf(schema.allOf, root, seen, depth, options);
     }
     if (Array.isArray(schema.oneOf) || Array.isArray(schema.anyOf)) {
         const branches = (schema.oneOf ?? schema.anyOf) as unknown[];
-        if (branches.length === 1) return fromJsonSchema(branches[0], root, seen, depth + 1);
+        if (branches.length === 1) return fromJsonSchema(branches[0], root, seen, depth + 1, options);
         return { ok: false, error: 'oneOf/anyOf with several branches is not a single ValueType' };
     }
     if (schema.not !== undefined) return { ok: false, error: 'not is unsupported' };
@@ -44,10 +56,10 @@ export function fromJsonSchema(
         : schema.type;
 
     if (schema.properties && rawType === undefined) {
-        return objectSchema(schema, nullable, root, seen, depth);
+        return objectSchema(schema, nullable, root, seen, depth, options);
     }
     if (schema.items && rawType === undefined) {
-        return arraySchema(schema, nullable, root, seen, depth);
+        return arraySchema(schema, nullable, root, seen, depth, options);
     }
     if (rawType === undefined && schema.enum) {
         const sample = (schema.enum as unknown[])[0];
@@ -60,6 +72,7 @@ export function fromJsonSchema(
         return finish({ kind, nullable: nullable || (schema.enum as unknown[]).includes(null) }, schema);
     }
     if (rawType === undefined) {
+        if (options.untypedBelowTop === 'any' && options.nested) return finish({ kind: 'any' }, schema);
         return { ok: false, error: 'schema does not declare a type' };
     }
     if (typeof rawType !== 'string') return { ok: false, error: 'schema type is invalid' };
@@ -72,9 +85,9 @@ export function fromJsonSchema(
         case 'null':
             return finish({ kind: rawType, nullable: nullable && rawType !== 'null' }, schema);
         case 'object':
-            return objectSchema(schema, nullable, root, seen, depth);
+            return objectSchema(schema, nullable, root, seen, depth, options);
         case 'array':
-            return arraySchema(schema, nullable, root, seen, depth);
+            return arraySchema(schema, nullable, root, seen, depth, options);
         default:
             return { ok: false, error: `unsupported schema type ${rawType}` };
     }
@@ -100,13 +113,15 @@ function objectSchema(
     nullable: boolean,
     root: unknown,
     seen: string[],
-    depth: number
+    depth: number,
+    options: ConvertOptions
 ): SchemaConversion {
+    const child = { ...options, nested: true };
     const properties: Record<string, ValueType> = {};
     if (schema.properties !== undefined) {
         if (!isRecord(schema.properties)) return { ok: false, error: 'properties must be an object' };
-        for (const [name, child] of Object.entries(schema.properties)) {
-            const converted = fromJsonSchema(child, root, seen, depth + 1);
+        for (const [name, property] of Object.entries(schema.properties)) {
+            const converted = fromJsonSchema(property, root, seen, depth + 1, child);
             if (!converted.ok) return converted;
             properties[name] = converted.schema;
         }
@@ -117,7 +132,7 @@ function objectSchema(
     let additional: ValueType['additionalProperties'];
     if (schema.additionalProperties === false) additional = false;
     else if (isRecord(schema.additionalProperties)) {
-        const converted = fromJsonSchema(schema.additionalProperties, root, seen, depth + 1);
+        const converted = fromJsonSchema(schema.additionalProperties, root, seen, depth + 1, child);
         if (!converted.ok) return converted;
         additional = converted.schema;
     }
@@ -135,18 +150,21 @@ function arraySchema(
     nullable: boolean,
     root: unknown,
     seen: string[],
-    depth: number
+    depth: number,
+    options: ConvertOptions
 ): SchemaConversion {
     if (schema.items === undefined) {
         return finish({ kind: 'array', nullable }, schema);
     }
-    const converted = fromJsonSchema(schema.items, root, seen, depth + 1);
+    // The items of a result list are the result: they stay as nested as the list is.
+    const converted = fromJsonSchema(schema.items, root, seen, depth + 1, options);
     if (!converted.ok) return converted;
     return finish({ kind: 'array', nullable, items: converted.schema }, schema);
 }
 
-function mergeAllOf(branches: unknown[], root: unknown, seen: string[], depth: number): SchemaConversion {
-    const converted = branches.map(branch => fromJsonSchema(branch, root, seen, depth + 1));
+function mergeAllOf(branches: unknown[], root: unknown, seen: string[], depth: number, options: ConvertOptions): SchemaConversion {
+    // A branch is the object itself, not a field of it.
+    const converted = branches.map(branch => fromJsonSchema(branch, root, seen, depth + 1, options));
     const failed = converted.find(entry => !entry.ok);
     if (failed && !failed.ok) return failed;
     const schemas = converted.map(entry => (entry as { ok: true; schema: ValueType }).schema);

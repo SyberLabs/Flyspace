@@ -326,7 +326,7 @@ function shapeErrors(input: unknown): string[] {
         errors.push('proposal.output is required');
     } else {
         closed(input.output, OUTPUT_KEYS, 'proposal.output', errors);
-        if (containsAny(input.output.schema)) {
+        if (untypedResult(input.output.schema)) {
             errors.push('proposal.output.schema must be typed; an untyped result is not admitted as any');
         }
     }
@@ -375,13 +375,15 @@ function closed(
     }
 }
 
-function containsAny(schema: unknown, depth = 0): boolean {
-    if (!isRecord(schema) || depth > 32) return false;
+/**
+ * The result, or each item of a result list, must be typed. A field inside a
+ * typed result may be `any`: the API does return it and its type is unknown
+ * (jsonSchema.ts), and an `any` source is never assignable to a typed input.
+ */
+function untypedResult(schema: unknown): boolean {
+    if (!isRecord(schema)) return false;
     if (schema.kind === 'any') return true;
-    if (containsAny(schema.items, depth + 1)) return true;
-    if (isRecord(schema.additionalProperties) && containsAny(schema.additionalProperties, depth + 1)) return true;
-    return isRecord(schema.properties)
-        && Object.values(schema.properties).some(child => containsAny(child, depth + 1));
+    return schema.kind === 'array' && isRecord(schema.items) && schema.items.kind === 'any';
 }
 
 function originOf(baseUrl: unknown): string | undefined {
