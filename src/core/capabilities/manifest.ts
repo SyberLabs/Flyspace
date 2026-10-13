@@ -166,6 +166,11 @@ const SECRET_REF_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 export const MAX_AUTH_HINT = 300;
 const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,64}$/;
 
+/** Whether a name can be an input's name. */
+export function isInputName(name: string): boolean {
+    return NAME_PATTERN.test(name);
+}
+
 /**
  * Names an object property cannot hold as plain data: __proto__ (an
  * accessor), prototype, and every name Object.prototype already defines

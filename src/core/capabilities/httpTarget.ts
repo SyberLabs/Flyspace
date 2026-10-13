@@ -2,10 +2,31 @@
 // A path argument fills one segment of the template and nothing else: the
 // resolved pathname must be exactly the expanded template.
 
+import type { ValueType } from './valueType';
+
 export function joinUrl(baseUrl: string, path: string): URL {
     const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
     const relative = path.startsWith('/') ? path.slice(1) : path;
     return new URL(relative, base);
+}
+
+/** An array of strings, numbers, or booleans: a query list Flyspace can send. */
+export function isPlainList(schema: ValueType): boolean {
+    return schema.kind === 'array' && !!schema.items
+        && (schema.items.kind === 'string' || schema.items.kind === 'number' || schema.items.kind === 'integer' || schema.items.kind === 'boolean');
+}
+
+/**
+ * Put one query argument on a URL. A list is sent the OpenAPI default way for
+ * a query (form, exploded): one `name=value` per element, in order.
+ */
+export function setQueryParam(params: URLSearchParams, name: string, value: unknown): void {
+    if (Array.isArray(value)) {
+        params.delete(name);
+        for (const element of value) params.append(name, stringifyParam(element));
+        return;
+    }
+    params.set(name, stringifyParam(value));
 }
 
 export function stringifyParam(value: unknown): string {

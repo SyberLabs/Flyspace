@@ -2,7 +2,7 @@
 // Side effects stop here until approveCapability has moved them to `approved`.
 
 import { canonicalize, sha256 } from './hash';
-import { joinUrl, resolveHttpPath, stringifyParam } from './httpTarget';
+import { joinUrl, resolveHttpPath, setQueryParam, stringifyParam } from './httpTarget';
 import { redact } from './redact';
 import {
     admitExecution,
@@ -180,7 +180,7 @@ function prepareRun(manifest: CapabilityManifest, args: Readonly<Record<string, 
                 return { error: `${entry.name} carries the credential and cannot be supplied as an input` };
             }
             const value = args[entry.name];
-            if (entry.in === 'query') target.url.searchParams.set(entry.name, stringifyParam(value));
+            if (entry.in === 'query') setQueryParam(target.url.searchParams, entry.name, value);
             else if (entry.in === 'header') headers[entry.name] = stringifyParam(value);
             else if (entry.in === 'body') body = JSON.stringify(value);
         }
