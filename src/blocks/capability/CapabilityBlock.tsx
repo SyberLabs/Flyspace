@@ -15,6 +15,8 @@ import { EffectPill } from '@/components/apis/ApiReview';
 import { KeyField, keySlotOf, useHasKey, useHouseKeyCovers } from '@/components/apis/KeyField';
 import { useRememberingKeys } from '@/components/apis/RememberKeys';
 import { SignInPrompt, useSignIn } from '@/components/apis/SignIn';
+import { ProviderAttribution } from '@/components/apis/ProviderAttribution';
+import { attributionFor } from '@/core/capabilities/curatedApis';
 import { argumentsFrom, CapabilityInputs, constantOf, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
 
@@ -97,6 +99,8 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const signIn = useSignIn(manifest);
     const needsSignIn = signIn !== null && !signIn.signedIn;
     const needsCredential = needsKey || needsSignIn;
+    // A provider whose terms require a notice on every app screen that uses it (FRED).
+    const attribution = attributionFor(manifest);
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
     const params = isPlainParams(block?.params) ? block.params : {};
@@ -271,6 +275,7 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                     </p>
                 ) : null}
             </div>
+            {attribution ? <ProviderAttribution attribution={attribution} /> : null}
             {previewError ? (
                 <p className="text-xs text-[var(--truth-red)]">{previewError}</p>
             ) : null}

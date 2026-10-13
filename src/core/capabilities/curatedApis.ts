@@ -5,6 +5,7 @@
 
 import type { ApiIndexEntry } from './apiIndex';
 import type { KeyGuide } from './keyGuide';
+import type { CapabilityManifest } from './manifest';
 import { ALPHA_VANTAGE_SPEC } from './curated/alphaVantage';
 import { BLS_SPEC } from './curated/bls';
 import { FRED_SPEC } from './curated/fred';
@@ -20,6 +21,16 @@ export interface CuratedApi {
     keyGuide?: Omit<KeyGuide, 'source'>;
     /** The environment variable the quality line reads its key from (scripts/verify-curated.ts). */
     keyEnv?: string;
+    /** What the provider's terms require an app to show its users, on every block that calls it. */
+    attribution?: Attribution;
+}
+
+export interface Attribution {
+    /** The provider's own wording, shown as written. */
+    notice: string;
+    /** The terms a person agrees to by using the block. */
+    termsUrl: string;
+    termsTitle: string;
 }
 
 export const CURATED_APIS: readonly CuratedApi[] = [
@@ -46,7 +57,15 @@ export const CURATED_APIS: readonly CuratedApi[] = [
             format: { pattern: '^[a-z0-9]{32}$', describe: '32 lowercase letters and digits' },
             test: { operationId: 'getSeriesObservations', input: { series_id: 'GDP', file_type: 'json', limit: 1 } }
         },
-        brokerOrigins: ['https://api.stlouisfed.org']
+        brokerOrigins: ['https://api.stlouisfed.org'],
+        // Required by https://fred.stlouisfed.org/docs/api/terms_of_use.html (checked 2026-10-12)
+        // for an application other people use: this exact notice, shown prominently, and a link to
+        // the terms that using the application means agreeing to.
+        attribution: {
+            notice: 'This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.',
+            termsUrl: 'https://fred.stlouisfed.org/docs/api/terms_of_use.html',
+            termsTitle: 'FRED® API Terms of Use'
+        }
     },
     {
         entry: {
@@ -142,6 +161,22 @@ export const CURATED_APIS: readonly CuratedApi[] = [
         brokerOrigins: ['https://www.metaculus.com']
     }
 ];
+
+/**
+ * The attribution a provider's terms require, for any manifest that calls it,
+ * however it was installed: matched on the API's origin, not the install path.
+ */
+export function attributionFor(manifest: CapabilityManifest | undefined): Attribution | null {
+    if (!manifest || manifest.transport.kind !== 'http') return null;
+    let origin: string;
+    try {
+        origin = new URL(manifest.transport.baseUrl).origin;
+    } catch {
+        return null;
+    }
+    const api = CURATED_APIS.find(entry => entry.attribution && entry.brokerOrigins.includes(origin));
+    return api?.attribution ?? null;
+}
 
 export function curatedApi(id: string): CuratedApi | undefined {
     return CURATED_APIS.find(api => api.entry.id === id);
