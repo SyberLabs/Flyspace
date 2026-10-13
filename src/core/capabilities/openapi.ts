@@ -565,7 +565,8 @@ function collectOutput(
     const json = jsonContent(response.content);
     if (!json) return { error: 'only application/json responses are in the supported subset' };
     if (json.schema === undefined) return { error: 'response schema is required' };
-    const converted = fromJsonSchema(json.schema, spec);
+    // A field the spec leaves untyped is `any`; an untyped response as a whole is still refused.
+    const converted = fromJsonSchema(json.schema, spec, [], 0, { untypedBelowTop: 'any' });
     if (!converted.ok) return { error: converted.error };
     return { output: presentationFor(converted.schema) };
 }
