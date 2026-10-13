@@ -87,6 +87,10 @@ this order:
    first run always works.
 6. **Spec forge.** A developer tool that drafts a curated spec from provider
    docs, checks it against live calls, and leaves a person to approve it.
+   Status: drafts with Claude, OpenAI or Gemini (`--provider`). Measured once
+   on 2026-10-12 with Gemini 2.5 Pro: Open Library search docs, passed the
+   checks in round 1, both operations answered live. Claude and OpenAI are
+   tested with stubs only.
 7. **Data plant.** Server-side house keys, used only where a provider's terms
    allow an application key, behind a shared cache with per-user quotas and
    provenance on every value. Lifts the "broad provider catalog" cut in
