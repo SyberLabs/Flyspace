@@ -45,7 +45,7 @@ jobs:
         if: steps.access.outputs.enabled == 'true'
         with:
           repository: SyberLabs/MasterMind
-          ref: bf0dd6c22b9411a82dfebb3a533c1fb8a1e7b2e8
+          ref: bca5384b4a78992572a4d8ae07c608743aec97ca
           token: ${{ secrets.GITHITS_USAGE_TOKEN }}
           path: .private-githits
           persist-credentials: false
