@@ -1,8 +1,12 @@
 {
   "mcpServers": {
     "githits": {
-      "type": "http",
-      "url": "https://mcp.githits.com"
+      "command": "${GITHITS_USAGE_NODE}",
+      "args": [
+        "${GITHITS_USAGE_HOME}/mcp.mjs",
+        "--repo",
+        "SyberLabs/Flyspace"
+      ]
     }
   }
 }
