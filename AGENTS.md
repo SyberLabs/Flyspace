@@ -138,9 +138,13 @@ made in this repo.
 
 ## Public dependency lookup
 
-`.mcp.json` registers the hosted GitHits MCP server (`https://mcp.githits.com`,
-OAuth on first use). Headless agents set `GITHITS_API_TOKEN` in the environment;
-never write a token to a file.
+`.mcp.json` invokes the private MasterMind usage runtime. Install its
+`tools/githits-usage` package with Node 24 and run `install.mjs`; before starting
+the agent, load `GITHITS_USAGE_NODE` and `GITHITS_USAGE_HOME` from its ignored
+`data/environment.json`. These are absolute executable/tool paths, independent
+of PATH and the launch directory. Headless agents also set `GITHITS_API_TOKEN`
+in the environment; interactive OAuth uses the private bridge. Never write a
+token here or restore a direct unaccounted hosted fallback. See `CLAUDE.md`.
 
 - Use it for the exact source and docs of the dependency version in
   `package-lock.json`, and for vulnerability, changelog, and upgrade checks
