@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__githits__search",
+      "mcp__githits__get_example",
+      "mcp__githits__read",
+      "mcp__githits__list",
+      "mcp__githits__grep"
+    ]
+  }
+}
