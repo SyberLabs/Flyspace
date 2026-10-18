@@ -83,7 +83,11 @@ describe('Connect: finishing a sign-in', () => {
         const [body, mac] = cookie.split('.');
         const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(body, 'base64url').toString()), scopes: ['https://www.googleapis.com/auth/calendar'] })).toString('base64url');
         expect(await finish({ state, cookie: `${forged}.${mac}` })).toMatchObject({ ok: false });
-        expect(await finish({ state: `${state.slice(0, -1)}x`, cookie })).toMatchObject({ ok: false, error: 'This sign-in was not started in this browser' });
+        // Flip the last character instead of replacing it with a fixed one: the state is
+        // random base64url, so a fixed 'x' left it unchanged for the 1 in 64 states that
+        // already ended in 'x', and this assertion then failed by chance.
+        const mismatched = `${state.slice(0, -1)}${state.endsWith('x') ? 'y' : 'x'}`;
+        expect(await finish({ state: mismatched, cookie })).toMatchObject({ ok: false, error: 'This sign-in was not started in this browser' });
     });
 
     it('refuses a non-ASCII state of the same length without throwing', async () => {

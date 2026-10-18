@@ -108,7 +108,10 @@ describe('field evaluation harness', () => {
             completed: true, speechTurns: 3, pointerActs: 1, errors: 0, clarifications: 0, confirmations: 1
         });
 
-        const report = readFileSync(join(import.meta.dirname, 'FIELD_REPORT.md'), 'utf8');
+        // FIELD_REPORT.md is stored with LF, but a Windows checkout with core.autocrlf=true
+        // reads it back with CRLF while renderFieldTable joins its lines with LF. Compare
+        // the text, not the checkout's line endings.
+        const report = readFileSync(join(import.meta.dirname, 'FIELD_REPORT.md'), 'utf8').replace(/\r\n/g, '\n');
         const table = renderFieldTable(runs);
         expect(report).toContain(table);
         expect(report).toMatch(/scripted in-memory engine tasks are what was measured/i);
