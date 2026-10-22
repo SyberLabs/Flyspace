@@ -42,9 +42,11 @@ function pool(): Pool | null {
             connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
             statement_timeout: STATEMENT_TIMEOUT_MS,
             // Ambient SSL for hosted Postgres; local sockets ignore it.
-            ssl: /\bsslmode=(require|verify-full|verify-ca)\b/.test(connectionString)
-                ? { rejectUnauthorized: false }
-                : undefined
+            ssl: /\bsslmode=verify-(full|ca)\b/.test(connectionString)
+                ? { rejectUnauthorized: true }
+                : /\bsslmode=require\b/.test(connectionString)
+                  ? { rejectUnauthorized: false }
+                  : undefined
         });
         // An idle-client error must not take the process down with it.
         globalForPg.__omniPgPool.on('error', () => {

@@ -49,9 +49,11 @@ async function main(): Promise<void> {
     const pool = new Pool({
         connectionString,
         max: 1,
-        ssl: /\bsslmode=(require|verify-full|verify-ca)\b/.test(connectionString)
-            ? { rejectUnauthorized: false }
-            : undefined
+        ssl: /\bsslmode=verify-(full|ca)\b/.test(connectionString)
+            ? { rejectUnauthorized: true }
+            : /\bsslmode=require\b/.test(connectionString)
+              ? { rejectUnauthorized: false }
+              : undefined
     });
 
     try {
