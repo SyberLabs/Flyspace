@@ -20,3 +20,15 @@ if (typeof globalThis.localStorage === 'undefined') {
         writable: true
     });
 }
+
+// The Web Animations spec marks `finished` as handled when cancel() rejects it;
+// happy-dom does not, so every framer-motion animation stopped mid-flight
+// surfaces as an unhandled AbortError. Mark it handled before cancelling —
+// anyone awaiting `finished` still sees the rejection.
+if (typeof globalThis.Animation !== 'undefined') {
+    const cancel = globalThis.Animation.prototype.cancel;
+    globalThis.Animation.prototype.cancel = function (this: Animation) {
+        this.finished?.catch(() => {});
+        return cancel.call(this);
+    };
+}
