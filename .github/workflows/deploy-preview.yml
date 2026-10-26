@@ -57,11 +57,11 @@ jobs:
 
       # The commit CI tested, not whatever main has become since. A manual run
       # has no CI run, so it takes main's head.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
