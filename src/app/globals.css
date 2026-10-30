@@ -738,3 +738,67 @@ body {
 .account-restore { margin-top: 18px; padding: 14px; border: 1px solid #9a6bff88; border-radius: 12px; background: #9a6bff16; }
 .account-restore h3 { margin: 0 0 5px; }
 .account-restore > small { color: var(--text-muted); font-size: 11px; }
+
+/* ============================================
+   MIDNIGHT THEME: SITE-LIKE PAGES ONLY
+   The SyberLabs Midnight theme (syberlabs.io, October 30, 2026) for pages
+   that are not the canvas. Today that is only not-found.tsx. Everything is
+   scoped to .midnight-page, so the canvas and every working screen keep the
+   Atlas palette above. Midnight #02070A surface, off-white text, Electric
+   Blue #0297DE for links and focus.
+   ============================================ */
+
+:root:has(.midnight-page) { color-scheme: dark; }
+body:has(.midnight-page) { background: #02070a; }
+
+.midnight-page {
+  --citadel-void: #02070a;
+  --citadel-surface: #07121a;
+  --citadel-elevated: #0c1b25;
+  --citadel-border: rgba(140, 200, 235, 0.14);
+  --rule: rgba(140, 200, 235, 0.14);
+  --rule-2: rgba(140, 200, 235, 0.28);
+  --blue: #0297de;
+  --ice: #0297de;
+  --citadel-primary: #0297de;
+  --text-primary: #f1f6f9;
+  --text-secondary: #c3cfd6;
+  --text-muted: #93a4ae;
+  color-scheme: dark;
+  background: var(--citadel-void);
+  color: var(--text-primary);
+}
+.midnight-page a { color: var(--blue); }
+.midnight-page a:hover { color: #4cc0f5; }
+.midnight-page :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.midnight-page ::selection { background: rgba(2, 151, 222, 0.32); color: #fff; }
+
+/* The framework's stock 404 layout, unchanged; only its colours are Midnight. */
+.not-found {
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  height: 100vh;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.not-found-code {
+  display: inline-block;
+  margin: 0 20px 0 0;
+  padding: 0 23px 0 0;
+  font-size: 24px;
+  font-weight: 500;
+  vertical-align: top;
+  line-height: 49px;
+  color: var(--text-primary);
+  border-right: 1px solid var(--rule-2);
+}
+.not-found-message { display: inline-block; }
+.not-found-message h2 {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 49px;
+  margin: 0;
+  color: var(--text-secondary);
+}
