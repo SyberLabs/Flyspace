@@ -103,19 +103,26 @@ version.
 
 ### Logs
 
-`wrangler.jsonc` turns on Workers Logs (`observability.enabled`). From the
-first deploy that carries it, Cloudflare keeps a log of every request to the
-Worker, with its method, full URL and the request metadata Cloudflare
-attaches, which can include the client address, for up to 7 days (3 on the
-Workers Free plan). Deploy it only while syberlabs.io's privacy page says the
-preview keeps Cloudflare request logs for up to 7 days.
+`wrangler.jsonc` turns on Workers Logs (`observability.enabled`) with request
+logs off (`observability.logs.invocation_logs: false`). Cloudflare then keeps
+no log per request, the entry that would carry its method, full URL and
+request metadata, which can include the client address. From the app's own
+code, Workers Logs keeps only the allowlisted event lines below, for 3 days
+on the Workers Free plan and 7 on Paid. Cloudflare's docs do not say what
+metadata it attaches to such a line, so check one from the deployed Worker
+before counting on it carrying no URL or address.
 
-The app's own lines are JSON, one per event, written only through
+The lines are JSON, one per event, written only through
 `src/core/services/server/telemetry.ts`; a test fails on any other console
 call under `src/app/api`, `src/core/services/server` or `src/core/db`.
 `telemetry/events.json` names every event and every field an event may
-carry. Error detail is the error's class name, never its
-message. Errors go to `console.error`, the rest to `console.log`.
+carry. Error detail is the error's class name, never its message. Errors go
+to `console.error`, the rest to `console.log`. vinext and React can still
+write their own error lines, and the runtime still records an uncaught
+exception; neither is on the allowlist.
+
+Turning request logs on would keep full URLs and can keep client addresses.
+Do it only after syberlabs.io's privacy page says the preview keeps them.
 
 ### Automatic deploys (off until enabled)
 

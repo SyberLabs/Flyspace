@@ -16,7 +16,10 @@
     "NEXT_PUBLIC_OMNI_PUBLIC_DEMO": "1"
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "invocation_logs": false
+    }
   },
   "assets": {
     "directory": "dist/client",
