@@ -22,6 +22,7 @@ import { openRun, MAX_SOURCES, normalizePostgresBigintId, type RunSource, type S
 import { authenticateApiRequest, hostedAuthRequired } from '@/core/services/server/auth';
 import { readBoundedJson } from '@/core/services/server/boundedJson';
 import { requireSameOrigin } from '@/core/services/server/sameOrigin';
+import { errorKind, logEvent } from '@/core/services/server/telemetry';
 
 export const runtime = 'nodejs';
 
@@ -354,8 +355,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(result, { headers: runIdHeader(run.id) });
     } catch (err) {
         // Never reflect raw upstream errors to the client (may contain
-        // keys/PII). The ledger keeps a scrubbed copy so a 502 is diagnosable.
-        console.error('[api/llm] provider call failed');
+        // keys/PII). The ledger keeps a scrubbed copy so a 502 is diagnosable;
+        // the log keeps the provider, the HTTP status and the error class.
+        logEvent('flyspace.llm.failed', {
+            llm_provider: provider,
+            status: err instanceof ProviderResponseError ? err.status : undefined,
+            kind: errorKind(err)
+        });
         const uncertain = inferenceSignal.aborted || !(err instanceof ProviderResponseError)
             || !err.isDefinitiveRejection;
         if (uncertain) {

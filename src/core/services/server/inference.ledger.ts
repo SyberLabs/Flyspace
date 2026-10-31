@@ -19,6 +19,7 @@
 import 'server-only';
 import { query, transaction, isDatabaseConfigured } from '@/core/db/client';
 import { SECRET_ENV_VARS, MIN_SECRET_LENGTH } from '@/core/secrets';
+import { errorKind, logEvent } from './telemetry';
 
 // ============================================
 // TYPES
@@ -239,8 +240,8 @@ const RECONCILE_STALE_HOSTED_RUNS = `
 async function reconcileStaleHostedRuns(): Promise<void> {
     try {
         await query(RECONCILE_STALE_HOSTED_RUNS);
-    } catch {
-        console.error('[ledger] stale hosted run reconciliation failed');
+    } catch (err) {
+        logEvent('flyspace.ledger.reconcile_failed', { kind: errorKind(err) });
     }
 }
 
@@ -361,10 +362,9 @@ export async function openRun(input: OpenRunInput): Promise<LedgerRun> {
     } catch (err) {
         if (err instanceof ParentOwnershipError) return { ...NOOP_RUN, parentRejected: true };
         suppressedUntil = Date.now() + OPEN_FAILURE_COOLDOWN_MS;
-        console.error(
-            `[ledger] could not open run (pausing ${OPEN_FAILURE_COOLDOWN_MS}ms):`,
-            normalizeError(err)
-        );
+        // Only the class reaches the log: a pg error's text can carry the
+        // connection string.
+        logEvent('flyspace.ledger.open_failed', { kind: errorKind(err) });
         return NOOP_RUN;
     }
 
@@ -397,7 +397,7 @@ class OpenLedgerRun implements LedgerRun {
         } catch (err) {
             // Rule 1: the answer already went out. Losing the row is the
             // cheaper failure, and the row stays 'running' to say so.
-            console.error(`[ledger] could not close run ${this.id}:`, normalizeError(err));
+            logEvent('flyspace.ledger.close_failed', { kind: errorKind(err) });
         }
     }
 

@@ -111,6 +111,7 @@ describe('/api/llm total request deadline', () => {
         mocks.isProviderConfigured.mockReturnValue(true);
         mocks.openRun.mockResolvedValue(run);
         mocks.runComplete.mockRejectedValue(new TypeError('connection refused'));
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
         const response = await POST(new Request('http://localhost/api/llm', {
             method: 'POST',
             headers: { origin: 'http://localhost', 'content-type': 'application/json' },
@@ -120,6 +121,8 @@ describe('/api/llm total request deadline', () => {
         expect(await response.json()).toMatchObject({ error: expect.stringContaining('outcome may be unresolved') });
         expect(run.uncertain).toHaveBeenCalledOnce();
         expect(run.failed).not.toHaveBeenCalled();
+        expect(error.mock.calls).toEqual([['{"event":"flyspace.llm.failed","llm_provider":"anthropic","kind":"TypeError"}']]);
+        error.mockRestore();
     });
 
     it.each([408, 429, 500, 503])('marks provider HTTP %i as unresolved', async status => {
@@ -147,6 +150,7 @@ describe('/api/llm total request deadline', () => {
         mocks.openRun.mockResolvedValue(run);
         const { ProviderResponseError } = await import('@/core/services/server/llm.adapters');
         mocks.runComplete.mockRejectedValue(new ProviderResponseError(`HTTP ${status}`, status));
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
         const response = await POST(new Request('http://localhost/api/llm', {
             method: 'POST', headers: { origin: 'http://localhost', 'content-type': 'application/json' },
             body: JSON.stringify({ provider: 'anthropic', model: 'claude', messages: [{ role: 'user', content: 'hi' }] })
@@ -154,6 +158,9 @@ describe('/api/llm total request deadline', () => {
         expect(response.status).toBe(502);
         expect(run.failed).toHaveBeenCalledOnce();
         expect(run.uncertain).not.toHaveBeenCalled();
+        expect(error).toHaveBeenCalledOnce();
+        expect(JSON.parse(String(error.mock.calls[0][0]))).toMatchObject({ event: 'flyspace.llm.failed', llm_provider: 'anthropic', status });
+        error.mockRestore();
     });
 
     it('fails hosted admission closed when the ledger cannot return a durable run', async () => {

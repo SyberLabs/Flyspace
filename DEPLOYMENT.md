@@ -101,6 +101,21 @@ Then run the route checks above against `https://omni.syberlabs.io`.
 address. To undo a bad release, `npx wrangler rollback` restores the prior
 version.
 
+### Logs
+
+`wrangler.jsonc` turns on Workers Logs (`observability.enabled`). From the
+first deploy that carries it, Cloudflare keeps a log of every request to the
+Worker, with its method, full URL and the request metadata Cloudflare
+attaches, which can include the client address, for up to 7 days (3 on the
+Workers Free plan). Deploy it only while syberlabs.io's privacy page says the
+preview keeps Cloudflare request logs for up to 7 days.
+
+The app's own lines are JSON, one per event, written only through
+`src/core/services/server/telemetry.ts`; a test fails on any other console
+call in server code. `telemetry/events.json` names every event and every
+field an event may carry. Error detail is the error's class name, never its
+message. Errors go to `console.error`, the rest to `console.log`.
+
 ### Automatic deploys (off until enabled)
 
 `.github/workflows/deploy-preview.yml` runs the steps above after CI passes

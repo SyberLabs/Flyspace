@@ -21,6 +21,7 @@ import {
 } from '@/core/services/server/inference.ledger';
 import { isDatabaseConfigured } from '@/core/db/client';
 import { authenticateApiRequest } from '@/core/services/server/auth';
+import { errorKind, logEvent } from '@/core/services/server/telemetry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,9 +69,10 @@ export async function GET(request: NextRequest) {
             { configured: true, limit, runs },
             { headers: { 'cache-control': 'no-store' } }
         );
-    } catch {
-        // A connection string or host name could ride along on a pg error.
-        console.error('[api/inference-runs] ledger query failed');
+    } catch (err) {
+        // A connection string or host name could ride along on a pg error,
+        // so the log keeps its class and nothing else.
+        logEvent('flyspace.ledger.query_failed', { query: 'runs', kind: errorKind(err) });
         return NextResponse.json({ error: 'Ledger query failed. Check server logs.' }, { status: 503 });
     }
 }

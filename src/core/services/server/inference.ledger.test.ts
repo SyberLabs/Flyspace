@@ -144,16 +144,23 @@ describe('without a database', () => {
 
 describe('when the database is broken', () => {
     it('an insert failure degrades to a no-op handle instead of throwing', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
         vi.mocked(transaction).mockRejectedValue(new Error('ECONNREFUSED 127.0.0.1:5432'));
         const run = await openRun(BASE_RUN);
         expect(run.id).toBeNull();
         await expect(run.succeeded({ output: 'answer' })).resolves.toBeUndefined();
+        // The error's class reaches the log; its text, which can name the host, does not.
+        expect(error.mock.calls).toEqual([['{"event":"flyspace.ledger.open_failed","kind":"Error"}']]);
+        error.mockRestore();
     });
 
     it('a close failure is swallowed — the answer already shipped', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
         const run = await openRun(BASE_RUN);
         vi.mocked(query).mockRejectedValue(new Error('connection terminated'));
         await expect(run.succeeded({ output: 'answer' })).resolves.toBeUndefined();
+        expect(error.mock.calls).toEqual([['{"event":"flyspace.ledger.close_failed","kind":"Error"}']]);
+        error.mockRestore();
     });
 
     it('a stream still delivers every byte when the ledger write fails', async () => {

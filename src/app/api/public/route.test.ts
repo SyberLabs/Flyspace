@@ -4,10 +4,10 @@ import { GET } from './route';
 
 const BODY_MARKER = 'UPSTREAM-BODY-MUST-NOT-BE-LOGGED';
 
-let warn: ReturnType<typeof vi.spyOn>;
+let log: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    log = vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -62,7 +62,7 @@ describe('GET /api/public', () => {
 
         expect(await failureOf(await GET(request('provider=wikipedia')))).toBe('upstream_timeout');
         expect(timeoutSpy).toHaveBeenCalledWith(8000);
-        expect(JSON.stringify(warn.mock.calls)).toContain('upstream_timeout');
+        expect(log).toHaveBeenCalledWith('{"event":"flyspace.source.failed","provider":"wikipedia","reason":"timeout","kind":"TimeoutError"}');
     });
 
     it('does not follow a redirect and reports it as 502 upstream_redirect', async () => {
@@ -74,8 +74,9 @@ describe('GET /api/public', () => {
 
         expect(await failureOf(await GET(request('provider=frankfurter')))).toBe('upstream_redirect');
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        const logged = JSON.stringify(warn.mock.calls);
-        expect(logged).toContain('evil.example');
+        expect(log).toHaveBeenCalledWith('{"event":"flyspace.source.failed","provider":"frankfurter","reason":"redirect","status":302}');
+        const logged = JSON.stringify(log.mock.calls);
+        expect(logged).not.toContain('evil.example');
         expect(logged).not.toContain('SECRET-IN-LOCATION');
     });
 
@@ -86,6 +87,7 @@ describe('GET /api/public', () => {
         })));
 
         expect(await failureOf(await GET(request('provider=crossref')))).toBe('upstream_too_large');
+        expect(log).toHaveBeenCalledWith('{"event":"flyspace.source.failed","provider":"crossref","reason":"too_large"}');
     });
 
     it('reports an upstream non-2xx as 502 upstream_status and logs the status, never the body', async () => {
@@ -94,9 +96,8 @@ describe('GET /api/public', () => {
         })));
 
         expect(await failureOf(await GET(request('provider=github')))).toBe('upstream_status');
-        const logged = JSON.stringify(warn.mock.calls);
-        expect(logged).toContain('403');
-        expect(logged).not.toContain(BODY_MARKER);
+        expect(log).toHaveBeenCalledWith('{"event":"flyspace.source.failed","provider":"github","reason":"status","status":403}');
+        expect(JSON.stringify(log.mock.calls)).not.toContain(BODY_MARKER);
     });
 
     it('reports non-JSON upstream as 502 upstream_shape and keeps the body out of the log', async () => {
@@ -105,7 +106,8 @@ describe('GET /api/public', () => {
         })));
 
         expect(await failureOf(await GET(request('provider=openlibrary')))).toBe('upstream_shape');
-        expect(JSON.stringify(warn.mock.calls)).not.toContain(BODY_MARKER);
+        expect(log).toHaveBeenCalledWith('{"event":"flyspace.source.failed","provider":"openlibrary","reason":"shape","kind":"SyntaxError"}');
+        expect(JSON.stringify(log.mock.calls)).not.toContain(BODY_MARKER);
     });
 
     it('reports a network failure as 502 upstream_unreachable without echoing the error text', async () => {
@@ -116,6 +118,7 @@ describe('GET /api/public', () => {
         const body = await response.json();
         expect(body.error.code).toBe('upstream_unreachable');
         expect(JSON.stringify(body)).not.toContain('secret-in-url');
-        expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-in-url');
+        expect(log).toHaveBeenCalledWith('{"event":"flyspace.source.failed","provider":"openmeteo","reason":"network","kind":"Error"}');
+        expect(JSON.stringify(log.mock.calls)).not.toContain('secret-in-url');
     });
 });

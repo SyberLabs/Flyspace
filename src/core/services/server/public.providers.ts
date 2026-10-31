@@ -11,6 +11,7 @@
 import 'server-only';
 import { getApiProvider } from '@/core/schemas/api.schema';
 import { readBoundedJson, RequestBodyTooLarge } from './boundedJson';
+import { errorKind, logEvent } from './telemetry';
 
 export const PUBLIC_PROXY_IDS = [
     'usgs',
@@ -109,19 +110,22 @@ export interface PublicFailure {
 
 type Outcome = { status: number; body: unknown };
 
-function failure(id: string, code: PublicFailureCode, message: string, detail: Record<string, unknown> = {}): Outcome {
-    // Status, code and keys only. The upstream body never reaches the log.
-    console.warn('[public proxy] upstream failure', { provider: id, code, ...detail });
+/** A failure code, in the words telemetry/events.json allows for `reason`. */
+const REASONS: Record<PublicFailureCode, string> = {
+    upstream_timeout: 'timeout',
+    upstream_redirect: 'redirect',
+    upstream_status: 'status',
+    upstream_too_large: 'too_large',
+    upstream_shape: 'shape',
+    upstream_unreachable: 'network'
+};
+
+function failure(id: string, code: PublicFailureCode, message: string, detail: { status?: number; kind?: string } = {}): Outcome {
+    // Provider, reason, status and error class only. Neither the upstream
+    // body nor where a redirect pointed reaches the log.
+    logEvent('flyspace.source.failed', { provider: id, reason: REASONS[code], ...detail });
     const body: PublicFailure = { error: { code, message: `${id}: ${message}` } };
     return { status: 502, body };
-}
-
-function redirectHost(res: Response): string {
-    try {
-        return new URL(res.headers.get('location') || '').host || '(none)';
-    } catch {
-        return '(unparseable)';
-    }
 }
 
 export async function fetchPublicProvider(
@@ -152,15 +156,14 @@ export async function fetchPublicProvider(
     } catch (error) {
         const name = error instanceof Error ? error.name : 'Unknown';
         if (name === 'TimeoutError' || name === 'AbortError') {
-            return failure(id, 'upstream_timeout', `no response within ${PUBLIC_UPSTREAM_DEADLINE_MS / 1000} s`);
+            return failure(id, 'upstream_timeout', `no response within ${PUBLIC_UPSTREAM_DEADLINE_MS / 1000} s`, { kind: errorKind(error) });
         }
-        return failure(id, 'upstream_unreachable', 'request failed', { name });
+        return failure(id, 'upstream_unreachable', 'request failed', { kind: errorKind(error) });
     }
 
     if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
         return failure(id, 'upstream_redirect', 'upstream redirected; redirects are not followed', {
-            status: res.status,
-            location: redirectHost(res)
+            status: res.status
         });
     }
     if (!res.ok) {
@@ -176,9 +179,9 @@ export async function fetchPublicProvider(
         }
         const name = error instanceof Error ? error.name : 'Unknown';
         if (name === 'TimeoutError' || name === 'AbortError') {
-            return failure(id, 'upstream_timeout', `body not complete within ${PUBLIC_UPSTREAM_DEADLINE_MS / 1000} s`);
+            return failure(id, 'upstream_timeout', `body not complete within ${PUBLIC_UPSTREAM_DEADLINE_MS / 1000} s`, { kind: errorKind(error) });
         }
         // SyntaxError (and only its name): the message would quote the body.
-        return failure(id, 'upstream_shape', 'non-JSON response', { name });
+        return failure(id, 'upstream_shape', 'non-JSON response', { kind: errorKind(error) });
     }
 }

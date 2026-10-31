@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runLineage, clampDepth, DEFAULT_LINEAGE_DEPTH } from '@/core/services/server/inference.ledger';
 import { isDatabaseConfigured } from '@/core/db/client';
 import { authenticateApiRequest } from '@/core/services/server/auth';
+import { errorKind, logEvent } from '@/core/services/server/telemetry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -55,9 +56,10 @@ export async function GET(
             { configured: true, depth, ...lineage },
             { headers: { 'cache-control': 'no-store' } }
         );
-    } catch {
-        // A connection string or host name could ride along on a pg error.
-        console.error('[api/inference-runs/lineage] query failed');
+    } catch (err) {
+        // A connection string or host name could ride along on a pg error,
+        // so the log keeps its class and nothing else.
+        logEvent('flyspace.ledger.query_failed', { query: 'lineage', kind: errorKind(err) });
         return NextResponse.json({ error: 'Lineage query failed. Check server logs.' }, { status: 503 });
     }
 }
