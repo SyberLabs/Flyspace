@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createRemoteJWKSet, errors, jwtVerify } from 'jose';
 import { NextResponse } from 'next/server';
+import { logEvent } from './telemetry';
 
 export interface AuthenticatedIdentity {
     ownerId: string | null;
@@ -88,7 +89,7 @@ export async function authenticateApiRequest(request: Request): Promise<AuthResu
         return { identity: { ownerId: `${issuer}:${payload.sub}` } };
     } catch (error) {
         if (error instanceof AuthConfigurationError || error instanceof errors.JWKSTimeout) {
-            console.error('[auth] identity provider unavailable or misconfigured');
+            logEvent('flyspace.auth.unavailable', { reason: error instanceof errors.JWKSTimeout ? 'timeout' : 'config' });
             return jsonError(503, 'Identity provider unavailable');
         }
         return jsonError(401, 'Invalid authentication token');

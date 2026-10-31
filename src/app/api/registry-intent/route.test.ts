@@ -71,11 +71,12 @@ describe('/api/registry-intent', () => {
 
     it('answers 502 on an upstream failure without echoing the query', async () => {
         mocks.classifyIntent.mockResolvedValue({ ok: false, failure: 'upstream_shape' });
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         const response = await POST(post({ query: 'my secret plans' }));
         expect(response.status).toBe(502);
-        expect(JSON.stringify(await response.json())).not.toContain('secret plans');
-        expect(JSON.stringify(warn.mock.calls)).not.toContain('secret plans');
-        warn.mockRestore();
+        expect(await response.json()).toEqual({ error: 'Search routing failed.' });
+        expect(log).toHaveBeenCalledWith('{"event":"flyspace.registry_intent.failed","reason":"shape"}');
+        expect(JSON.stringify(log.mock.calls)).not.toContain('secret plans');
+        log.mockRestore();
     });
 });

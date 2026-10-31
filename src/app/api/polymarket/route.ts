@@ -3,6 +3,7 @@
 // ============================================
 
 import { NextResponse } from 'next/server';
+import { errorKind, logEvent } from '@/core/services/server/telemetry';
 
 const UPSTREAM_URL = 'https://gamma-api.polymarket.com/markets?limit=50&closed=false&order=volumeNum&ascending=false';
 const UPSTREAM_DEADLINE_MS = 8000;
@@ -62,8 +63,8 @@ function asString(value: unknown, fallback: string): string {
  * GET /api/polymarket
  *
  * Upstream failure is reported as 502 `{ success: false, error }` so the
- * settings probe and the block see the outage. Logs carry the upstream
- * status and top-level keys, never the body.
+ * settings probe and the block see the outage. Logs carry the failure, the
+ * upstream status and the error class, never the body or its keys.
  */
 export async function GET() {
     try {
@@ -77,7 +78,7 @@ export async function GET() {
         });
 
         if (!response.ok) {
-            console.warn('[Polymarket API] upstream returned', response.status);
+            logEvent('flyspace.source.failed', { provider: 'polymarket', reason: 'status', status: response.status });
             return failure('upstream_status');
         }
 
@@ -85,10 +86,7 @@ export async function GET() {
         const marketsArray = marketsFromRaw(rawData);
 
         if (marketsArray === null) {
-            console.warn('[Polymarket API] unexpected upstream shape', {
-                status: response.status,
-                keys: isRecord(rawData) ? Object.keys(rawData) : typeof rawData
-            });
+            logEvent('flyspace.source.failed', { provider: 'polymarket', reason: 'shape', status: response.status });
             return failure('upstream_shape');
         }
 
@@ -148,7 +146,11 @@ export async function GET() {
         const name = error instanceof Error ? error.name : 'Unknown';
         const timedOut = name === 'TimeoutError' || name === 'AbortError';
         // Only the error name: a JSON SyntaxError message quotes the body.
-        console.warn('[Polymarket API] fetch failed:', name);
+        logEvent('flyspace.source.failed', {
+            provider: 'polymarket',
+            reason: timedOut ? 'timeout' : 'network',
+            kind: errorKind(error)
+        });
         return failure(timedOut ? 'upstream_timeout' : 'upstream_unreachable');
     }
 }

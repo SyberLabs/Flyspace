@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { authenticateApiRequest } from './auth';
@@ -87,6 +87,21 @@ describe('hosted API authentication', () => {
             headers: { 'x-user-id': 'attacker' }
         }));
         expect(result.response?.status).toBe(401);
+    });
+
+    it('answers 503 when the identity provider cannot be discovered, and logs only that', async () => {
+        const saved = process.env.OMNI_AUTH_ISSUER;
+        process.env.OMNI_AUTH_ISSUER = `${issuer}missing`;
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const result = await verify(await token({ issuer: `${issuer}missing` }));
+            expect(result.response?.status).toBe(503);
+            expect(await result.response?.json()).toEqual({ error: 'Identity provider unavailable' });
+            expect(error.mock.calls).toEqual([['{"event":"flyspace.auth.unavailable","reason":"config"}']]);
+        } finally {
+            process.env.OMNI_AUTH_ISSUER = saved;
+            error.mockRestore();
+        }
     });
 
     it('fails closed when hosted issuer or API audience configuration is absent', async () => {

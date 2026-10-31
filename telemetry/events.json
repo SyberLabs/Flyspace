@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "dataset": "syberlabs_events",
+  "fields": {
+    "provider": ["polymarket", "usgs", "wikipedia", "openlibrary", "github", "crossref", "openmeteo", "frankfurter", "other"],
+    "llm_provider": ["local", "anthropic", "google"],
+    "reason": ["timeout", "status", "redirect", "too_large", "shape", "network", "config", "other"],
+    "status": { "integer": [100, 599] },
+    "kind": ["AbortError", "TimeoutError", "TypeError", "SyntaxError", "ProviderResponseError", "Error", "other"],
+    "query": ["runs", "lineage"]
+  },
+  "events": {
+    "flyspace.source.failed": {
+      "level": "warn",
+      "fields": ["provider", "reason", "status", "kind"],
+      "owner": "Mateo",
+      "decision": "Count failures of the keyless sources the server relays, by provider and reason, so a dead source is seen before a canvas block goes empty."
+    },
+    "flyspace.registry_intent.failed": {
+      "level": "warn",
+      "fields": ["reason"],
+      "owner": "Mateo",
+      "decision": "Record that JEV search routing failed and why; search already falls back to keyword results, so this is a warning and never carries the query."
+    },
+    "flyspace.llm.failed": {
+      "level": "error",
+      "fields": ["llm_provider", "status", "kind"],
+      "owner": "Mateo",
+      "decision": "Record a failed provider call by provider, HTTP status and error class; the scrubbed error text stays in the ledger row, never in the log."
+    },
+    "flyspace.ledger.query_failed": {
+      "level": "error",
+      "fields": ["query", "kind"],
+      "owner": "Mateo",
+      "decision": "Record a failed ledger read, runs or lineage, without the pg error, which can carry the connection string."
+    },
+    "flyspace.ledger.open_failed": {
+      "level": "error",
+      "fields": ["kind"],
+      "owner": "Mateo",
+      "decision": "Record that a run row could not open and the ledger paused for 30 s; only the error class is kept, since its text can carry the connection string."
+    },
+    "flyspace.ledger.close_failed": {
+      "level": "error",
+      "fields": ["kind"],
+      "owner": "Mateo",
+      "decision": "Record that a run row stayed 'running' because its closing write failed, so the stuck row has a cause in the log."
+    },
+    "flyspace.ledger.reconcile_failed": {
+      "level": "error",
+      "fields": ["kind"],
+      "owner": "Mateo",
+      "decision": "Record that marking stale hosted runs 'uncertain' failed, so rows left 'running' have a cause in the log."
+    },
+    "flyspace.auth.unavailable": {
+      "level": "error",
+      "fields": ["reason"],
+      "owner": "Mateo",
+      "decision": "Record that the identity provider timed out or is misconfigured, the one authentication failure that is ours to fix rather than the caller's."
+    },
+    "flyspace.db.idle_client_failed": {
+      "level": "error",
+      "fields": ["kind"],
+      "owner": "Mateo",
+      "decision": "Record an idle Postgres client error by class only, so a dropped connection is visible without its text and never takes the process down."
+    }
+  }
+}

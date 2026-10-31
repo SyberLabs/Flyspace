@@ -14,10 +14,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readBoundedJson, RequestBodyTooLarge } from '@/core/services/server/boundedJson';
 import { requireSameOrigin } from '@/core/services/server/sameOrigin';
 import { classifyIntent } from '@/core/services/server/registryIntent';
+import { logEvent } from '@/core/services/server/telemetry';
 
 export const runtime = 'nodejs';
 
 const MAX_BODY_BYTES = 2048;
+
+/** An upstream failure, in the words telemetry/events.json allows for `reason`. */
+const REASONS = {
+    timeout: 'timeout',
+    unreachable: 'network',
+    upstream_status: 'status',
+    upstream_shape: 'shape'
+} as const;
 
 function reply(status: number, body: Record<string, unknown>): NextResponse {
     return NextResponse.json(body, {
@@ -48,6 +57,6 @@ export async function POST(request: NextRequest) {
     if (outcome.failure === 'query_invalid') return reply(400, { error: 'Query must be 1–200 characters.' });
     if (outcome.failure === 'not_configured') return reply(503, { error: 'Search routing is unavailable.' });
     // Status and failure code only; never the query or the upstream body.
-    console.warn('[registry-intent] upstream failure', { failure: outcome.failure });
+    logEvent('flyspace.registry_intent.failed', { reason: REASONS[outcome.failure] });
     return reply(502, { error: 'Search routing failed.' });
 }

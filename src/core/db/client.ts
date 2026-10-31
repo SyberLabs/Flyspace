@@ -12,6 +12,7 @@
 
 import 'server-only';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
+import { errorKind, logEvent } from '@/core/services/server/telemetry';
 
 /**
  * Fail fast rather than hanging a request behind an unreachable database.
@@ -48,9 +49,10 @@ function pool(): Pool | null {
                   ? { rejectUnauthorized: false }
                   : undefined
         });
-        // An idle-client error must not take the process down with it.
-        globalForPg.__omniPgPool.on('error', () => {
-            console.error('[db] idle client error');
+        // An idle-client error must not take the process down with it. Its
+        // text can carry the connection string, so only the class is logged.
+        globalForPg.__omniPgPool.on('error', err => {
+            logEvent('flyspace.db.idle_client_failed', { kind: errorKind(err) });
         });
     }
     return globalForPg.__omniPgPool;
