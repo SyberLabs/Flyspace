@@ -112,8 +112,9 @@ preview keeps Cloudflare request logs for up to 7 days.
 
 The app's own lines are JSON, one per event, written only through
 `src/core/services/server/telemetry.ts`; a test fails on any other console
-call in server code. `telemetry/events.json` names every event and every
-field an event may carry. Error detail is the error's class name, never its
+call under `src/app/api`, `src/core/services/server` or `src/core/db`.
+`telemetry/events.json` names every event and every field an event may
+carry. Error detail is the error's class name, never its
 message. Errors go to `console.error`, the rest to `console.log`.
 
 ### Automatic deploys (off until enabled)
