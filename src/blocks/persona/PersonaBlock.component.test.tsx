@@ -62,7 +62,6 @@ describe('PersonaBlockView — UI wiring', () => {
         mockStream(['Markets look ', 'stable today.'], {
             success: true,
             content: 'Markets look stable today.',
-            sourceIds: [],
             sources: []
         });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
@@ -79,7 +78,6 @@ describe('PersonaBlockView — UI wiring', () => {
         mockStream(['Grounded ', 'answer.'], {
             success: true,
             content: 'Grounded answer.',
-            sourceIds: [],
             sources: []
         });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
@@ -99,7 +97,6 @@ describe('PersonaBlockView — UI wiring', () => {
     it('engine failure surfaces a clear in-chat warning (no fake answer)', async () => {
         mockStream([], {
             success: false,
-            sourceIds: [],
             sources: [],
             error: 'No LLM available — make sure Ollama is running (localhost:11434).'
         });
@@ -124,7 +121,6 @@ describe('PersonaBlockView — provenance', () => {
         mockStream(['Grounded.'], {
             success: true,
             content: 'Grounded.',
-            sourceIds: ['src-fred'],
             sources: [{ id: 'src-fred', kind: 'wire', label: 'FRED Series' }]
         });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
@@ -138,7 +134,6 @@ describe('PersonaBlockView — provenance', () => {
         mockStream(['ok'], {
             success: true,
             content: 'ok',
-            sourceIds: ['src-fred'],
             sources: [{ id: 'src-fred', kind: 'wire', label: 'FRED Series' }]
         });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
@@ -158,7 +153,6 @@ describe('PersonaBlockView — provenance', () => {
         mockStream(['from memory'], {
             success: true,
             content: 'from memory',
-            sourceIds: [],
             sources: [{ id: 'mem-block-1', kind: 'memory', label: 'Long-term memory' }]
         });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
@@ -172,7 +166,6 @@ describe('PersonaBlockView — provenance', () => {
         mockStream(['general reasoning'], {
             success: true,
             content: 'general reasoning',
-            sourceIds: [],
             sources: []
         });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
@@ -194,7 +187,7 @@ describe('PersonaBlockView — answer rendering', () => {
         const md = '## Outlook' + String.fromCharCode(10) + String.fromCharCode(10) +
             'Rates are **steady**.' + String.fromCharCode(10) + String.fromCharCode(10) +
             '- 10y near 4.2%' + String.fromCharCode(10) + '- CPI cooling';
-        mockStream([md], { success: true, content: md, sourceIds: [], sources: [] });
+        mockStream([md], { success: true, content: md, sources: [] });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
         fireEvent.click(screen.getByTitle('Think'));
 
@@ -209,7 +202,7 @@ describe('PersonaBlockView — answer rendering', () => {
     it('does not execute HTML embedded in an answer', async () => {
         // Answers can quote text that arrived from an external feed.
         const hostile = 'Look: <img src=x onerror="alert(1)">';
-        mockStream([hostile], { success: true, content: hostile, sourceIds: [], sources: [] });
+        mockStream([hostile], { success: true, content: hostile, sources: [] });
         const { container } = render(<PersonaBlockView instanceId={PERSONA_ID} />);
         fireEvent.click(screen.getByTitle('Think'));
 
@@ -218,7 +211,7 @@ describe('PersonaBlockView — answer rendering', () => {
     });
 
     it('offers lineage only on an answer the ledger recorded', async () => {
-        mockStream(['Recorded.'], { success: true, content: 'Recorded.', sourceIds: [], sources: [], runId: '42' });
+        mockStream(['Recorded.'], { success: true, content: 'Recorded.', sources: [], runId: '42' });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
         fireEvent.click(screen.getByTitle('Think'));
 
@@ -227,7 +220,7 @@ describe('PersonaBlockView — answer rendering', () => {
     });
 
     it('offers no lineage when no run was recorded', async () => {
-        mockStream(['Unrecorded.'], { success: true, content: 'Unrecorded.', sourceIds: [], sources: [] });
+        mockStream(['Unrecorded.'], { success: true, content: 'Unrecorded.', sources: [] });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
         fireEvent.click(screen.getByTitle('Think'));
 
@@ -236,7 +229,7 @@ describe('PersonaBlockView — answer rendering', () => {
     });
 
     it("leaves the user's own message as literal text", async () => {
-        mockStream(['ok'], { success: true, content: 'ok', sourceIds: [], sources: [] });
+        mockStream(['ok'], { success: true, content: 'ok', sources: [] });
         render(<PersonaBlockView instanceId={PERSONA_ID} />);
 
         const input = screen.getByPlaceholderText(/Ask Analyst/);

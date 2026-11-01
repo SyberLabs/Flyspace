@@ -256,5 +256,3 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
         </>
     );
 }
-
-export default MindDock;

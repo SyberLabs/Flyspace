@@ -3,7 +3,7 @@
 
 import type { RealtimeTransport } from './openaiRealtimeAdapter';
 
-export class FakeChannel {
+class FakeChannel {
     readyState: 'connecting' | 'open' | 'closed' = 'connecting';
     sent: unknown[] = [];
     onopen: (() => void) | null = null;
@@ -35,7 +35,7 @@ export class FakeChannel {
     }
 }
 
-export class FakePeer {
+class FakePeer {
     tracks: unknown[] = [];
     channel: FakeChannel | null = null;
     local: unknown = null;
@@ -75,7 +75,7 @@ export class FakePeer {
     }
 }
 
-export interface FakeRequest {
+interface FakeRequest {
     url: string;
     method: string;
     headers: Record<string, string>;
@@ -83,7 +83,7 @@ export interface FakeRequest {
     signal?: AbortSignal;
 }
 
-export interface FakeRealtimeOptions {
+interface FakeRealtimeOptions {
     sessionStatus?: number;
     sessionBody?: Record<string, unknown>;
     configured?: boolean;

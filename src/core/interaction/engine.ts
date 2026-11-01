@@ -53,7 +53,7 @@ interface UndoEntry {
     apply: () => void;
 }
 
-export interface EngineSnapshot {
+interface EngineSnapshot {
     commands: SpatialCommand[];
     traces: InteractionTrace[];
     preview: SpatialCommand | null;
@@ -646,7 +646,6 @@ export class InteractionEngine {
             };
             proposal.geometry = { point: at };
             proposal.subjects = [];
-            if (intent.destructive) return this.previewDestructive(proposal);
             return this.execute(proposal, timestampMs, false);
         }
 

@@ -18,7 +18,7 @@ import {
     MIN_CANARY_LENGTH,
     type Canary
 } from './bundleScan';
-import { SECRET_ENV_VARS, PUBLIC_ENV_VARS } from './secrets';
+import { SECRET_ENV_VARS } from './secrets';
 
 let root: string;
 
@@ -191,13 +191,6 @@ describe('the secret list itself', () => {
         // here would make the gate fail on correct code, every time.
         for (const name of SECRET_ENV_VARS) {
             expect(name.startsWith('NEXT_PUBLIC_')).toBe(false);
-        }
-    });
-
-    it('keeps the public and secret lists disjoint', () => {
-        const secret = new Set<string>(SECRET_ENV_VARS);
-        for (const name of PUBLIC_ENV_VARS) {
-            expect(secret.has(name)).toBe(false);
         }
     });
 });

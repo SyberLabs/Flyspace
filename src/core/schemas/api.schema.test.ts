@@ -4,7 +4,7 @@ import { blockRegistry } from '@/core/registry/BlockRegistry';
 
 describe('catalog blockIds — the map shells use to know what they need', () => {
     it('every registered truth block maps to exactly one provider', () => {
-        for (const block of blockRegistry.getByCategory('truth')) {
+        for (const block of blockRegistry.getAll().filter(b => b.category === 'truth')) {
             const owners = API_CATALOG.filter(p => p.blockIds?.includes(block.block_id));
             expect(owners, block.block_id).toHaveLength(1);
         }

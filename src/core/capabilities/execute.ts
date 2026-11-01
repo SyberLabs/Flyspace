@@ -2,7 +2,7 @@
 // Side effects stop here until approveCapability has moved them to `approved`.
 
 import { canonicalize, sha256 } from './hash';
-import { joinUrl, resolveHttpPath, setQueryParam, stringifyParam } from './httpTarget';
+import { resolveHttpPath, setQueryParam, stringifyParam } from './httpTarget';
 import { redact } from './redact';
 import {
     admitExecution,
@@ -100,8 +100,6 @@ export interface ExecuteOptions {
      */
     confirmedRun?: string;
 }
-
-export { joinUrl };
 
 /** What a write or destructive run will send, shown to a person before it is sent. */
 export interface RunPreview {
@@ -384,7 +382,7 @@ function settleAsync(
     return result;
 }
 
-export interface ReconcileReport {
+interface ReconcileReport {
     runId: string;
     status: ExecutionPhase;
     observed: boolean;

@@ -1,7 +1,7 @@
 // SpeechObservation v1 and the SpeechAdapter seam.
 // A provider produces evidence. OmniOS owns the session, the ids, and every effect.
 
-export interface SpeechProvenance {
+interface SpeechProvenance {
     adapterId: string;
     providerName?: string;
     model?: string;
@@ -30,7 +30,7 @@ export interface SpeechObservationV1 {
     source: 'microphone';
 }
 
-export interface SpeechAdapterStartInput {
+interface SpeechAdapterStartInput {
     sessionId: string;
     locale?: string;
     signal: AbortSignal;
@@ -75,7 +75,7 @@ export class SpeechAdapterError extends Error {
     }
 }
 
-export const SPEECH_ERROR_MESSAGES: Record<SpeechErrorCode, string> = {
+const SPEECH_ERROR_MESSAGES: Record<SpeechErrorCode, string> = {
     unsupported: 'This browser has no speech recognition.',
     unconfigured: 'Remote transcription is not configured.',
     'permission-denied': 'Microphone permission was refused.',
@@ -107,7 +107,7 @@ export function createSpeechSessionId(): string {
     return `omni-speech-${sessionSequence}-${random}`;
 }
 
-export const MAX_TRANSCRIPT_CHARS = 2000;
+const MAX_TRANSCRIPT_CHARS = 2000;
 
 const OBSERVATION_KEYS = new Set([
     'version', 'sessionId', 'observationId', 'provider', 'locale', 'startedAtMs', 'endedAtMs',

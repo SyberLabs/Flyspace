@@ -42,7 +42,7 @@ export interface RunSource {
     parentRunId?: string;
 }
 
-export interface OpenRunInput {
+interface OpenRunInput {
     provider: RunProvider;
     model: string;
     streamed: boolean;
@@ -58,7 +58,7 @@ export interface OpenRunInput {
     requestDigest?: string;
 }
 
-export interface RunOutcome {
+interface RunOutcome {
     output?: string;
     outputChars?: number;
     tokensUsed?: number;
@@ -70,7 +70,7 @@ export interface RunOutcome {
  * opening INSERT failed — then every method is a no-op, so the route reads
  * the same either way and carries no `if (ledgerEnabled)` branches.
  */
-export interface LedgerRun {
+interface LedgerRun {
     /** Row id, or null when nothing was recorded. */
     readonly id: string | null;
     readonly replay?: boolean;
@@ -515,7 +515,7 @@ export interface LedgerRunRow {
     sources: RunSource[];
 }
 
-export interface RecentRunsFilter {
+interface RecentRunsFilter {
     limit?: number;
     provider?: RunProvider;
     status?: RunStatus;

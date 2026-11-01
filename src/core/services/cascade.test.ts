@@ -137,7 +137,7 @@ describe('crystallize', () => {
         expect(created?.schema.block_id).toBe('memory_pool');
         expect((created?.data as MemoryBlockData).poolId).toBe(CRYSTAL_POOL);
 
-        const entries = useMindStore.getState().getPoolEntries(CRYSTAL_POOL);
+        const entries = useMindStore.getState().contextPools.find(p => p.id === CRYSTAL_POOL)?.entries ?? [];
         expect(entries.some(e => e.content === 'Rates are steady near 4.2%.')).toBe(true);
     });
 

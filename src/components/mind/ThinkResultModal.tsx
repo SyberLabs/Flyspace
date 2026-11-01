@@ -182,5 +182,3 @@ export function ThinkResultModal({
         </AnimatePresence>
     );
 }
-
-export default ThinkResultModal;

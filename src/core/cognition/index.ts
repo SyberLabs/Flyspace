@@ -3,4 +3,3 @@
 // ============================================
 
 export { runTurn, runTurnStream } from './kernel';
-export type { TurnOptions, TurnResult } from './kernel';

@@ -89,22 +89,6 @@ describe('extractBlockData — empty content carries nothing', () => {
     it.each(empties)('returns null for %s (no placeholder to cite)', (_label, data) => {
         seed('empty', data);
         expect(extractBlockData('empty', DEFAULT_WIRE_FILTERS)).toBeNull();
-        expect(extractBlockData('empty', { ...DEFAULT_WIRE_FILTERS, summaryOnly: true })).toBeNull();
-    });
-
-    const expiredMarket = {
-        id: 'm', question: 'Old?', outcomes: [{ id: 'y', name: 'Yes', probability: 0.5 }],
-        volume: 1, liquidity: 0, endDate: '2001-01-01', category: 'x', tags: []
-    };
-
-    it.each([
-        ['wrapped { markets }', { markets: [expiredMarket] }],
-        ['direct PolymarketMarket[]', [expiredMarket]]
-    ])('returns null when a time window filters every market of a %s away', (_shape, data) => {
-        seed('old', data);
-        for (const summaryOnly of [true, false]) {
-            expect(extractBlockData('old', { ...DEFAULT_WIRE_FILTERS, timeWindow: 'day', summaryOnly })).toBeNull();
-        }
     });
 
     it('still returns JSON for an object that carries a value (0 and false are data)', () => {

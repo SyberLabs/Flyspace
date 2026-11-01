@@ -176,7 +176,7 @@ describe('captureShellSnapshot', () => {
     });
 
     it('does not send the observations pool (earlier answers) to the model', () => {
-        useMindStore.getState().addToPool('observations', {
+        useMindStore.getState().pushContext('observations', {
             type: 'analysis', content: 'a prior Think answer', importance: 0.8
         });
 

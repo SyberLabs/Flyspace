@@ -4,7 +4,6 @@ import {
     createApiSearcher,
     fetchCatalogSpec,
     RegistryFetchError,
-    searchApiIndex,
     tokenize
 } from './registrySearch';
 
@@ -82,8 +81,8 @@ describe('createApiSearcher', () => {
     });
 
     it('orders ties deterministically', () => {
-        const a = searchApiIndex(CATALOG, 'sms').map(r => r.entry.id);
-        const b = searchApiIndex([...CATALOG].reverse(), 'sms').map(r => r.entry.id);
+        const a = createApiSearcher(CATALOG).search('sms').map(r => r.entry.id);
+        const b = createApiSearcher([...CATALOG].reverse()).search('sms').map(r => r.entry.id);
         expect(a).toEqual(b);
     });
 });
@@ -104,7 +103,7 @@ describe('APIs that compile to nothing', () => {
             entry('dead.example', 'Weather API', { operations: 0, blocker: 'It needs a sign-in Flyspace does not support yet (OAuth, or several keys at once)' }),
             entry('live.example', 'Weather API', { operations: 5 })
         ];
-        expect(searchApiIndex(catalog, 'weather').map(hit => hit.entry.id)).toEqual(['live.example', 'dead.example']);
+        expect(createApiSearcher(catalog).search('weather').map(hit => hit.entry.id)).toEqual(['live.example', 'dead.example']);
     });
 
     it('still lead when they match far better', () => {
@@ -112,7 +111,7 @@ describe('APIs that compile to nothing', () => {
             entry('gmail.example', 'Gmail API', { description: 'gmail mail inbox', operations: 0 }),
             entry('mailer.example', 'Bulk Sender', { description: 'mail', operations: 5 })
         ];
-        expect(searchApiIndex(catalog, 'gmail inbox')[0].entry.id).toBe('gmail.example');
+        expect(createApiSearcher(catalog).search('gmail inbox')[0].entry.id).toBe('gmail.example');
     });
 });
 

@@ -6,7 +6,6 @@ import { fallbackSpeechAdapter, openaiRealtimeAdapter } from '@/core/interaction
 import { spatialSession } from '@/core/interaction/session';
 import { browserSpeechFeedback, emitFeedback, silenceFeedback, type SpeechFeedbackAdapter } from '@/core/interaction/speechFeedback';
 import { createSpeechInput, type SpeechOutcome } from '@/core/interaction/speechInput';
-import { liveSpeechTimings } from '@/core/interaction/speechMeasurement';
 import type { SpeechAdapter, SpeechCapture } from '@/core/interaction/speechObservation';
 import { useUIStore } from '@/core/stores';
 
@@ -54,7 +53,6 @@ export function VoiceControl({
     const [input] = useState(() => createSpeechInput({
         adapter: adapter ?? defaultSpeechAdapter(),
         authority: spatialSession,
-        recorder: liveSpeechTimings,
         onListening: capture => setProvider(providerLabel(capture))
     }));
     const feedbackRef = useRef<SpeechFeedbackAdapter | null>(feedback === undefined ? browserSpeechFeedback() : feedback);

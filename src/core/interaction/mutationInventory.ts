@@ -29,14 +29,14 @@ export const TOPOLOGY_WRITES = [
 
 export type TopologyWrite = typeof TOPOLOGY_WRITES[number];
 
-export interface InventoryException {
+interface InventoryException {
     write: TopologyWrite;
     /** The concrete function that makes the write. */
     in: string;
     reason: string;
 }
 
-export interface InventoryEntry {
+interface InventoryEntry {
     file: string;
     /** User actions in this file that now enter the engine. */
     routed: Array<{ action: string; via: 'pointerCreate' | 'pointerDelete' | 'pointerConnect' | 'pointerMove' }>;

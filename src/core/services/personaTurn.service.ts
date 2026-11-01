@@ -26,7 +26,7 @@ import type { PersonaBlockData, ContextSource, PersonaChatMessage } from '@/core
  */
 export const STREAM_COMMIT_MS = 80;
 
-export interface PersonaTurnOutcome {
+interface PersonaTurnOutcome {
     ran: boolean;
     success: boolean;
     error?: string;

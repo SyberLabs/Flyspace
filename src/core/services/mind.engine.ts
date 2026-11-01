@@ -158,7 +158,7 @@ ${taskDescription}
 // TYPES
 // ============================================
 
-export interface ThinkResult {
+interface ThinkResult {
     success: boolean;
     response?: string;
     insights?: ExtractedInsight[];

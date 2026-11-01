@@ -7,7 +7,7 @@ import { useBlockStore } from '../stores';
 import { useWireStore } from '../stores/wireStore';
 
 import { WireFilters, ContextSource } from '../schemas/wire.schema';
-import { PolymarketMarket, NewsArticle } from '../schemas/block.schema';
+import { PolymarketMarket } from '../schemas/block.schema';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -65,7 +65,7 @@ function asMemoryEntries(value: unknown): Array<{ content: string }> {
  */
 export function extractBlockData(
     blockId: string,
-    filters: WireFilters
+    _filters: WireFilters
 ): string | null {
     const block = useBlockStore.getState().getBlock(blockId);
     if (!block?.data) return null;
@@ -75,24 +75,7 @@ export function extractBlockData(
 
     try {
         // Handle different data types
-        if (isRecord(data) && Array.isArray(data.markets)) {
-            // Polymarket data
-            extracted = formatFilteredMarkets(data.markets as PolymarketMarket[], filters);
-        } else if (isRecord(data) && Array.isArray(data.articles)) {
-            // News data
-            const articles = data.articles as NewsArticle[];
-            const filtered = filters.timeWindow && filters.timeWindow !== 'all'
-                ? filterArticlesByTimeWindow(articles, filters.timeWindow)
-                : articles;
-
-            if (filtered.length === 0) {
-                extracted = '';
-            } else if (filters.summaryOnly) {
-                extracted = formatNewsSummary(filtered);
-            } else {
-                extracted = formatNewsDetailed(filtered);
-            }
-        } else if (isRecord(data) && 'personaType' in data && Array.isArray(data.messages)) {
+        if (isRecord(data) && 'personaType' in data && Array.isArray(data.messages)) {
             // A persona used as a SOURCE: another mind's conclusion, not its
             // internals. This used to fall through to the generic JSON dump,
             // which fed the downstream persona ids, timestamps and isCollapsed
@@ -100,9 +83,7 @@ export function extractBlockData(
             const lastAnswer = lastPersonaAnswer(data);
             if (!lastAnswer) return null;
 
-            extracted = filters.summaryOnly
-                ? lastAnswer.content.slice(0, 500) + (lastAnswer.content.length > 500 ? '…' : '')
-                : lastAnswer.content;
+            extracted = lastAnswer.content;
         } else if (isRecord(data) && 'poolId' in data && Array.isArray(data.entries)) {
             // Memory block — a Mind pool wired in like any other source.
             extracted = asMemoryEntries(data.entries)
@@ -111,15 +92,13 @@ export function extractBlockData(
                 .join('\n');
         } else if (isRecord(data) && typeof data.content === 'string') {
             // Text block
-            extracted = filters.summaryOnly
-                ? data.content.slice(0, 500) + (data.content.length > 500 ? '...' : '')
-                : data.content;
+            extracted = data.content;
         } else if (isRecord(data) && Array.isArray(data.items)) {
             // OmniItem[] from the gateway (polymarket, coingecko, fred, metaculus,
             // hackernews, …). The useful signal lives in each item's `metadata`
             // (probability, volume, price, value, …) — include it, don't drop it.
             const items = data.items;
-            const limit = filters.summaryOnly ? 8 : 25;
+            const limit = 25;
             extracted = items.slice(0, limit)
                 .map(item => formatOmniItem(item))
                 .join('\n');
@@ -129,10 +108,10 @@ export function extractBlockData(
             if (isRecord(first) && 'question' in first && 'outcomes' in first) {
                 // PolymarketMarket[] (how the Polymarket block stores its data):
                 // use the dedicated formatter so outcomes + volume are included.
-                extracted = formatFilteredMarkets(data as PolymarketMarket[], filters);
+                extracted = formatMarketsDetailed(data as PolymarketMarket[]);
             } else if (isRecord(first) && 'metadata' in first) {
                 // OmniItem[] stored directly.
-                const limit = filters.summaryOnly ? 8 : 25;
+                const limit = 25;
                 extracted = data.slice(0, limit).map(item => formatOmniItem(item)).join('\n');
                 if (data.length > limit) extracted += `\n… ${data.length - limit} more`;
             } else {
@@ -148,12 +127,6 @@ export function extractBlockData(
             // null/blank values) would serialize to non-empty text and be
             // cited as grounding, so it extracts to nothing.
             extracted = carriesNothing(data) ? '' : JSON.stringify(data, null, 2).slice(0, 2000);
-        }
-
-        // Apply field filtering if specified
-        if (filters.fields && filters.fields.length > 0) {
-            // This would require more sophisticated field extraction
-            // For now, we'll just include everything
         }
 
         // A source that carried nothing is not grounding. Return null, not a
@@ -217,76 +190,6 @@ function formatOmniItem(item: unknown): string {
 }
 
 /**
- * Apply the wire's time window and format what is left. '' when nothing is
- * left, so no formatter emits a header for zero rows.
- */
-function formatFilteredMarkets(markets: PolymarketMarket[], filters: WireFilters): string {
-    const filtered = filters.timeWindow && filters.timeWindow !== 'all'
-        ? filterByTimeWindow(markets, filters.timeWindow)
-        : markets;
-    if (filtered.length === 0) return '';
-    return filters.summaryOnly ? formatMarketsSummary(filtered) : formatMarketsDetailed(filtered);
-}
-
-/**
- * Filter markets by time window
- */
-function filterByTimeWindow(
-    markets: PolymarketMarket[],
-    timeWindow: 'hour' | 'day' | 'week'
-): PolymarketMarket[] {
-    const now = Date.now();
-    const cutoffs = {
-        hour: now - 60 * 60 * 1000,
-        day: now - 24 * 60 * 60 * 1000,
-        week: now - 7 * 24 * 60 * 60 * 1000
-    };
-
-    const cutoff = cutoffs[timeWindow];
-
-    return markets.filter(market => {
-        const endDate = new Date(market.endDate).getTime();
-        return endDate >= cutoff;
-    });
-}
-
-/**
- * Filter articles by time window
- */
-function filterArticlesByTimeWindow(
-    articles: NewsArticle[],
-    timeWindow: 'hour' | 'day' | 'week'
-): NewsArticle[] {
-    const now = Date.now();
-    const cutoffs = {
-        hour: now - 60 * 60 * 1000,
-        day: now - 24 * 60 * 60 * 1000,
-        week: now - 7 * 24 * 60 * 60 * 1000
-    };
-
-    const cutoff = cutoffs[timeWindow];
-
-    return articles.filter(article => {
-        const publishDate = new Date(article.publishedAt).getTime();
-        return publishDate >= cutoff;
-    });
-}
-
-/**
- * Format markets as summary
- */
-function formatMarketsSummary(markets: PolymarketMarket[]): string {
-    const lines = markets.slice(0, 5).map(market => {
-        const topOutcome = market.outcomes.reduce((max, outcome) =>
-            outcome.probability > max.probability ? outcome : max
-        );
-        return `• ${market.question.slice(0, 80)}${market.question.length > 80 ? '...' : ''}\n  → ${topOutcome.name}: ${(topOutcome.probability * 100).toFixed(1)}%`;
-    });
-
-    return `**Prediction Markets** (${markets.length} total)\n\n${lines.join('\n\n')}`;
-}
-
-/**
  * Format markets with full details
  */
 function formatMarketsDetailed(markets: PolymarketMarket[]): string {
@@ -297,35 +200,6 @@ function formatMarketsDetailed(markets: PolymarketMarket[]): string {
             .join('\n');
 
         return `**${market.question}**\n${outcomes}\nVolume: $${(market.volume / 1000).toFixed(0)}K | Ends: ${new Date(market.endDate).toLocaleDateString()}`;
-    });
-
-    return lines.join('\n\n---\n\n');
-}
-
-/**
- * Format news as summary
- */
-function formatNewsSummary(articles: NewsArticle[]): string {
-    const lines = articles.slice(0, 10).map(article => {
-        const sentiment = article.sentiment
-            ? ` [${article.sentiment === 'positive' ? '📈' : article.sentiment === 'negative' ? '📉' : '➖'}]`
-            : '';
-        return `• ${article.title}${sentiment}\n  ${article.source} • ${new Date(article.publishedAt).toLocaleDateString()}`;
-    });
-
-    return `**News Feed** (${articles.length} articles)\n\n${lines.join('\n\n')}`;
-}
-
-/**
- * Format news with full details
- */
-function formatNewsDetailed(articles: NewsArticle[]): string {
-    const lines = articles.map(article => {
-        const sentiment = article.sentiment
-            ? ` [Sentiment: ${article.sentiment === 'positive' ? 'Positive' : article.sentiment === 'negative' ? 'Negative' : 'Neutral'}]`
-            : '';
-
-        return `**${article.title}**${sentiment}\n${article.description || ''}\n*${article.source}* • ${new Date(article.publishedAt).toLocaleString()}\n[Read more](${article.url})`;
     });
 
     return lines.join('\n\n---\n\n');

@@ -10,7 +10,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { CommandPalette } from '@/components/CommandPalette';
 import { ShellPanel } from '@/components/ShellPanel';
-import { MindPanel } from '@/components/mind';
+import { MindPanel } from '@/components/mind/MindPanel';
 import { MindDock } from '@/components/mind/MindDock';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { ContextCaptureModal } from '@/components/mind/ContextCaptureModal';
@@ -59,7 +59,6 @@ export default function CitadelApp() {
 
         if (text && text.length > 0) {
             captureSelection({ text });
-            // windowSelection?.removeAllRanges(); // Optional: clear selection
         }
     }, [activeTool, captureSelection]);
     return (

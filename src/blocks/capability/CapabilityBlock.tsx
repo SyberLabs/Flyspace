@@ -41,7 +41,7 @@ function isPlainParams(value: unknown): value is Record<string, unknown> {
 }
 
 /** The executor's error for a keyed run whose slot is empty this session. */
-export function isUnboundKeyError(error: string): boolean {
+function isUnboundKeyError(error: string): boolean {
     return /^Secret slot \S+ is empty$/.test(error);
 }
 
@@ -54,7 +54,7 @@ function isRefusal(error: string): boolean {
 }
 
 /** What an HTTP status usually means for the person running the block. */
-export function errorHint(error: string): string | null {
+function errorHint(error: string): string | null {
     const status = /\bHTTP (\d{3})\b/.exec(error)?.[1];
     if (status === '401' || status === '403') return 'The API refused the request. Check the key, or whether your plan covers this call.';
     if (status === '400') return 'The API rejected the request. Check the inputs, and the key if it takes one.';

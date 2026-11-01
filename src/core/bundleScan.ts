@@ -26,14 +26,14 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-export interface SecretLeak {
+interface SecretLeak {
     /** The env var whose value was found. */
     envVar: string;
     /** Path of the served file, relative to the scanned root. */
     file: string;
 }
 
-export interface BundleScanResult {
+interface BundleScanResult {
     filesScanned: number;
     bytesScanned: number;
     leaks: SecretLeak[];

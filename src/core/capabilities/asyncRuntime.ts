@@ -3,7 +3,7 @@
 // not decide success, retry, or uncertainty: the executor does, from what was
 // observed. Each start or poll request is still one bounded request.
 
-export interface AsyncCall {
+interface AsyncCall {
     /** Credential placement resolved from the manifest's slot for this call only. */
     headers: Record<string, string>;
     signal: AbortSignal;
@@ -62,7 +62,7 @@ function abortError(): Error {
 }
 
 export const EXTERNAL_RUN_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
-export const MAX_CONSECUTIVE_POLL_ERRORS = 5;
+const MAX_CONSECUTIVE_POLL_ERRORS = 5;
 
 const runtimes = new Map<string, AsyncJobRuntime>();
 
@@ -85,7 +85,7 @@ export type PollOutcome =
     | { kind: 'deadline' }
     | { kind: 'unobservable'; message: string };
 
-export interface PollPlan {
+interface PollPlan {
     runtime: AsyncJobRuntime;
     operation: string;
     externalRunId: string;

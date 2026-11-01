@@ -59,7 +59,7 @@ export function isUserInstalled(manifest: CapabilityManifest): boolean {
     return manifest.source.locator !== 'speech';
 }
 
-export interface YourApisProps {
+interface YourApisProps {
     /** Put an installed operation on the canvas again. */
     onPlace: (manifest: CapabilityManifest) => void;
 }

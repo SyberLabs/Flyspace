@@ -11,8 +11,8 @@ import {
     type SpeechObservationV1
 } from './speechObservation';
 
-export const OPENAI_REALTIME_ADAPTER_ID = 'openai-realtime';
-export const REALTIME_SESSION_ROUTE = '/api/speech/realtime-session';
+const OPENAI_REALTIME_ADAPTER_ID = 'openai-realtime';
+const REALTIME_SESSION_ROUTE = '/api/speech/realtime-session';
 export const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 
 /** Configuration bounds, not measured latencies. */
@@ -26,7 +26,7 @@ export interface RealtimeTransport {
     createPeer(): RTCPeerConnection;
 }
 
-export function browserRealtimeTransport(): RealtimeTransport {
+function browserRealtimeTransport(): RealtimeTransport {
     return {
         fetch: (url, init) => fetch(url, init),
         getUserMedia(constraints) {
@@ -42,9 +42,7 @@ export function browserRealtimeTransport(): RealtimeTransport {
     };
 }
 
-export interface RealtimeAdapterOptions {
-    sessionRoute?: string;
-    callsUrl?: string;
+interface RealtimeAdapterOptions {
     now?: () => number;
     connectTimeoutMs?: number;
     finalizeTimeoutMs?: number;
@@ -112,8 +110,8 @@ export function openaiRealtimeAdapter(
     options: RealtimeAdapterOptions = {}
 ): SpeechAdapter & { probe(): Promise<boolean> } {
     const now = options.now ?? Date.now;
-    const route = options.sessionRoute ?? REALTIME_SESSION_ROUTE;
-    const callsUrl = options.callsUrl ?? REALTIME_CALLS_URL;
+    const route = REALTIME_SESSION_ROUTE;
+    const callsUrl = REALTIME_CALLS_URL;
     const connectTimeoutMs = options.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
     const finalizeTimeoutMs = options.finalizeTimeoutMs ?? FINALIZE_TIMEOUT_MS;
 

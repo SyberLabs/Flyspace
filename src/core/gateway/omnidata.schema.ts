@@ -6,7 +6,7 @@
 /**
  * API categories for type discrimination
  */
-export type ApiCategory =
+type ApiCategory =
     | 'prediction_market'
     | 'news'
     | 'market_data'
@@ -21,7 +21,7 @@ export type ApiCategory =
 /**
  * Source metadata for any OmniData
  */
-export interface OmniSource {
+interface OmniSource {
     /** API provider ID (e.g., 'polymarket', 'newsapi') */
     apiId: string;
 
@@ -88,7 +88,7 @@ export interface OmniMetrics {
 /**
  * Text/media content (LLM responses, documents)
  */
-export interface OmniContent {
+interface OmniContent {
     /** Text content */
     text: string;
 

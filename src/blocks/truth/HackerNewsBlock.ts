@@ -11,7 +11,7 @@ import { debug } from '@/core/debug';
 /**
  * Hacker News story for block display
  */
-export interface HNStory {
+interface HNStory {
     id: string;
     title: string;
     url: string;
@@ -111,7 +111,6 @@ export function useHackerNewsBlock(instanceId: string) {
         stories: cachedData.length > 0 ? cachedData : stories,
         status: block?.status || (isLoading ? 'connecting' : 'connected'),
         lastUpdated: block?.last_updated,
-        fromCache,
         refresh,
         error
     };

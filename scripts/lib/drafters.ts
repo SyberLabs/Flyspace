@@ -6,9 +6,9 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-export type DraftProvider = 'anthropic' | 'openai' | 'google';
+type DraftProvider = 'anthropic' | 'openai' | 'google';
 
-export const DEFAULT_MODELS: Record<DraftProvider, string> = {
+const DEFAULT_MODELS: Record<DraftProvider, string> = {
     anthropic: 'claude-opus-5-5',
     openai: 'gpt-5',
     google: 'gemini-2.5-pro'
@@ -22,7 +22,7 @@ const KEY_ENV: Record<Exclude<DraftProvider, 'anthropic'>, string> = {
 const MAX_OUTPUT_TOKENS = 64_000;
 const REQUEST_TIMEOUT_MS = 10 * 60_000;
 
-export interface DraftSession {
+interface DraftSession {
     provider: DraftProvider;
     model: string;
     /** Send one user turn (the first carries the documents) and return the reply's text. */

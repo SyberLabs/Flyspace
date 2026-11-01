@@ -14,11 +14,11 @@ import { DEFAULT_RESULT_LIMIT, type ApiSearcher } from './registrySearch';
 import { OTHER_INTENT, REGISTRY_INTENTS, type RegistryIntent } from './registryIntents';
 
 /** An intent counts once JEV gives it at least this probability. */
-export const MIN_INTENT_PROBABILITY = 0.15;
+const MIN_INTENT_PROBABILITY = 0.15;
 /** At most this many intents shape one result list. */
-export const MAX_ROUTED_INTENTS = 2;
+const MAX_ROUTED_INTENTS = 2;
 /** JEV is confident nothing listed fits: keyword search alone. */
-export const OTHER_CUTOFF = 0.5;
+const OTHER_CUTOFF = 0.5;
 /** Keyword results taken per routed intent's terms. */
 const TERMS_PER_INTENT = 5;
 
@@ -27,14 +27,14 @@ export interface IntentScore {
     p: number;
 }
 
-export interface RankedResult {
+interface RankedResult {
     entry: ApiIndexEntry;
     /** Why it is here: a routed intent, or the keyword search on the query. */
     source: 'intent' | 'keyword';
     intent?: string;
 }
 
-export interface RankOptions {
+interface RankOptions {
     limit?: number;
     intents?: readonly RegistryIntent[];
 }
@@ -101,9 +101,9 @@ export function rankResults(
 // CLIENT CALL
 // ============================================
 
-export const REGISTRY_INTENT_ENDPOINT = '/api/registry-intent';
+const REGISTRY_INTENT_ENDPOINT = '/api/registry-intent';
 
-export interface IntentAnswer {
+interface IntentAnswer {
     scores: IntentScore[];
     model: string;
 }

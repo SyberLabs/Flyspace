@@ -66,12 +66,12 @@ export const LLM_DEFAULTS: Record<LLMProvider, LLMConfig> = {
 /**
  * Node types in the knowledge graph
  */
-export type KnowledgeNodeType = 'entity' | 'concept' | 'event' | 'insight' | 'prediction';
+type KnowledgeNodeType = 'entity' | 'concept' | 'event' | 'insight' | 'prediction';
 
 /**
  * A node in the knowledge graph
  */
-export interface KnowledgeNode {
+interface KnowledgeNode {
     id: string;
     type: KnowledgeNodeType;
     label: string;
@@ -86,7 +86,7 @@ export interface KnowledgeNode {
 /**
  * Relationship types between nodes
  */
-export type RelationType =
+type RelationType =
     | 'related_to'
     | 'causes'
     | 'correlates_with'
@@ -101,7 +101,7 @@ export type RelationType =
 /**
  * An edge/relationship in the knowledge graph
  */
-export interface KnowledgeEdge {
+interface KnowledgeEdge {
     id: string;
     sourceId: string;
     targetId: string;
@@ -128,7 +128,7 @@ export interface KnowledgeGraph {
 /**
  * Persona trait definition
  */
-export interface PersonaTrait {
+interface PersonaTrait {
     id: string;
     name: string;
     description: string;
@@ -138,7 +138,7 @@ export interface PersonaTrait {
 /**
  * Built-in trait presets
  */
-export const PERSONA_TRAITS: PersonaTrait[] = [
+const PERSONA_TRAITS: PersonaTrait[] = [
     { id: 'analytical', name: 'Analytical', description: 'Depth of logical analysis', value: 0.5 },
     { id: 'creative', name: 'Creative', description: 'Novelty in connections and ideas', value: 0.5 },
     { id: 'cautious', name: 'Cautious', description: 'Risk awareness and hedging', value: 0.5 },
@@ -308,7 +308,7 @@ export function createMemoryBlockData(poolId: string = 'memory'): MemoryBlockDat
 /**
  * Pruning strategies for context pools
  */
-export type PruneStrategy = 'fifo' | 'importance' | 'recency' | 'hybrid';
+type PruneStrategy = 'fifo' | 'importance' | 'recency' | 'hybrid';
 
 /**
  * A context pool configuration
@@ -329,7 +329,7 @@ export interface ContextPool {
 /**
  * Built-in context pool definitions
  */
-export const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updatedAt'>[] = [
+const BUILTIN_POOLS: Omit<ContextPool, 'entries' | 'createdAt' | 'updatedAt'>[] = [
     {
         id: 'observations',
         name: 'Observations',

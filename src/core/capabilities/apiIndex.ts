@@ -13,7 +13,7 @@
 // ============================================
 
 /** The one host specs are fetched from. Every upstream spec URL is on it today. */
-export const CATALOG_SPEC_HOST = 'api.apis.guru';
+const CATALOG_SPEC_HOST = 'api.apis.guru';
 
 /** Upstream list this index is built from. */
 export const CATALOG_SOURCE_URL = 'https://api.apis.guru/v2/list.json';
@@ -59,7 +59,7 @@ export interface ApiIndexEntry {
     curated?: true;
 }
 
-export type CredentialNeed = 'none' | 'partial' | 'key';
+type CredentialNeed = 'none' | 'partial' | 'key';
 const CREDENTIAL_NEEDS: readonly CredentialNeed[] = ['none', 'partial', 'key'];
 
 /** Summarise what a set of compiled operations needs to run, from each one's auth kind. */
@@ -131,7 +131,7 @@ export interface ApiIndex {
     entries: ApiIndexEntry[];
 }
 
-export interface BuildIssue {
+interface BuildIssue {
     id: string;
     reason: string;
 }

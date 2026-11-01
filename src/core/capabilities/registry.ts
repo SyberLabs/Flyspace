@@ -21,7 +21,7 @@ import { resolveWiredInputs } from './wireInputs';
 import { runSpeechHandler, speechManifests } from './speech';
 import type { ValueType } from './valueType';
 
-export interface InstallResult {
+interface InstallResult {
     ok: boolean;
     manifest?: CapabilityManifest;
     errors: string[];
@@ -32,7 +32,7 @@ export interface CapabilitySnapshot {
     manifests: CapabilityManifest[];
 }
 
-export interface RestoreReport {
+interface RestoreReport {
     installed: string[];
     rejected: Array<{ id?: string; errors: string[] }>;
 }
@@ -99,18 +99,6 @@ export function uninstallCapability(id: string, options?: { removeInstances?: bo
     unbindRuntime(id, options?.removeInstances !== false);
     touch();
     return true;
-}
-
-export function listCapabilities(): CapabilityManifest[] {
-    return allCapabilities();
-}
-
-export function getCapability(id: string): CapabilityManifest | undefined {
-    return readCapability(id);
-}
-
-export function exportSnapshot(): CapabilitySnapshot {
-    return { version: 1, manifests: allCapabilities() };
 }
 
 export function restoreSnapshot(snapshot: unknown): RestoreReport {
@@ -311,7 +299,7 @@ function isId(value: unknown): value is { id: string } {
 }
 
 /** Called once, after the vault read. Revalidates before anything is rebound. */
-export function acceptRehydrated(manifests: CapabilityManifest[]): void {
+function acceptRehydrated(manifests: CapabilityManifest[]): void {
     if (!claimHydration()) return;
     // A session that already installed capabilities must not be wiped by an
     // empty vault read that resolves a moment later.

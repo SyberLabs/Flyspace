@@ -3,7 +3,7 @@
 import { credentialPlacement } from '@/core/capabilities/execute';
 import type { CapabilityEffect, CapabilityManifest } from '@/core/capabilities/manifest';
 
-export const EFFECT_STYLE: Record<CapabilityEffect, { label: string; className: string }> = {
+const EFFECT_STYLE: Record<CapabilityEffect, { label: string; className: string }> = {
     read: { label: 'read', className: 'text-[var(--truth-green)] border-[var(--truth-green)]/40' },
     compute: { label: 'compute', className: 'text-[var(--truth-green)] border-[var(--truth-green)]/40' },
     write: { label: 'write · needs approval', className: 'text-[var(--truth-amber)] border-[var(--truth-amber)]/40' },
@@ -33,7 +33,7 @@ export function operationParts(manifest: CapabilityManifest): { method: string; 
 }
 
 /** `city, state (optional: units)`: what you will be asked for before a run. */
-export function inputSummary(manifest: CapabilityManifest): string {
+function inputSummary(manifest: CapabilityManifest): string {
     // A one-value input (FRED's file_type) is filled in, not asked for.
     const asked = manifest.inputs.filter(input => !(input.required && input.schema.enum?.length === 1));
     const required = asked.filter(input => input.required).map(input => input.name);
@@ -56,7 +56,7 @@ export function destinationOf(manifest: CapabilityManifest): { origin: string; c
     };
 }
 
-export interface ApiReviewProps {
+interface ApiReviewProps {
     title: string;
     /** `spec updated 2023-03-06` or a paste note. */
     subtitle: string;

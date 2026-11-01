@@ -1,7 +1,7 @@
 import { captureLiveStores, validateStoreEnvelopes } from './snapshot';
 import { isVaultExport, prepareVaultImport, type OmniVaultExport } from '../vault/vaultExport';
 
-export const ACCOUNT_ORIGIN = 'https://syberlabs.io';
+const ACCOUNT_ORIGIN = 'https://syberlabs.io';
 export const SIGN_IN_URL = `${ACCOUNT_ORIGIN}/auth/signin?next=${encodeURIComponent('/admin/return?app=omni')}`;
 export interface Account { user: { id: string; label: string }; portalUrl: string }
 export interface SavedCanvas { id: string; app: string; name: string; createdAt: number; bytes: number; payload?: unknown }

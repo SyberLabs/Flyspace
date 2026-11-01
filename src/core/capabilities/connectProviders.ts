@@ -19,7 +19,7 @@ export interface ConnectProvider {
     isReadOnlyScope(scope: string): boolean;
 }
 
-export const CONNECT_PROVIDERS: readonly ConnectProvider[] = [
+const CONNECT_PROVIDERS: readonly ConnectProvider[] = [
     {
         id: 'google',
         title: 'Google',

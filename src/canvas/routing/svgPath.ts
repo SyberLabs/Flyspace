@@ -3,12 +3,12 @@
 
 import type { Point } from './types';
 
-export interface PathStyle {
+interface PathStyle {
     cornerRadius: number;
     hopRadius: number;
 }
 
-export const DEFAULT_PATH_STYLE: PathStyle = { cornerRadius: 6, hopRadius: 4 };
+const DEFAULT_PATH_STYLE: PathStyle = { cornerRadius: 6, hopRadius: 4 };
 
 const EPS = 1e-6;
 

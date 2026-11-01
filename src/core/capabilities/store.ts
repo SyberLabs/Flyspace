@@ -12,7 +12,7 @@ import type { CapabilityManifest } from './manifest';
  * here, with the stored body, instead of being dropped on reload. The reader
  * re-installs the capability from its source; this entry only says which.
  */
-export interface StaleCapability {
+interface StaleCapability {
     id: string;
     title: string;
     reason: string;

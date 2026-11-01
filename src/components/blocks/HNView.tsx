@@ -12,7 +12,7 @@ import { BlockBodyState } from './BlockSetupCard';
 /**
  * HN story data for display
  */
-export interface HNStory {
+interface HNStory {
     id: string;
     title: string;
     url: string;
@@ -30,7 +30,6 @@ export interface HNStory {
 interface HNViewProps {
     stories: HNStory[];
     status: string;
-    lastUpdated?: number | null;
     onRefresh?: () => void;
     error?: string | null;
 }

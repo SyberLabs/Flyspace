@@ -3,7 +3,7 @@ import 'server-only';
 import { createRemoteJWKSet, errors, jwtVerify } from 'jose';
 import { NextResponse } from 'next/server';
 
-export interface AuthenticatedIdentity {
+interface AuthenticatedIdentity {
     ownerId: string | null;
 }
 

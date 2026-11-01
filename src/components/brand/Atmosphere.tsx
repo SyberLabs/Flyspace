@@ -22,7 +22,7 @@ const SOFTWARE_GL = /swiftshader|llvmpipe|softpipe|software|basic render/i;
  * "no WebGL2": the CSS nebula shows instead.
  */
 let hardwareGL: boolean | undefined;
-export function hasHardwareWebGL2(): boolean {
+function hasHardwareWebGL2(): boolean {
     if (hardwareGL === undefined) hardwareGL = probeHardwareWebGL2();
     return hardwareGL;
 }

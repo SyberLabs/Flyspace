@@ -41,7 +41,7 @@ export interface LLMOptions {
     onRunId?: (runId: string) => void;
 }
 
-export interface LLMResponse {
+interface LLMResponse {
     content: string;
     tokensUsed?: number;
     finishReason?: string;
@@ -85,7 +85,7 @@ function abortError(): Error {
 // LLM SERVICE
 // ============================================
 
-export class LLMService {
+class LLMService {
     private config: LLMConfig;
 
     constructor(config: LLMConfig) {
@@ -218,8 +218,4 @@ export function getLLMService(config: LLMConfig): LLMService {
         currentService = new LLMService(config);
     }
     return currentService;
-}
-
-export function createLLMService(config: LLMConfig): LLMService {
-    return new LLMService(config);
 }

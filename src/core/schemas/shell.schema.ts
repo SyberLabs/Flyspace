@@ -32,7 +32,7 @@ export type AestheticTheme =
 /**
  * Shell types for universal shell architecture
  */
-export type ShellType =
+type ShellType =
     | 'root'        // Default home shell
     | 'system'      // One of the 7 life system shells
     | 'custom'      // User-created shell

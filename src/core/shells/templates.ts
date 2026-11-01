@@ -10,7 +10,7 @@ import type { PersonaType, AestheticTheme } from '@/core/schemas/shell.schema';
 import { API_CATALOG, type ApiProvider } from '@/core/schemas/api.schema';
 
 /** A block placement inside a template (placeholder instanceId, remapped on use). */
-export interface TemplateBlock {
+interface TemplateBlock {
     /** Local placeholder id, unique within the template; remapped on instantiate. */
     ref: string;
     /** Registry block_id this placement instantiates. */
@@ -22,7 +22,7 @@ export interface TemplateBlock {
 }
 
 /** A wire between two template blocks, by their local `ref`s. */
-export interface TemplateConnection {
+interface TemplateConnection {
     sourceRef: string;
     targetRef: string;
 }
@@ -200,9 +200,4 @@ export function validateTemplate(
     }
 
     return problems;
-}
-
-/** Validate every built-in template. Returns all problems across templates. */
-export function validateAllTemplates(isRegistered: (blockId: string) => boolean): string[] {
-    return SHELL_TEMPLATES.flatMap(t => validateTemplate(t, isRegistered));
 }

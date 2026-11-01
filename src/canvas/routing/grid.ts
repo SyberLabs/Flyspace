@@ -290,7 +290,7 @@ const EAST = 0;
 const WEST = 1;
 const SOUTH = 2;
 
-export interface SearchCosts {
+interface SearchCosts {
     bend: number;
     cross: number;
     share: number;

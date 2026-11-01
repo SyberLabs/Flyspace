@@ -36,7 +36,7 @@ export interface RecognitionLike {
     abort(): void;
 }
 
-export const BROWSER_ADAPTER_ID = 'browser-web-speech';
+const BROWSER_ADAPTER_ID = 'browser-web-speech';
 const RECOGNITION_WAIT_MS = 2000;
 
 function recognitionFailure(code: string): SpeechErrorCode | null {

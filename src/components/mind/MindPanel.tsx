@@ -77,7 +77,6 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
         if (text && text.length > 0) {
             setSelectedText(text);
             setSelectionModalOpen(true);
-            // selection?.removeAllRanges(); // Optional: clear selection
         }
     };
 
@@ -738,5 +737,3 @@ function SettingsView({ llmConfig, onProviderChange }: SettingsViewProps) {
         </div>
     );
 }
-
-export default MindPanel;

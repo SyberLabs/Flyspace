@@ -13,13 +13,13 @@ const PINNED_LOCAL: Record<string, string> = {
     'local|speech.listen': 'cap_speech_listen'
 };
 
-export function canonicalBase(baseUrl: string): string {
+function canonicalBase(baseUrl: string): string {
     const url = new URL(baseUrl);
     const path = url.pathname.replace(/\/$/, '');
     return `${url.origin}${path}`;
 }
 
-export function capabilityIdentityKey(transport: CapabilityTransport): string {
+function capabilityIdentityKey(transport: CapabilityTransport): string {
     if (transport.kind === 'local') return `local|${transport.handler}`;
     // The origin is in the key so two servers that share a label are two capabilities.
     if (transport.kind === 'mcp') return `mcp|${transport.origin}|${transport.serverId}|${transport.toolName}`;

@@ -42,21 +42,19 @@ export function BlockBodyState({
     isLoading,
     isEmpty,
     loadingLabel = 'Loading...',
-    emptyLabel = 'No results',
     children
 }: {
     error?: string | null;
     isLoading: boolean;
     isEmpty: boolean;
     loadingLabel?: string;
-    emptyLabel?: string;
     children: ReactNode;
 }) {
     if (error) return <BlockSetupCard message={error} />;
     if (isEmpty) {
         return (
             <div className="text-center text-[var(--text-muted)] py-8 text-xs">
-                {isLoading ? loadingLabel : emptyLabel}
+                {isLoading ? loadingLabel : 'No results'}
             </div>
         );
     }

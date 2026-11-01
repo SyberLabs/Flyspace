@@ -196,7 +196,7 @@ describe('capability production boundaries', () => {
         const speakId = useBlockStore.getState().addBlock(blockRegistry.get('cap_speech_speak')!, { x: 40, y: 0 });
         const wireId = wireService.createWire(sourceId, speakId);
         expect(wireId).not.toBe('');
-        expect(useWireStore.getState().getWire(wireId)?.projection).toEqual({ kind: 'join_titles' });
+        expect(useWireStore.getState().wires.find(w => w.id === wireId)?.projection).toEqual({ kind: 'join_titles' });
 
         const count = compileOpenApi({
             openapi: '3.0.3',

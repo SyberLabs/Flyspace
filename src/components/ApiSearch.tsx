@@ -44,7 +44,7 @@ function shortDate(updated: string): string {
     return updated ? updated.slice(0, 7) : 'date unknown';
 }
 
-export interface ApiSearchProps {
+interface ApiSearchProps {
     /** The entry currently open in the review, if any. */
     selectedId?: string | null;
     /** A supported entry was chosen. The caller fetches and reviews it. */

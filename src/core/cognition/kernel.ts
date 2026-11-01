@@ -20,7 +20,7 @@ import { minOutputTokensFor } from '@/core/models.registry';
 import type { LLMConfig } from '@/core/schemas/mind.schema';
 import type { ContextSource } from '@/core/schemas/wire.schema';
 
-export interface TurnOptions {
+interface TurnOptions {
     temperature?: number;
     maxTokens?: number;
     signal?: AbortSignal;
@@ -35,7 +35,7 @@ export interface TurnOptions {
     sources?: ContextSource[];
 }
 
-export interface TurnResult {
+interface TurnResult {
     success: boolean;
     /** Full response text ('' on failure). */
     content: string;
@@ -87,7 +87,7 @@ interface AvailabilityCheck {
 }
 
 /** Shared availability gate (ping-based; no generation). */
-export async function checkLLMAvailable(): Promise<AvailabilityCheck> {
+async function checkLLMAvailable(): Promise<AvailabilityCheck> {
     const { llmConfig } = useMindStore.getState();
     const llm = getLLMService(llmConfig);
     const ok = await llm.isAvailable();

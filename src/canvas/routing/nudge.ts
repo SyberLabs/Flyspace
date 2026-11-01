@@ -8,7 +8,7 @@
 
 import type { Point, RouteBlock, RouteOptions } from './types';
 
-export interface NetPolyline {
+interface NetPolyline {
     points: Point[];
     /** Net of each segment (points[k] -> points[k + 1]). Same net = same lane. */
     nets: string[];

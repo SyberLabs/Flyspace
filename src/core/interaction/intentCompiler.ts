@@ -4,8 +4,6 @@
 
 import { parseSpeech, type SpeechCatalog, type SpeechIntent } from './speech';
 import {
-    PROPOSAL_OPERATIONS,
-    RESERVED_OPERATIONS,
     validateProposal,
     type ReferentExpression,
     type SpatialCommandProposalV1
@@ -20,14 +18,14 @@ export interface IntentContext {
     selection: string[];
 }
 
-export type CompilerPath = 'grammar' | 'semantic' | 'model';
+type CompilerPath = 'grammar' | 'semantic';
 
 export type IntentCompilerResult =
     | { kind: 'proposal'; proposal: SpatialCommandProposalV1; via: CompilerPath }
     | { kind: 'needs-input'; question: string; reason: string; via: CompilerPath }
     | { kind: 'refuse'; reason: string; via: CompilerPath };
 
-export interface SemanticInput {
+interface SemanticInput {
     transcript: string;
     observationId: string;
     context: IntentContext;
@@ -82,7 +80,7 @@ function deictic(word: SpeechIntent['deixis']): ReferentExpression {
 }
 
 /** Lossless map from the fixed grammar's intent to a proposal. */
-export function intentToResult(intent: SpeechIntent, observationId: string, via: CompilerPath = 'grammar'): IntentCompilerResult {
+function intentToResult(intent: SpeechIntent, observationId: string, via: CompilerPath = 'grammar'): IntentCompilerResult {
     if (intent.ambiguous === 'block') return { kind: 'needs-input', reason: 'ambiguous-block', question: 'Which block do you mean?', via };
     if (intent.ambiguous === 'shell') return { kind: 'needs-input', reason: 'ambiguous-shell', question: 'Which shell do you mean?', via };
     switch (intent.action) {
@@ -260,70 +258,6 @@ export function paraphraseCompiler(): SemanticCompiler {
             }
 
             return null;
-        }
-    };
-}
-
-// ---------------------------------------------------------------------------
-// Model boundary. The model function is injected; it receives bounded
-// descriptors and must return one proposal object. Everything else is refused.
-// ---------------------------------------------------------------------------
-
-export interface ModelIntentRequest {
-    objective: 'compile speech into one bounded Omni proposal';
-    transcript: string;
-    observationId: string;
-    operations: string[];
-    blockTypes: Array<{ blockId: string; displayName: string }>;
-    shells: Array<{ shellId: string; name: string }>;
-    candidates: Array<{ id: string; name: string; blockId: string }>;
-    selection: string[];
-}
-
-export type IntentModel = (request: ModelIntentRequest) => unknown | Promise<unknown>;
-
-const MAX_MODEL_CANDIDATES = 50;
-const MAX_MODEL_OUTPUT_CHARS = 4000;
-
-export function modelIntentCompiler(model: IntentModel): SemanticCompiler {
-    return {
-        id: 'model-intent-v1',
-        async compile({ transcript, observationId, context }) {
-            const candidates = context.visibleBlocks.slice(0, MAX_MODEL_CANDIDATES);
-            const candidateIds = new Set(candidates.map(block => block.id));
-            const request: ModelIntentRequest = {
-                objective: 'compile speech into one bounded Omni proposal',
-                transcript,
-                observationId,
-                operations: PROPOSAL_OPERATIONS.filter(operation => !RESERVED_OPERATIONS.has(operation)),
-                blockTypes: context.vocabulary.blocks.map(block => ({ blockId: block.blockId, displayName: block.displayName })),
-                shells: context.vocabulary.shells.map(shell => ({ shellId: shell.id, name: shell.name })),
-                candidates: candidates.map(block => ({ id: block.id, name: block.name, blockId: block.blockId })),
-                selection: context.selection.filter(id => candidateIds.has(id))
-            };
-            let output: unknown;
-            try {
-                output = await model(request);
-            } catch {
-                return refuse('model-error', 'model');
-            }
-            let parsed: unknown = output;
-            if (typeof output === 'string') {
-                if (output.length > MAX_MODEL_OUTPUT_CHARS) return refuse('model-output-too-long', 'model');
-                try {
-                    parsed = JSON.parse(output);
-                } catch {
-                    return refuse('model-output-invalid-json', 'model');
-                }
-            }
-            const checked = validateProposal(parsed, {
-                observationId,
-                vocabulary: context.vocabulary,
-                allowReserved: false,
-                candidateIds
-            });
-            if (!checked.ok) return refuse(`model-output-invalid:${checked.reason}`, 'model');
-            return { kind: 'proposal', proposal: checked.proposal, via: 'model' };
         }
     };
 }

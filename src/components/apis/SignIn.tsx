@@ -5,7 +5,7 @@ import { connectSignIn, isConnectConfigured, signInSlotOf, subscribeConnect, typ
 import type { CapabilityManifest } from '@/core/capabilities/manifest';
 import { capabilitySecrets } from '@/core/capabilities/secrets';
 
-export interface SignInState extends SignInSlot {
+interface SignInState extends SignInSlot {
     signedIn: boolean;
     /** Whether this server has an OAuth client for the provider. */
     configured: boolean;

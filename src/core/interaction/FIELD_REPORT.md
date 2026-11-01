@@ -9,7 +9,7 @@ Scripted in-memory engine tasks are what was measured. `runFieldEvaluation` in `
 - Browser audio injection: not measured. No Playwright speech spec was executed and no page-level audio was injected.
 - Human preference: not measured. The harness returns `not measured` until a person supplies a preference. None was supplied.
 
-No latency percentiles were computed. `SpeechTimingRecorder` still refuses percentiles from zero live samples.
+No latency percentiles were computed.
 
 ## Speech-disabled use
 

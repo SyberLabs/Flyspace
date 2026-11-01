@@ -9,9 +9,9 @@ import { create } from 'zustand';
 // TYPES
 // ============================================
 
-export type ToolType = 'navigate' | 'highlighter';
+type ToolType = 'navigate' | 'highlighter';
 
-export interface SelectionData {
+interface SelectionData {
     text: string;
     sourceBlockId?: string;
     sourceBlockType?: string;

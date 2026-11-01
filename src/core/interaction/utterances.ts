@@ -26,7 +26,7 @@ export type UtteranceClass =
 export type CompilerConfig = 'deterministic-only' | 'paraphrase';
 export const COMPILER_CONFIGS: CompilerConfig[] = ['deterministic-only', 'paraphrase'];
 
-export interface UtteranceExpectation {
+interface UtteranceExpectation {
     outcome: 'command' | 'error' | 'silence' | 'none';
     lifecycle?: CommandLifecycle;
     action?: SpatialAction | 'open-shell';
@@ -42,7 +42,7 @@ export interface UtteranceExpectation {
 
 export type SceneId = 'board' | 'two-news' | 'similar-personas' | 'injected-name';
 
-export interface UtteranceCase {
+interface UtteranceCase {
     id: string;
     class: UtteranceClass;
     note: string;
@@ -323,7 +323,7 @@ export function expectationFor(item: UtteranceCase, config: CompilerConfig): Utt
     return item.expect[config] ?? item.expect['deterministic-only'];
 }
 
-export interface CountingCompiler extends IntentCompiler {
+interface CountingCompiler extends IntentCompiler {
     semanticCalls: number;
 }
 
@@ -346,7 +346,7 @@ export function compilerFor(config: CompilerConfig, semantic: SemanticCompiler =
     return counted;
 }
 
-export interface PlayedUtterance {
+interface PlayedUtterance {
     canvas: MemoryCanvas;
     engine: InteractionEngine;
     outcome: SpeechOutcome | undefined;

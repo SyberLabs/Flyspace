@@ -7,7 +7,7 @@
 
 const MAX_DEPTH = 64;
 
-export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
+type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 /**
  * A deep, frozen copy of `value` made only of strings, finite numbers,

@@ -8,22 +8,22 @@ import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from '
 import { destinationUrlErrors } from './egress';
 import { validateValueType, type Primitive, type ValueType } from './valueType';
 
-export const CAPABILITY_MANIFEST_VERSION = 1 as const;
+const CAPABILITY_MANIFEST_VERSION = 1 as const;
 
 export type CapabilityEffect = 'read' | 'compute' | 'write' | 'destructive';
-export type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
-export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring' | 'web_data' | 'managed_integration';
-export type CapabilityInvocation = 'auto' | 'manual';
+type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
+type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring' | 'web_data' | 'managed_integration';
+type CapabilityInvocation = 'auto' | 'manual';
 export type CapabilityTrigger =
     | { kind: 'manual' }
     | { kind: 'on_create' }
     | { kind: 'on_input_change' }
     | { kind: 'interval'; everyMs: number };
 export type HttpMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-export type InputLocation = 'path' | 'query' | 'header' | 'body' | 'argument';
-export type EffectSource = 'method' | 'extension' | 'annotation' | 'declared';
+type InputLocation = 'path' | 'query' | 'header' | 'body' | 'argument';
+type EffectSource = 'method' | 'extension' | 'annotation' | 'declared';
 
-export interface CapabilitySource {
+interface CapabilitySource {
     kind: CapabilitySourceKind;
     locator: string;
     operationId?: string;
@@ -59,7 +59,7 @@ export interface CapabilityInput {
     default?: Primitive;
 }
 
-export interface CapabilityOutput {
+interface CapabilityOutput {
     schema: ValueType;
     /** Dot path used only when projecting to the OmniData envelope. */
     itemsPath?: string;
@@ -67,7 +67,7 @@ export interface CapabilityOutput {
     presentation: 'items' | 'content' | 'raw';
 }
 
-export type HttpAccess = 'browser_direct' | 'server_broker';
+type HttpAccess = 'browser_direct' | 'server_broker';
 
 export type CapabilityTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
@@ -77,23 +77,23 @@ export type CapabilityTransport =
     /** A host-bound job runtime: start returns an external run id, poll observes it. */
     | { kind: 'async'; runtimeId: string; operation: string };
 
-export const MIN_POLL_INTERVAL_MS = 1_000;
-export const MAX_POLL_INTERVAL_MS = 300_000;
-export const MAX_ASYNC_DURATION_MS = 3_600_000;
+const MIN_POLL_INTERVAL_MS = 1_000;
+const MAX_POLL_INTERVAL_MS = 300_000;
+const MAX_ASYNC_DURATION_MS = 3_600_000;
 
 /** How an admitted capability completes. Absent means synchronous. */
 export type CapabilityExecutionProfile =
     | { kind: 'sync' }
     | { kind: 'async_poll'; pollIntervalMs: number; maxDurationMs: number };
 
-export type CapabilityProviderKind = 'openapi' | 'mcp' | 'managed_integration' | 'web_data' | 'manual';
+type CapabilityProviderKind = 'openapi' | 'mcp' | 'managed_integration' | 'web_data' | 'manual';
 
 /**
  * Where an admitted capability came from. Written by admission, never by a
  * provider. Part of the digest, so a stored manifest cannot swap its origin
  * story without failing validation.
  */
-export interface CapabilityProvenance {
+interface CapabilityProvenance {
     providerId: string;
     providerKind: CapabilityProviderKind;
     externalId: string;
@@ -131,7 +131,7 @@ export interface CapabilityManifest {
     digest: string;
 }
 
-export type ManifestDraft = Omit<CapabilityManifest, 'digest'>;
+type ManifestDraft = Omit<CapabilityManifest, 'digest'>;
 
 const EFFECTS: CapabilityEffect[] = ['read', 'compute', 'write', 'destructive'];
 const APPROVALS: CapabilityApproval[] = ['auto', 'pending', 'approved', 'denied'];
@@ -150,7 +150,7 @@ const MANIFEST_KEYS = new Set([
 const RUNTIME_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/;
 const MAX_OAUTH_SCOPES = 20;
 /** Each input schema is already depth-bounded by validateValueType. */
-export const MAX_MANIFEST_INPUTS = 64;
+const MAX_MANIFEST_INPUTS = 64;
 const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5B\x5D-\x7E]{1,200}$/;
 const OPERATION_PATTERN = /^[A-Za-z0-9_.:-]{1,120}$/;
 
@@ -159,7 +159,7 @@ const PROVENANCE_KEYS = new Set([
     'discoveredAtMs', 'admittedAtMs', 'schemaDigest'
 ]);
 
-export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_.:-]{0,63}$/;
+const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_.:-]{0,63}$/;
 
 const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
 const SECRET_REF_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
@@ -177,7 +177,7 @@ export function isInputName(name: string): boolean {
  * (constructor, toString, ...), which a lookup would find by inheritance.
  * An input or credential placement may not use one.
  */
-export function isReservedName(name: string): boolean {
+function isReservedName(name: string): boolean {
     return name === '__proto__' || name === 'prototype' || Object.prototype.hasOwnProperty.call(Object.prototype, name);
 }
 
@@ -214,7 +214,7 @@ export const DENIED_HEADER_NAMES: ReadonlySet<string> = new Set([
  * already outside the token grammar; they are refused here as well so the
  * rule holds without the grammar.
  */
-export function isDeniedHeaderName(name: string): boolean {
+function isDeniedHeaderName(name: string): boolean {
     return name.startsWith(':') || DENIED_HEADER_NAMES.has(name.toLowerCase());
 }
 
@@ -255,16 +255,16 @@ export function effectAllowedForMethod(method: HttpMethod, effect: CapabilityEff
     return effect === 'write' || effect === 'destructive';
 }
 
-export const MIN_TRIGGER_INTERVAL_MS = 5_000;
-export const MAX_TRIGGER_INTERVAL_MS = 86_400_000;
+const MIN_TRIGGER_INTERVAL_MS = 5_000;
+const MAX_TRIGGER_INTERVAL_MS = 86_400_000;
 
-export function normalizeTrigger(trigger: CapabilityTrigger | undefined, invocation?: CapabilityInvocation): CapabilityTrigger {
+function normalizeTrigger(trigger: CapabilityTrigger | undefined, invocation?: CapabilityInvocation): CapabilityTrigger {
     if (trigger && validTriggerShape(trigger)) return trigger;
     if (invocation === 'auto') return { kind: 'on_create' };
     return { kind: 'manual' };
 }
 
-export function triggerInvocation(trigger: CapabilityTrigger): CapabilityInvocation {
+function triggerInvocation(trigger: CapabilityTrigger): CapabilityInvocation {
     return trigger.kind === 'manual' ? 'manual' : 'auto';
 }
 
@@ -274,7 +274,7 @@ function validTriggerShape(trigger: CapabilityTrigger): boolean {
     return false;
 }
 
-export function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrigger): string | null {
+function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrigger): string | null {
     if ((effect === 'write' || effect === 'destructive') && trigger.kind !== 'manual') {
         return 'write and destructive capabilities only run manually';
     }
@@ -289,11 +289,11 @@ export function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrig
 }
 
 /** Digest of the typed contract alone: inputs and output schema. */
-export function schemaDigestFor(draft: Pick<ManifestDraft, 'inputs' | 'output'>): string {
+function schemaDigestFor(draft: Pick<ManifestDraft, 'inputs' | 'output'>): string {
     return sha256(canonicalize({ inputs: draft.inputs, output: draft.output }));
 }
 
-export function digestPayload(draft: ManifestDraft): unknown {
+function digestPayload(draft: ManifestDraft): unknown {
     return {
         version: draft.version,
         id: draft.id,
@@ -465,13 +465,13 @@ function pathParamNames(path: string): string[] {
     return [...path.matchAll(/\{([^}]+)\}/g)].map(match => match[1]);
 }
 
-export interface ManifestValidation {
+interface ManifestValidation {
     ok: boolean;
     manifest?: CapabilityManifest;
     errors: string[];
 }
 
-export interface ManifestValidationOptions {
+interface ManifestValidationOptions {
     /**
      * The host itself built this manifest (not a compiler, provider, model or
      * stored snapshot). Only then may an http transport target loopback.
@@ -773,7 +773,7 @@ function canonicalDraft(input: Record<string, unknown>): ManifestDraft {
     };
 }
 
-export function canonicalInput(entry: CapabilityInput): CapabilityInput {
+function canonicalInput(entry: CapabilityInput): CapabilityInput {
     return {
         name: entry.name,
         in: entry.in,
@@ -785,7 +785,7 @@ export function canonicalInput(entry: CapabilityInput): CapabilityInput {
 }
 
 /** The longest example or default kept from a spec. Longer ones are dropped, not cut. */
-export const MAX_INPUT_HINT = 200;
+const MAX_INPUT_HINT = 200;
 
 /** An example or default a field can show: a short string, a finite number, or a boolean. */
 export function isInputHint(value: unknown): value is Primitive {
@@ -820,7 +820,7 @@ function canonicalAuth(auth: AuthBinding): AuthBinding {
     };
 }
 
-export function canonicalScopes(scopes: readonly string[]): string[] {
+function canonicalScopes(scopes: readonly string[]): string[] {
     return [...new Set(scopes)].sort();
 }
 
@@ -843,7 +843,7 @@ function canonicalTransport(transport: CapabilityTransport): CapabilityTransport
     };
 }
 
-export function canonicalOutput(output: CapabilityOutput): CapabilityOutput {
+function canonicalOutput(output: CapabilityOutput): CapabilityOutput {
     return {
         schema: output.schema,
         presentation: output.presentation,

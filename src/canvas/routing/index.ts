@@ -1,6 +1,6 @@
 // Circuit-style wire routing for the canvas.
 //
-//   routeWires(blocks, wires) -> one orthogonal polyline per wire
+//   new WireRouter().route(blocks, wires) -> one orthogonal polyline per wire
 //
 // 1. Every block is inflated by `clearance` and becomes an obstacle (a wire's
 //    own source and target blocks too: only the port stub touches them).
@@ -32,7 +32,7 @@ import {
 } from './types';
 
 export * from './types';
-export { polylineToPath, midpoint, DEFAULT_PATH_STYLE } from './svgPath';
+export { polylineToPath, midpoint } from './svgPath';
 
 const EPS = 1e-6;
 
@@ -427,11 +427,6 @@ function routeCore(
         },
         raw: rawById
     };
-}
-
-/** Route every wire from scratch. Deterministic: the same layout always gives the same wires. */
-export function routeWires(blocks: RouteBlock[], wires: RouteWire[], options: Partial<RouteOptions> = {}): RouteResult {
-    return routeCore(blocks, wires, { ...DEFAULT_ROUTE_OPTIONS, ...options }, () => undefined).result;
 }
 
 const LIVE_GREED = 2;

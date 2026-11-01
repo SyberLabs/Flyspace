@@ -22,7 +22,7 @@ export const PUBLIC_PROXY_IDS = [
     'frankfurter'
 ] as const;
 
-export type PublicProviderId = (typeof PUBLIC_PROXY_IDS)[number];
+type PublicProviderId = (typeof PUBLIC_PROXY_IDS)[number];
 
 export function isPublicProvider(id: string): id is PublicProviderId {
     return (PUBLIC_PROXY_IDS as readonly string[]).includes(id);
@@ -91,11 +91,11 @@ function headersFor(id: PublicProviderId): Record<string, string> {
  * these are single small GETs and a canvas block is waiting on them, so the
  * broker's 15 s (which covers a whole capability run) would be too generous.
  */
-export const PUBLIC_UPSTREAM_DEADLINE_MS = 8000;
+const PUBLIC_UPSTREAM_DEADLINE_MS = 8000;
 /** Same cap the capability broker puts on an upstream body. */
-export const PUBLIC_MAX_RESPONSE_BYTES = 1_000_000;
+const PUBLIC_MAX_RESPONSE_BYTES = 1_000_000;
 
-export type PublicFailureCode =
+type PublicFailureCode =
     | 'upstream_timeout'
     | 'upstream_redirect'
     | 'upstream_status'
@@ -103,7 +103,7 @@ export type PublicFailureCode =
     | 'upstream_shape'
     | 'upstream_unreachable';
 
-export interface PublicFailure {
+interface PublicFailure {
     error: { code: PublicFailureCode; message: string };
 }
 

@@ -96,7 +96,7 @@ function unseal(value: string | undefined, client: Client): FlowCookie | null {
     }
 }
 
-export type StartResult =
+type StartResult =
     | { ok: true; redirect: string; cookie: string }
     | { ok: false; status: number; error: string };
 
@@ -141,7 +141,7 @@ export function startConnect(args: {
     return { ok: true, redirect: authorize.toString(), cookie };
 }
 
-export type CallbackResult =
+type CallbackResult =
     | { ok: true; providerId: ConnectProviderId; nonce: string; scopes: string[]; accessToken: string; expiresIn: number }
     | { ok: false; nonce?: string; error: string };
 
