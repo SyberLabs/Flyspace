@@ -25,9 +25,9 @@ export const CACHE_TTL_MS = 5 * 60_000;
 const MAX_CACHE_ENTRIES = 500;
 const DAY_MS = 24 * 60 * 60_000;
 /** House-key answers one caller may receive per day, cached or not. */
-export const MAX_CALLER_PER_DAY = 200;
+const MAX_CALLER_PER_DAY = 200;
 /** Upstream calls one provider may receive on a house key per day. */
-export const MAX_PROVIDER_PER_DAY = 500;
+const MAX_PROVIDER_PER_DAY = 500;
 
 export interface HouseKey {
     apiId: string;

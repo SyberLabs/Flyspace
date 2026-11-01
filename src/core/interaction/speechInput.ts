@@ -3,7 +3,6 @@
 
 import { createIntentCompiler, type IntentCompiler, type IntentCompilerResult, type IntentContext } from './intentCompiler';
 import { createPushToTalk, type PushToTalkOptions } from './pushToTalk';
-import type { SpeechTimingRecorder } from './speechMeasurement';
 import type { SpeechAdapter, SpeechErrorCode, SpeechObservationV1 } from './speechObservation';
 import type { SpatialCommand } from './types';
 
@@ -19,7 +18,7 @@ export type SpeechOutcome =
     | { kind: 'cancelled' }
     | { kind: 'error'; code: SpeechErrorCode; message: string };
 
-export interface SpeechInput {
+interface SpeechInput {
     readonly held: boolean;
     readonly adapterId: string;
     prepare(): Promise<void>;
@@ -29,20 +28,17 @@ export interface SpeechInput {
     cancel(): void;
 }
 
-export interface SpeechInputOptions extends PushToTalkOptions {
+interface SpeechInputOptions extends PushToTalkOptions {
     adapter: SpeechAdapter;
     authority: SpeechAuthority;
     /** Defaults to the fixed grammar alone. */
     compiler?: IntentCompiler;
-    /** Receives timings from live captures only; synthetic adapters are refused by the recorder. */
-    recorder?: SpeechTimingRecorder;
 }
 
 const STOP_LISTENING = /^stop listening[.!]?$/i;
 
 export function createSpeechInput(options: SpeechInputOptions): SpeechInput {
-    const now = options.now ?? Date.now;
-    const talk = createPushToTalk(options.adapter, { ...options, now });
+    const talk = createPushToTalk(options.adapter, options);
     const compiler = options.compiler ?? createIntentCompiler();
     let generation = 0;
 
@@ -74,20 +70,7 @@ export function createSpeechInput(options: SpeechInputOptions): SpeechInput {
             if (STOP_LISTENING.test(heard.transcript)) return { kind: 'stopped' };
             const result = await compiler.compile(heard.observation, options.authority.describeSpeechContext());
             if (turn !== generation) return { kind: 'cancelled' };
-            const decidedAtMs = now();
             const command = options.authority.admitSpeech(heard.observation, result);
-            const admittedAtMs = now();
-            if (heard.timings) {
-                const { sessionId: _sessionId, ...timings } = heard.timings;
-                options.recorder?.record({
-                    ...timings,
-                    adapterId: heard.observation.provider.adapterId,
-                    captureKind: options.adapter.captureKind,
-                    decidedAtMs,
-                    ...(command.lifecycle === 'committed' ? { committedAtMs: admittedAtMs } : {}),
-                    lifecycle: command.lifecycle
-                });
-            }
             return { kind: 'command', command, observation: heard.observation };
         },
         cancel() {

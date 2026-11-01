@@ -51,13 +51,10 @@ export interface PersonaTurnInput {
     abortSignal?: AbortSignal;
 }
 
-export interface PersonaTurnPrepared {
+interface PersonaTurnPrepared {
     messages: LLMMessage[];
-    sourceIds: string[];
     /** Labelled provenance for the UI: wired blocks and ambient pools. */
     sources: ContextSource[];
-    /** Whether any wired data context was found. */
-    hasContext: boolean;
 }
 
 const DEFAULT_THINK_TASK =
@@ -69,11 +66,7 @@ const DEFAULT_THINK_TASK =
  * context + recent history + the user task. Pure (no network) for easy testing.
  */
 export function preparePersonaTurn(input: PersonaTurnInput): PersonaTurnPrepared {
-    const { context, sourceIds, sources } = aggregateWireContext(input.instanceId);
-    // aggregateWireContext returns a human sentinel string when nothing is
-    // wired and another when every wired source is empty, so presence of real
-    // context is keyed off sourceIds, not the text.
-    const hasContext = sourceIds.length > 0;
+    const { context, sources } = aggregateWireContext(input.instanceId);
 
     const system = buildPersonaSystemPrompt(input.personaType, input.customName);
 
@@ -94,13 +87,12 @@ export function preparePersonaTurn(input: PersonaTurnInput): PersonaTurnPrepared
         { role: 'user', content: `${contextBlock}\n\n---\n\n${task}` }
     ];
 
-    return { messages, sourceIds, sources, hasContext };
+    return { messages, sources };
 }
 
 export interface PersonaTurnResult {
     success: boolean;
     content?: string;
-    sourceIds: string[];
     /** What actually fed this turn — record this, not the block's wires. */
     sources: ContextSource[];
     error?: string;
@@ -117,7 +109,7 @@ export interface PersonaTurnResult {
 export async function* streamPersonaTurn(
     input: PersonaTurnInput
 ): AsyncGenerator<string, PersonaTurnResult> {
-    const { messages, sourceIds, sources } = preparePersonaTurn(input);
+    const { messages, sources } = preparePersonaTurn(input);
     input.onPrepared?.(sources);
 
     // The Cognition Kernel owns the turn lifecycle (availability, registry
@@ -139,10 +131,10 @@ export async function* streamPersonaTurn(
     const { runId } = result;
 
     if (result.stopped) {
-        return { success: true, content: result.content, sourceIds, sources, stopped: true, runId };
+        return { success: true, content: result.content, sources, stopped: true, runId };
     }
 
     return result.success
-        ? { success: true, content: result.content, sourceIds, sources, runId }
-        : { success: false, sourceIds, sources, error: result.error, runId };
+        ? { success: true, content: result.content, sources, runId }
+        : { success: false, sources, error: result.error, runId };
 }

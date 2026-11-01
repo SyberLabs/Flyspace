@@ -52,7 +52,7 @@ type Review =
     | { state: 'failed'; message: string }
     | { state: 'ready'; title: string; subtitle: string; proposals: CapabilityManifest[]; issues: string[] };
 
-export interface AddApiDialogProps {
+interface AddApiDialogProps {
     open: boolean;
     onClose: () => void;
 }

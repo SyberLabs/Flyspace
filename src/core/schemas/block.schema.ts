@@ -27,7 +27,7 @@ export type ConnectionStatus =
 /**
  * Expand behavior for blocks
  */
-export type BlockExpandMode = 'resize' | 'portal' | 'fullscreen';
+type BlockExpandMode = 'resize' | 'portal' | 'fullscreen';
 
 /** Data types shown as visual hints on block wire handles. */
 export type PortDataType = 'json' | 'text' | 'media' | 'any';
@@ -36,7 +36,7 @@ export type PortDataType = 'json' | 'text' | 'media' | 'any';
  * Schema-bearing port contract. Optional so existing catalog ports stay
  * visual hints. When both ends of a wire declare one, the wire is checked.
  */
-export interface PortValueSchema {
+interface PortValueSchema {
   kind: 'string' | 'number' | 'integer' | 'boolean' | 'null' | 'object' | 'array' | 'any';
   description?: string;
   enum?: Array<string | number | boolean | null>;
@@ -51,7 +51,7 @@ export interface PortValueSchema {
 /**
  * Port direction
  */
-export type PortDirection = 'input' | 'output';
+type PortDirection = 'input' | 'output';
 
 /**
  * Port definition for block schema
@@ -162,34 +162,11 @@ export interface PolymarketMarket {
   tags: string[];
 }
 
-export interface PolymarketOutcome {
+interface PolymarketOutcome {
   id: string;
   name: string;
   probability: number;
   priceHistory?: { timestamp: number; price: number }[];
-}
-
-/**
- * NewsAPI-specific data types
- */
-export interface NewsArticle {
-  id: string;
-  title: string;
-  description: string;
-  source: string;
-  author?: string;
-  url: string;
-  imageUrl?: string;
-  publishedAt: string;
-  content?: string;
-  sentiment?: 'positive' | 'negative' | 'neutral';
-}
-
-export interface NewsFeed {
-  articles: NewsArticle[];
-  totalResults: number;
-  query?: string;
-  category?: string;
 }
 
 /**

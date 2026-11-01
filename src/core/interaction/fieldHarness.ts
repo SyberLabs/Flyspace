@@ -15,19 +15,19 @@ import { buildScene, compilerFor, CORPUS_CATALOG, type CompilerConfig, type Scen
 
 export type FieldTaskId = 'instantiate-place' | 'connect-source-persona' | 'open-shell' | 'delete-with-confirmation';
 
-export type SpeechTurn =
+type SpeechTurn =
     | { say: string; fail?: SpeechErrorCode; interrupt?: boolean }
     | { select: string[] }
     | { pointAt: { x: number; y: number } };
 
-export interface SpeechVariant {
+interface SpeechVariant {
     id: string;
     config: CompilerConfig;
     scene?: SceneId;
     turns: SpeechTurn[];
 }
 
-export interface FieldTask {
+interface FieldTask {
     id: FieldTaskId;
     title: string;
     scene: SceneId;
@@ -37,7 +37,7 @@ export interface FieldTask {
     speech: SpeechVariant[];
 }
 
-export interface TurnRecord {
+interface TurnRecord {
     turn: string;
     outcome: SpeechOutcome['kind'] | 'none' | 'pointer';
     lifecycle?: SpatialCommand['lifecycle'];
@@ -60,7 +60,7 @@ export interface FieldRun {
 }
 
 /** Supplied by a person after a session. The harness never fills this in. */
-export interface HumanPreference {
+interface HumanPreference {
     participant: string;
     task: FieldTaskId;
     prefers: 'speech' | 'pointer' | 'no preference';
@@ -184,7 +184,7 @@ function tally(run: FieldRun, command: SpatialCommand | undefined, isConfirm: bo
     if (isConfirm && command.lifecycle === 'committed') run.confirmations += 1;
 }
 
-export async function runSpeechVariant(task: FieldTask, variant: SpeechVariant): Promise<FieldRun> {
+async function runSpeechVariant(task: FieldTask, variant: SpeechVariant): Promise<FieldRun> {
     const canvas = buildScene(variant.scene ?? task.scene);
     const engine = new InteractionEngine(canvas, () => CORPUS_CATALOG);
     const run: FieldRun = {
@@ -217,7 +217,7 @@ export async function runSpeechVariant(task: FieldTask, variant: SpeechVariant):
     return run;
 }
 
-export function runPointerTask(task: FieldTask): FieldRun {
+function runPointerTask(task: FieldTask): FieldRun {
     const canvas = buildScene(task.scene);
     const engine = new InteractionEngine(canvas, () => CORPUS_CATALOG);
     const command = task.pointer.run(engine, canvas) ?? undefined;
@@ -257,6 +257,3 @@ export function summarizePreferences(preferences: HumanPreference[]): 'not measu
     for (const item of preferences) counts[item.prefers] += 1;
     return counts;
 }
-
-export const FIELD_TABLE_START = '<!-- field-table:start -->';
-export const FIELD_TABLE_END = '<!-- field-table:end -->';

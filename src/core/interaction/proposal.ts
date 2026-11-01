@@ -4,7 +4,7 @@
 
 import type { SpeechCatalog } from './speech';
 
-export const PROPOSAL_OPERATIONS = [
+const PROPOSAL_OPERATIONS = [
     'CREATE',
     'MOVE',
     'CONNECT',
@@ -18,10 +18,10 @@ export const PROPOSAL_OPERATIONS = [
     'RESOLVE_CAPABILITY'
 ] as const;
 
-export type ProposalOperation = typeof PROPOSAL_OPERATIONS[number];
+type ProposalOperation = typeof PROPOSAL_OPERATIONS[number];
 
 /** Only the deterministic grammar may produce these. A model outage must not block them, and a model must not forge them. */
-export const RESERVED_OPERATIONS: ReadonlySet<ProposalOperation> = new Set(['UNDO', 'CANCEL', 'CONFIRM']);
+const RESERVED_OPERATIONS: ReadonlySet<ProposalOperation> = new Set(['UNDO', 'CANCEL', 'CONFIRM']);
 
 export type ReferentExpression =
     | { kind: 'deictic'; word: 'this' | 'these' }
@@ -30,9 +30,9 @@ export type ReferentExpression =
     | { kind: 'block-type'; blockId: string }
     | { kind: 'shell'; shellId: string };
 
-export type SpatialRelationExpression = { kind: 'pointed' } | { kind: 'default' };
+type SpatialRelationExpression = { kind: 'pointed' } | { kind: 'default' };
 
-export interface CapabilityQueryExpression {
+interface CapabilityQueryExpression {
     text: string;
 }
 
@@ -46,7 +46,7 @@ export interface SpatialCommandProposalV1 {
     evidence: { speechObservationId: string };
 }
 
-export interface ProposalRules {
+interface ProposalRules {
     observationId: string;
     vocabulary: SpeechCatalog;
     /** Reserved operations are admitted only from the deterministic grammar. */
@@ -55,7 +55,7 @@ export interface ProposalRules {
     candidateIds?: ReadonlySet<string>;
 }
 
-export type ProposalCheck = { ok: true; proposal: SpatialCommandProposalV1 } | { ok: false; reason: string };
+type ProposalCheck = { ok: true; proposal: SpatialCommandProposalV1 } | { ok: false; reason: string };
 
 const TOP_KEYS = new Set(['version', 'operation', 'subject', 'target', 'placement', 'capabilityQuery', 'evidence']);
 const MAX_NAME = 80;

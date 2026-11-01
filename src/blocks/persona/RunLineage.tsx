@@ -27,7 +27,7 @@ const NOT_RECORDED =
     'The inference ledger is not configured here, so no lineage was recorded for this answer.';
 
 /** Map every non-tree answer to one honest sentence. */
-export async function fetchLineage(runId: string): Promise<LoadState> {
+async function fetchLineage(runId: string): Promise<LoadState> {
     let res: Response;
     try {
         res = await fetch(`/api/inference-runs/${encodeURIComponent(runId)}/lineage`, { cache: 'no-store' });

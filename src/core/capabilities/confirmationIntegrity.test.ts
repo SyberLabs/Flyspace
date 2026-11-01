@@ -4,8 +4,6 @@ import { canonicalCapabilityId, credentialSlot } from './identity';
 import { DENIED_HEADER_NAMES, sealManifest, validateManifest, type CapabilityInput, type CapabilityManifest } from './manifest';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
 import { bindMcpTransport, executeCapability, previewCapabilityRun, unbindMcpTransport } from './execute';
-import { admitProposal } from './admission';
-import type { CapabilityProposalV1 } from './provider';
 import { capabilitySecrets } from './secrets';
 
 const SPEC = {
@@ -191,22 +189,25 @@ describe('the confirmed request is the dispatched request', () => {
     });
 
     it('hands a tool exactly the confirmed arguments', async () => {
-        const proposal: CapabilityProposalV1 = {
+        const transport = { kind: 'mcp' as const, serverId: 'board', origin: 'https://board.example.test', toolName: 'post' };
+        const installed = installProposal(sealManifest({
             version: 1,
-            provider: { id: 'fixture.mcp', kind: 'mcp' },
-            externalIdentity: { operationId: 'post', sourceLocator: 'fixture://mcp/board' },
+            id: canonicalCapabilityId(transport),
             title: 'Post',
+            source: { kind: 'mcp', locator: 'fixture://mcp/board', operationId: 'post' },
+            effect: 'write',
+            effectSource: 'declared',
+            approval: 'pending',
+            invocation: 'manual',
+            trigger: { kind: 'manual' },
             auth: { kind: 'none' },
-            transport: { kind: 'mcp', serverId: 'board', origin: 'https://board.example.test', toolName: 'post' },
+            transport,
             inputs: [
                 { name: 'channel', in: 'argument', required: true, schema: { kind: 'string' } },
                 { name: 'message', in: 'argument', required: true, schema: { kind: 'object' } }
             ],
-            output: { schema: { kind: 'null' }, presentation: 'raw' },
-            execution: { kind: 'sync' },
-            provenance: { providerId: 'fixture.mcp', sourceLocator: 'fixture://mcp/board', discoveredAtMs: 1_790_000_000_000 }
-        };
-        const installed = admitProposal(proposal, { nowMs: 1_790_000_000_000 });
+            output: { schema: { kind: 'null' }, presentation: 'raw' }
+        }));
         expect(installed.ok, installed.errors.join('; ')).toBe(true);
         const manifest = approveCapability(installed.manifest!.id).manifest!;
         const received: Array<Record<string, unknown>> = [];

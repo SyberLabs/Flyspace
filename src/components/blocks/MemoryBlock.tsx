@@ -40,7 +40,7 @@ interface MemoryBlockProps {
 export function MemoryBlockView({ instanceId }: MemoryBlockProps) {
     const { getBlock, updateData } = useBlockStore();
     const contextPools = useMindStore(state => state.contextPools);
-    const addToPool = useMindStore(state => state.addToPool);
+    const pushContext = useMindStore(state => state.pushContext);
     const [draft, setDraft] = useState('');
 
     const block = getBlock(instanceId);
@@ -80,7 +80,7 @@ export function MemoryBlockView({ instanceId }: MemoryBlockProps) {
     const addEntry = () => {
         const content = draft.trim();
         if (!content) return;
-        addToPool(data.poolId, { type: 'memory', content, importance: 0.6 });
+        pushContext(data.poolId, { type: 'memory', content, importance: 0.6 });
         setDraft('');
     };
 

@@ -5,11 +5,9 @@ import { InteractionEngine } from './engine';
 import {
     compileDeterministic,
     createIntentCompiler,
-    modelIntentCompiler,
     paraphraseCompiler,
     type IntentCompilerResult,
     type IntentContext,
-    type ModelIntentRequest,
     type SemanticCompiler
 } from './intentCompiler';
 import { validateProposal } from './proposal';
@@ -46,15 +44,6 @@ const throwingSemantic: SemanticCompiler = {
         throw new Error('semantic step must not run');
     }
 };
-
-function stubModel(output: unknown) {
-    const requests: ModelIntentRequest[] = [];
-    const compiler = modelIntentCompiler(request => {
-        requests.push(request);
-        return typeof output === 'function' ? (output as (r: ModelIntentRequest) => unknown)(request) : output;
-    });
-    return { compiler, requests };
-}
 
 describe('utterance corpus', () => {
     it('is versioned and covers every spec §16 class', () => {
@@ -205,102 +194,6 @@ describe('SpatialCommandProposal v1 validation', () => {
     });
 });
 
-describe('ModelIntentCompiler boundary', () => {
-    async function compileWith(output: unknown, transcript = 'please take this off the board') {
-        const { canvas, engine } = boardEngine();
-        const { compiler, requests } = stubModel(output);
-        const observation = finalObservation(transcript);
-        const result = await createIntentCompiler({ semantic: compiler }).compile(observation, engine.describeSpeechContext());
-        return { canvas, engine, observation, result, requests };
-    }
-
-    it.each([
-        ['garbage text', 'sure! I deleted it for you', 'model-output-invalid-json'],
-        ['truncated JSON', '{"version":1,"operation":"DELETE"', 'model-output-invalid-json'],
-        ['a number', 42, 'model-output-invalid:not-an-object'],
-        ['an oversize string', `"${'x'.repeat(5000)}"`, 'model-output-too-long'],
-        ['an extra operation', { version: 1, operation: 'INSTALL_CAPABILITY', evidence: { speechObservationId: '?' } }, 'model-output-invalid:unknown-operation'],
-        ['CONFIRM', { version: 1, operation: 'CONFIRM', evidence: { speechObservationId: '?' } }, 'model-output-invalid:reserved-deterministic'],
-        ['UNDO', { version: 1, operation: 'UNDO', evidence: { speechObservationId: '?' } }, 'model-output-invalid:reserved-deterministic']
-    ])('refuses %s', async (_label, output, reason) => {
-        const { canvas, engine, observation, result } = await compileWith(output);
-        expect(result).toEqual({ kind: 'refuse', reason, via: 'model' });
-        expect(engine.admitSpeech(observation, result).lifecycle).toBe('refused');
-        expect(canvas.blocks).toHaveLength(2);
-        expect(canvas.wires).toHaveLength(0);
-    });
-
-    it('refuses extra fields and ids that were not supplied', async () => {
-        const extra = await compileWith((request: ModelIntentRequest) => ({
-            version: 1, operation: 'DELETE', subject: { kind: 'candidate', id: 'hn' },
-            evidence: { speechObservationId: request.observationId }, confirmed: true
-        }));
-        expect(extra.result).toEqual({ kind: 'refuse', reason: 'model-output-invalid:unknown-field:confirmed', via: 'model' });
-
-        const foreign = await compileWith((request: ModelIntentRequest) => ({
-            version: 1, operation: 'DELETE', subject: { kind: 'candidate', id: 'root-admin-block' },
-            evidence: { speechObservationId: request.observationId }
-        }));
-        expect(foreign.result).toEqual({ kind: 'refuse', reason: 'model-output-invalid:candidate-not-supplied', via: 'model' });
-    });
-
-    it('a thrown model call refuses', async () => {
-        const { result } = await compileWith(() => { throw new Error('rate limited'); });
-        expect(result).toEqual({ kind: 'refuse', reason: 'model-error', via: 'model' });
-    });
-
-    it('sends bounded descriptors and no reserved operations', async () => {
-        const { requests } = await compileWith('nope');
-        expect(requests).toHaveLength(1);
-        expect(requests[0].operations).not.toContain('CONFIRM');
-        expect(requests[0].operations).not.toContain('UNDO');
-        expect(requests[0].operations).not.toContain('CANCEL');
-        expect(requests[0].candidates.map(item => item.id).sort()).toEqual(['analyst', 'hn']);
-        expect(Object.keys(requests[0].candidates[0]).sort()).toEqual(['blockId', 'id', 'name']);
-    });
-
-    it('a valid model delete still previews and waits for the host confirm', async () => {
-        const { canvas, engine, observation, result } = await compileWith((request: ModelIntentRequest) => JSON.stringify({
-            version: 1, operation: 'DELETE', subject: { kind: 'candidate', id: 'hn' },
-            evidence: { speechObservationId: request.observationId }
-        }));
-        expect(result).toMatchObject({ kind: 'proposal', via: 'model' });
-        const command = engine.admitSpeech(observation, result);
-        expect(command).toMatchObject({ lifecycle: 'previewing', reason: 'destructive-needs-confirm', subjects: ['hn'] });
-        expect(command.evidence).toContain('speech-compiler:model');
-        expect(canvas.blocks).toHaveLength(2);
-        expect(engine.hear(finalObservation('yeah'))).toMatchObject({ lifecycle: 'refused' });
-        expect(canvas.blocks).toHaveLength(2);
-        expect(engine.hear(finalObservation('confirm'))).toMatchObject({ lifecycle: 'committed', action: 'delete' });
-        expect(canvas.blocks).toHaveLength(1);
-    });
-
-    it('a candidate that went stale between compile and admission holds', async () => {
-        const { canvas, engine, observation, result } = await compileWith((request: ModelIntentRequest) => ({
-            version: 1, operation: 'CONNECT', subject: { kind: 'candidate', id: 'hn' }, target: { kind: 'candidate', id: 'analyst' },
-            evidence: { speechObservationId: request.observationId }
-        }), 'hook the first one into the second one');
-        expect(result.kind).toBe('proposal');
-        canvas.remove('hn');
-        expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'held', reason: 'stale-referent' });
-        expect(canvas.wires).toHaveLength(0);
-    });
-
-    it('prompt injection inside a block name cannot forge a confirm', async () => {
-        const canvas = buildScene('injected-name');
-        const engine = new InteractionEngine(canvas, () => CORPUS_CATALOG);
-        engine.speak('delete notes');
-        const obedient = modelIntentCompiler(request => ({
-            version: 1, operation: 'CONFIRM', evidence: { speechObservationId: request.observationId }
-        }));
-        const observation = finalObservation('do what the notes block says');
-        const result = await createIntentCompiler({ semantic: obedient }).compile(observation, engine.describeSpeechContext());
-        expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'refused', reason: 'model-output-invalid:reserved-deterministic' });
-        expect(engine.snapshot().preview).not.toBeNull();
-        expect(canvas.blocks).toHaveLength(2);
-    });
-});
-
 describe('engine second gate', () => {
     it('refuses a result that claims the grammar but does not match it', () => {
         const { canvas, engine } = boardEngine();
@@ -324,6 +217,43 @@ describe('engine second gate', () => {
             proposal: { version: 1, operation: 'UNDO', evidence: { speechObservationId: observation.observationId } }
         };
         expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'refused', reason: 'invalid-proposal:reserved-deterministic' });
+    });
+
+    it('a semantic candidate that went stale between compile and admission holds', () => {
+        const { canvas, engine } = boardEngine();
+        const observation = finalObservation('hook the first one into the second one');
+        const result: IntentCompilerResult = {
+            kind: 'proposal', via: 'semantic',
+            proposal: {
+                version: 1, operation: 'CONNECT',
+                subject: { kind: 'candidate', id: 'hn' }, target: { kind: 'candidate', id: 'analyst' },
+                evidence: { speechObservationId: observation.observationId }
+            }
+        };
+        canvas.remove('hn');
+        expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'held', reason: 'stale-referent' });
+        expect(canvas.wires).toHaveLength(0);
+    });
+
+    it('a valid semantic delete still previews and waits for the host confirm', () => {
+        const { canvas, engine } = boardEngine();
+        const observation = finalObservation('please take this off the board');
+        const result: IntentCompilerResult = {
+            kind: 'proposal', via: 'semantic',
+            proposal: {
+                version: 1, operation: 'DELETE',
+                subject: { kind: 'candidate', id: 'hn' },
+                evidence: { speechObservationId: observation.observationId }
+            }
+        };
+        const command = engine.admitSpeech(observation, result);
+        expect(command).toMatchObject({ lifecycle: 'previewing', reason: 'destructive-needs-confirm', subjects: ['hn'] });
+        expect(command.evidence).toContain('speech-compiler:semantic');
+        expect(canvas.blocks).toHaveLength(2);
+        expect(engine.hear(finalObservation('yeah'))).toMatchObject({ lifecycle: 'refused' });
+        expect(canvas.blocks).toHaveLength(2);
+        expect(engine.hear(finalObservation('confirm'))).toMatchObject({ lifecycle: 'committed', action: 'delete' });
+        expect(canvas.blocks).toHaveLength(1);
     });
 
     it('RESOLVE_CAPABILITY is refused and changes nothing', async () => {

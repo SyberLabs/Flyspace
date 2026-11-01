@@ -5,9 +5,9 @@
 
 import { query, isDatabaseConfigured } from '@/core/db/client';
 
-export type ServerPhase = 'admitted' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'uncertain';
-export type ServerExecutionProfile = 'sync' | 'async_poll';
-export type ServerObservedStatus = 'accepted' | 'running' | 'succeeded' | 'failed';
+type ServerPhase = 'admitted' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'uncertain';
+type ServerExecutionProfile = 'sync' | 'async_poll';
+type ServerObservedStatus = 'accepted' | 'running' | 'succeeded' | 'failed';
 
 export interface ServerExecution {
     runId: string;
@@ -27,7 +27,7 @@ export interface ServerExecution {
     lastObservedAt?: number;
 }
 
-export interface ServerAdmit {
+interface ServerAdmit {
     kind: 'new' | 'replay' | 'conflict' | 'in_flight' | 'uncertain';
     row: ServerExecution;
 }
@@ -43,7 +43,7 @@ export interface ServerLedger {
 }
 
 /** The no-database ledger keeps this many rows; settled rows are evicted first, oldest first. */
-export const MEMORY_LEDGER_MAX_ROWS = 1_000;
+const MEMORY_LEDGER_MAX_ROWS = 1_000;
 
 export function memoryLedger(maxRows = MEMORY_LEDGER_MAX_ROWS): ServerLedger {
     const rows = new Map<string, ServerExecution>();
@@ -167,7 +167,7 @@ function fromRow(found: Row): ServerExecution {
     };
 }
 
-export function postgresLedger(): ServerLedger {
+function postgresLedger(): ServerLedger {
     return {
         async admit(row) {
             const inserted = await query<{ id: string }>(INSERT, [

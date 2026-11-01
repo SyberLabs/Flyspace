@@ -35,7 +35,7 @@ export function operationNeedsCredential(operation: {
         && ((input.required && looksLikeKey(input.name, input.schema.description)) || KEY_NAME.test(input.name)));
 }
 
-export interface KeyParameterCandidate {
+interface KeyParameterCandidate {
     name: string;
     in: string;
     description?: string;

@@ -8,11 +8,11 @@ import { useBlockStore, useSettingsStore } from '@/core/stores';
 import { useOmniData } from '@/core/hooks';
 import type { OmniItem } from '@/core/gateway';
 
-export interface OpenAlexBlockData {
+interface OpenAlexBlockData {
     items: OmniItem[];
 }
 
-export type OpenAlexBlockParams = Record<string, unknown>;
+type OpenAlexBlockParams = Record<string, unknown>;
 
 export function useOpenAlexBlock(instanceId: string, params?: OpenAlexBlockParams) {
     const { updateData, updateStatus, getBlock } = useBlockStore();
@@ -23,8 +23,7 @@ export function useOpenAlexBlock(instanceId: string, params?: OpenAlexBlockParam
         items,
         isLoading,
         error,
-        refresh,
-        fromCache
+        refresh
     } = useOmniData('openalex', instanceId, {
         immediate: true,
         params,
@@ -57,7 +56,6 @@ export function useOpenAlexBlock(instanceId: string, params?: OpenAlexBlockParam
         items: cachedData?.items?.length ? cachedData.items : items,
         status: block?.status || (isLoading ? 'connecting' : 'connected'),
         lastUpdated: block?.last_updated,
-        fromCache,
         refresh,
         error
     };

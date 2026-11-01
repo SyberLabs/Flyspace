@@ -28,7 +28,7 @@ function personaSourcesOf(blockId: string): string[] {
         .filter(isPersona);
 }
 
-export interface CascadePlan {
+interface CascadePlan {
     /** Personas to run, upstream first; the target is last. */
     order: string[];
     /** True when a cycle was found and broken to keep the plan finite. */

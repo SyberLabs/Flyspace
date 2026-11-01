@@ -18,10 +18,10 @@ export interface ExecutionReceipt {
     value?: unknown;
 }
 
-export type ExecutionProfileKind = 'sync' | 'async_poll';
+type ExecutionProfileKind = 'sync' | 'async_poll';
 
 /** What the destination last reported. `accepted` means start returned a run id. */
-export type ObservedStatus = 'accepted' | 'running' | 'succeeded' | 'failed';
+type ObservedStatus = 'accepted' | 'running' | 'succeeded' | 'failed';
 
 export interface ExecutionRecord {
     runId: string;
@@ -93,7 +93,7 @@ function isSideEffect(effect: CapabilityEffect): boolean {
  * bounded by the same deadline and settles the row itself; closing it
  * underneath would leave the observer's result and the ledger disagreeing.
  */
-export function reconcileExecutions(now = Date.now(), observing: ReadonlySet<string> = new Set()): void {
+function reconcileExecutions(now = Date.now(), observing: ReadonlySet<string> = new Set()): void {
     let changed = false;
     const records = executionRecords().map(record => {
         if (record.status !== 'admitted' && record.status !== 'running') return record;
@@ -122,7 +122,7 @@ export function reconcileExecutions(now = Date.now(), observing: ReadonlySet<str
     if (changed) useExecutionLedger.setState({ records });
 }
 
-export type Admission =
+type Admission =
     | { kind: 'admit'; record: ExecutionRecord }
     | { kind: 'replay'; record: ExecutionRecord }
     | { kind: 'conflict'; record: ExecutionRecord }

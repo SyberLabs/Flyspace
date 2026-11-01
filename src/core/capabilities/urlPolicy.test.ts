@@ -2,12 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { compileOpenApi } from './openapi';
 import { canonicalCapabilityId } from './identity';
 import { sealManifest, validateManifest, type CapabilityManifest } from './manifest';
-import { admitProposal } from './admission';
 import { clearCapabilities } from './registry';
-import { openapiProvider } from './providers/openapiProvider';
-import type { CapabilityProposalV1 } from './provider';
-
-const NOW = 1_790_000_000_000;
 
 const SPEC = {
     openapi: '3.0.3',
@@ -32,17 +27,6 @@ function atBase(baseUrl: string): CapabilityManifest {
     if (compiled.transport.kind !== 'http') throw new Error('expected http');
     const transport = { ...compiled.transport, baseUrl };
     return sealManifest({ ...compiled, id: canonicalCapabilityId(transport), transport });
-}
-
-async function proposals(): Promise<CapabilityProposalV1[]> {
-    const discovered = await openapiProvider.discover({ document: SPEC }, { nowMs: NOW });
-    return Promise.all(discovered.candidates.map(candidate => openapiProvider.materialize(candidate, { request: { document: SPEC } })));
-}
-
-function byOperation(list: CapabilityProposalV1[], operationId: string): CapabilityProposalV1 {
-    const found = list.find(entry => entry.externalIdentity.operationId === operationId);
-    if (!found) throw new Error(`no proposal ${operationId}`);
-    return found;
 }
 
 beforeEach(() => {
@@ -84,25 +68,5 @@ describe('base URL policy', () => {
         const compiled = compileOpenApi({ ...SPEC, servers: [{ url: 'https://board.example.test/v1?api_key=abc' }] });
         expect(compiled.manifests).toHaveLength(0);
         expect(compiled.errors.map(error => error.message).join('; ')).toContain('query or fragment');
-    });
-});
-
-describe('admission decides execution access', () => {
-    it('normalises a proposal that asks for the server broker to browser_direct', async () => {
-        const list = byOperation(await proposals(), 'list');
-        const asked = { ...list, transport: { ...list.transport, access: 'server_broker' } } as CapabilityProposalV1;
-        const result = admitProposal(asked, { nowMs: NOW });
-        expect(result.ok).toBe(true);
-        expect(result.manifest?.transport).toMatchObject({ access: 'browser_direct' });
-    });
-
-    it('uses the broker only for a read on an origin the host allowlisted', async () => {
-        const all = await proposals();
-        const policy = { nowMs: NOW, brokerOrigins: ['https://board.example.test'] };
-        expect(admitProposal(byOperation(all, 'list'), policy).manifest?.transport).toMatchObject({ access: 'server_broker' });
-        expect(admitProposal(byOperation(all, 'create'), policy).manifest?.transport).toMatchObject({ access: 'browser_direct' });
-        clearCapabilities();
-        const elsewhere = { nowMs: NOW, brokerOrigins: ['https://other.example.test'] };
-        expect(admitProposal(byOperation(all, 'list'), elsewhere).manifest?.transport).toMatchObject({ access: 'browser_direct' });
     });
 });

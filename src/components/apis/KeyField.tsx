@@ -30,7 +30,7 @@ export function useHouseKeyCovers(manifest: CapabilityManifest | undefined): boo
     return useSyncExternalStore(subscribeHouseKeys, () => houseKeyCovers(manifest), () => false);
 }
 
-export interface KeyFieldProps {
+interface KeyFieldProps {
     manifest: CapabilityManifest;
     /** Called after the key is in the slot. */
     onSaved?: () => void;

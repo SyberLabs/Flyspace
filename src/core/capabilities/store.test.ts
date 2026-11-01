@@ -2,7 +2,8 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { migrateCapabilityStore, useCapabilityStore } from './store';
-import { installProposal, clearCapabilities, listCapabilities } from './registry';
+import { installProposal, clearCapabilities } from './registry';
+import { allCapabilities } from './state';
 import { compileOpenApi } from './openapi';
 import { CAPABILITY_STORE_KEY, dropImportedApprovals } from './importAdmission';
 import { vaultStorage, __resetVaultConnection } from '../vault/vaultStorage';
@@ -72,7 +73,7 @@ describe('a v1 vault record survives rehydrate', () => {
         await useCapabilityStore.persist.rehydrate();
 
         expect(useCapabilityStore.getState().stale.map(entry => entry.id)).toEqual([LEGACY_MCP.id]);
-        expect(listCapabilities().some(manifest => manifest.id === LEGACY_MCP.id)).toBe(false);
+        expect(allCapabilities().some(manifest => manifest.id === LEGACY_MCP.id)).toBe(false);
 
         // A later install rewrites the persisted manifests; the stale entry stays.
         expect(installProposal(compileOpenApi(SPEC).manifests[0]).ok).toBe(true);
@@ -103,6 +104,6 @@ describe('a v1 vault record survives rehydrate', () => {
         const [stale] = useCapabilityStore.getState().stale;
         expect(stale).toMatchObject({ id: LEGACY_MCP.id, title: 'Search board' });
         expect((stale.manifest as { approval: string }).approval).toBe('pending');
-        expect(listCapabilities().some(manifest => manifest.id === LEGACY_MCP.id)).toBe(false);
+        expect(allCapabilities().some(manifest => manifest.id === LEGACY_MCP.id)).toBe(false);
     });
 });

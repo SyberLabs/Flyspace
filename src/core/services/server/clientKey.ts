@@ -11,7 +11,7 @@ export type ClientKeyEnv = Readonly<Record<string, string | undefined>>;
 /** Every caller shares this bucket when no ingress is declared. */
 export const DIRECT_CLIENT = 'direct';
 
-export type Ingress = 'cloudflare' | 'proxy' | 'direct';
+type Ingress = 'cloudflare' | 'proxy' | 'direct';
 
 /**
  * `OMNI_TRUSTED_PROXY` names what sits in front of this server:

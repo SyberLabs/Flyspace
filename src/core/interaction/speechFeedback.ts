@@ -55,10 +55,6 @@ export function browserSpeechFeedback(): SpeechFeedbackAdapter {
     };
 }
 
-export function silentSpeechFeedback(): SpeechFeedbackAdapter {
-    return { id: 'silent', speak() {}, cancel() {} };
-}
-
 /** Returns false when the feedback adapter failed. The caller's state is untouched either way. */
 export function emitFeedback(feedback: SpeechFeedbackAdapter | null, text: string): boolean {
     if (!feedback) return true;

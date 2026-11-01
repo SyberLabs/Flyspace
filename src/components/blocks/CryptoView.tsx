@@ -12,7 +12,7 @@ import { BlockBodyState } from './BlockSetupCard';
 /**
  * Crypto asset data for display
  */
-export interface CryptoAsset {
+interface CryptoAsset {
     id: string;
     symbol: string;
     name: string;
@@ -32,7 +32,6 @@ export interface CryptoAsset {
 interface CryptoViewProps {
     assets: CryptoAsset[];
     status: string;
-    lastUpdated?: number | null;
     onRefresh?: () => void;
     error?: string | null;
 }

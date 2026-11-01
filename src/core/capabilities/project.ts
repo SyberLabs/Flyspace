@@ -11,7 +11,7 @@ export interface TypedValue {
     value: unknown;
 }
 
-export interface CapabilityError {
+interface CapabilityError {
     code: string;
     message: string;
     retryable: boolean;

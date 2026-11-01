@@ -20,11 +20,11 @@ import { curatedApi } from './curatedApis';
 export const DEFAULT_RESULT_LIMIT = 24;
 
 /** Largest spec the browser will download and compile. */
-export const MAX_SPEC_BYTES = 5 * 1024 * 1024;
-export const SPEC_FETCH_TIMEOUT_MS = 15_000;
+const MAX_SPEC_BYTES = 5 * 1024 * 1024;
+const SPEC_FETCH_TIMEOUT_MS = 15_000;
 
 /** Where the static index is served from (public/api-index.json). */
-export const API_INDEX_PATH = '/api-index.json';
+const API_INDEX_PATH = '/api-index.json';
 
 // Field weights. A word in the title is the strongest signal of what an API
 // is; an id names the provider (`stripe.com`); categories are curated; a
@@ -36,7 +36,7 @@ const STOP_WORDS = new Set([
     'on', 'or', 'the', 'to', 'want', 'with', 'my', 'that', 'this', 'data', 'service'
 ]);
 
-export interface SearchResult {
+interface SearchResult {
     entry: ApiIndexEntry;
     score: number;
 }
@@ -145,20 +145,11 @@ export function createApiSearcher(entries: readonly ApiIndexEntry[]): ApiSearche
     };
 }
 
-/** One-shot search. Prefer `createApiSearcher` when searching the same index repeatedly. */
-export function searchApiIndex(
-    entries: readonly ApiIndexEntry[],
-    query: string,
-    limit: number = DEFAULT_RESULT_LIMIT
-): SearchResult[] {
-    return createApiSearcher(entries).search(query, limit);
-}
-
 // ============================================
 // FETCH
 // ============================================
 
-export type RegistryFetchCode =
+type RegistryFetchCode =
     | 'unsupported_version'
     | 'not_catalog_url'
     | 'timeout'
@@ -174,7 +165,7 @@ export class RegistryFetchError extends Error {
     }
 }
 
-export interface FetchOptions {
+interface FetchOptions {
     fetchImpl?: typeof fetch;
     signal?: AbortSignal;
     maxBytes?: number;

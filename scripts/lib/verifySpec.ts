@@ -21,7 +21,7 @@ export interface QualityResult {
 }
 
 /** Inputs from the spec itself: every required input's example, plus one-value constants. */
-export function sampleInput(manifest: CapabilityManifest): { ok: true; input: Record<string, unknown> } | { ok: false; missing: string[] } {
+function sampleInput(manifest: CapabilityManifest): { ok: true; input: Record<string, unknown> } | { ok: false; missing: string[] } {
     const input: Record<string, unknown> = {};
     const missing: string[] = [];
     for (const field of manifest.inputs) {

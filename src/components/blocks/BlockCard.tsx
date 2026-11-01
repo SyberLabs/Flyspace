@@ -29,7 +29,7 @@ import { type DraggableAttributes, type DraggableSyntheticListeners } from '@dnd
  * the whole card made the card a role="button" that swallowed the names of
  * the controls inside it (FINDINGS.md).
  */
-export interface BlockDragHandle {
+interface BlockDragHandle {
     attributes: DraggableAttributes;
     listeners: DraggableSyntheticListeners;
     setActivatorNodeRef: (element: HTMLElement | null) => void;
@@ -101,7 +101,6 @@ export function BlockCard({
                         ? '0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 28px rgba(34, 211, 238, 0.25)'
                         : undefined
             }}
-            exit={{ opacity: 0, scale: 0.95 }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             data-cited={isCited ? 'true' : 'false'}

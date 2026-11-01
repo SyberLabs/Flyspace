@@ -4,7 +4,7 @@
 // becomes state. Until this existed every store hydrated by casting: a blob
 // that lost a field, or carried a value of the wrong type, became live state
 // and failed later, far from the cause. Now a record that does not fit is
-// dropped and recorded here, and the records next to it survive.
+// dropped with a console warning, and the records next to it survive.
 //
 // The schema source of truth is the TypeScript interface. `Shape<T>` makes
 // a spec list every required key of `T`, so adding a required field to an
@@ -13,31 +13,7 @@
 // unions have no runtime form, and a cosmetic value is not worth a record.
 // ============================================
 
-/** One persisted record the hydrate refused, and why. */
-export interface HydrationRejection {
-    /** The persist name of the store the record came from (`omni-blocks`...). */
-    store: string;
-    /** The record's own id when it had one. */
-    id: string | null;
-    /** The first field that failed, and how. */
-    reason: string;
-    at: number;
-}
-
-const rejections: HydrationRejection[] = [];
-
-/** Every record refused since the page loaded. */
-export function getHydrationRejections(): readonly HydrationRejection[] {
-    return rejections;
-}
-
-/** Test hook. */
-export function __resetHydrationRejections(): void {
-    rejections.length = 0;
-}
-
 function recordRejection(store: string, id: string | null, reason: string): void {
-    rejections.push({ store, id, reason, at: Date.now() });
     console.warn(`[vault] ${store}: dropped persisted record${id ? ` ${id}` : ''}: ${reason}`);
 }
 
@@ -47,7 +23,7 @@ function recordRejection(store: string, id: string | null, reason: string): void
  * a nested shape.
  */
 export type FieldSpec = string | readonly string[] | ShapeSpec;
-export interface ShapeSpec {
+interface ShapeSpec {
     readonly [field: string]: FieldSpec;
 }
 

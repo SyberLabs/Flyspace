@@ -7,7 +7,7 @@
 // ============================================
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createLLMService, getLLMService } from './llm.service';
+import { getLLMService } from './llm.service';
 import { LLM_DEFAULTS } from '@/core/schemas/mind.schema';
 
 const originalFetch = globalThis.fetch;
@@ -35,7 +35,7 @@ function postedBody(): Record<string, unknown> {
 describe('LLMService.isAvailable', () => {
     it('pings /api/llm with the provider and no key', async () => {
         vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse({ available: true }));
-        const llm = createLLMService(LLM_DEFAULTS.local);
+        const llm = getLLMService(LLM_DEFAULTS.local);
 
         await expect(llm.isAvailable()).resolves.toBe(true);
 
@@ -51,7 +51,7 @@ describe('LLMService.isAvailable', () => {
 
     it('returns false when the probe cannot reach the server', async () => {
         vi.mocked(globalThis.fetch).mockRejectedValue(new Error('network down'));
-        await expect(createLLMService(LLM_DEFAULTS.local).isAvailable()).resolves.toBe(false);
+        await expect(getLLMService(LLM_DEFAULTS.local).isAvailable()).resolves.toBe(false);
     });
 });
 
@@ -60,7 +60,7 @@ describe('LLMService.complete', () => {
         vi.mocked(globalThis.fetch).mockResolvedValue(
             jsonResponse({ content: 'hello', tokensUsed: 3, finishReason: 'stop' })
         );
-        const llm = createLLMService(LLM_DEFAULTS.anthropic);
+        const llm = getLLMService(LLM_DEFAULTS.anthropic);
         const result = await llm.complete([{ role: 'user', content: 'Hi' }]);
 
         expect(result.content).toBe('hello');
@@ -77,14 +77,14 @@ describe('LLMService.complete', () => {
             jsonResponse({ error: 'anthropic is not configured on the server.' }, 503)
         );
         await expect(
-            createLLMService(LLM_DEFAULTS.anthropic).complete([{ role: 'user', content: 'Hi' }])
+            getLLMService(LLM_DEFAULTS.anthropic).complete([{ role: 'user', content: 'Hi' }])
         ).rejects.toThrow('anthropic is not configured on the server.');
     });
 
     it('passes the caller cancellation signal to complete fetch', async () => {
         const controller = new AbortController();
         vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse({ content: 'ok' }));
-        await createLLMService(LLM_DEFAULTS.local).complete(
+        await getLLMService(LLM_DEFAULTS.local).complete(
             [{ role: 'user', content: 'Hi' }], { signal: controller.signal }
         );
         expect((vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).signal)
@@ -93,7 +93,7 @@ describe('LLMService.complete', () => {
 
     it('reuses the caller key for retries of one logical operation', async () => {
         vi.mocked(globalThis.fetch).mockImplementation(async () => jsonResponse({ content: 'ok' }));
-        const llm = createLLMService(LLM_DEFAULTS.local);
+        const llm = getLLMService(LLM_DEFAULTS.local);
         const operation = { idempotencyKey: 'stable-operation-key' };
         await llm.complete([{ role: 'user', content: 'Hi' }], operation);
         await llm.complete([{ role: 'user', content: 'Hi' }], operation);
@@ -125,7 +125,7 @@ describe('LLMService.stream', () => {
             )
         );
 
-        const llm = createLLMService(LLM_DEFAULTS.local);
+        const llm = getLLMService(LLM_DEFAULTS.local);
         const got: string[] = [];
         for await (const chunk of llm.stream([{ role: 'user', content: 'Hi' }])) {
             got.push(chunk);
@@ -141,7 +141,7 @@ describe('LLMService.stream', () => {
         vi.mocked(globalThis.fetch).mockResolvedValue(
             new Response('x', { status: 200 })
         );
-        const llm = createLLMService(LLM_DEFAULTS.local);
+        const llm = getLLMService(LLM_DEFAULTS.local);
         const gen = llm.stream([{ role: 'user', content: 'Hi' }], { signal: controller.signal });
         await gen.next();
 
@@ -156,7 +156,7 @@ describe('LLMService.stream', () => {
             pull(controller) { controller.enqueue(new TextEncoder().encode('first')); },
             cancel() { canceled = true; }
         }), { status: 200 }));
-        const gen = createLLMService(LLM_DEFAULTS.local).stream([{ role: 'user', content: 'Hi' }]);
+        const gen = getLLMService(LLM_DEFAULTS.local).stream([{ role: 'user', content: 'Hi' }]);
         await gen.next();
         await gen.return(undefined);
         expect(canceled).toBe(true);

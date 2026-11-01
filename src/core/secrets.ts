@@ -45,14 +45,3 @@ export const SECRET_ENV_VARS = [
  * would corrupt more than it protects. A real key is far longer.
  */
 export const MIN_SECRET_LENGTH = 8;
-
-/**
- * Env vars that are public BY DESIGN. Listed so the distinction is explicit
- * rather than implied by absence: `NEXT_PUBLIC_*` is inlined into the client
- * bundle by Next, which is the whole point of the prefix.
- */
-export const PUBLIC_ENV_VARS = [
-    'NEXT_PUBLIC_OMNI_DEBUG',
-    // Not a credential: a localhost URL the user configures.
-    'OLLAMA_BASE_URL'
-] as const;

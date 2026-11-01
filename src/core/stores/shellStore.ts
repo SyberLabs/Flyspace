@@ -101,9 +101,6 @@ interface ShellState {
     /** Set current persona */
     setPersona: (persona: PersonaType) => void;
 
-    /** Set current aesthetic */
-    setAesthetic: (aesthetic: AestheticTheme) => void;
-
     /** Get active shell */
     getActiveShell: () => ShellConfig | undefined;
 }
@@ -170,8 +167,6 @@ export const useShellStore = create<ShellState>()(
             },
 
             setPersona: (persona) => set({ currentPersona: persona }),
-
-            setAesthetic: (aesthetic) => set({ currentAesthetic: aesthetic }),
 
             getActiveShell: () => {
                 const state = get();

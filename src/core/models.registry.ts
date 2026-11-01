@@ -11,7 +11,7 @@
 
 import type { LLMProvider } from './schemas/mind.schema';
 
-export interface ModelInfo {
+interface ModelInfo {
     id: string;
     label: string;
     /**

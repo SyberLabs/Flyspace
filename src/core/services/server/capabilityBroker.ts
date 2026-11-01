@@ -57,7 +57,7 @@ export function createBrokerRateLimiter(perCaller = MAX_PER_CALLER, global = MAX
 const processLimiter = createBrokerRateLimiter();
 
 /** Proof that one request was already counted against the broker budget. Spent once. */
-export interface BrokerAdmission {
+interface BrokerAdmission {
     readonly caller: string;
 }
 

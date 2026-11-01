@@ -64,14 +64,13 @@ describe('preparePersonaTurn — message assembly', () => {
         });
         useWireStore.getState().addWire('news_1', personaId);
 
-        const { messages, hasContext, sourceIds } = preparePersonaTurn({
+        const { messages, sources } = preparePersonaTurn({
             instanceId: personaId,
             personaType: 'analyst',
             userMessage: 'What stands out?'
         });
 
-        expect(hasContext).toBe(true);
-        expect(sourceIds).toContain('news_1');
+        expect(sources.filter(s => s.kind === 'wire').map(s => s.id)).toEqual(['news_1']);
         // system + user (no history)
         expect(messages[0].role).toBe('system');
         const userMsg = messages[messages.length - 1];
@@ -88,13 +87,13 @@ describe('preparePersonaTurn — message assembly', () => {
             activeShellId: 'root'
         });
 
-        const { messages, hasContext } = preparePersonaTurn({
+        const { messages, sources } = preparePersonaTurn({
             instanceId: personaId,
             personaType: 'analyst',
             userMessage: 'Hello'
         });
 
-        expect(hasContext).toBe(false);
+        expect(sources.filter(s => s.kind === 'wire')).toHaveLength(0);
         expect(messages[messages.length - 1].content).toMatch(/No active data sources connected/i);
     });
 
@@ -108,14 +107,13 @@ describe('preparePersonaTurn — message assembly', () => {
         });
         useWireStore.getState().addWire('feed_1', personaId);
 
-        const { messages, hasContext, sourceIds } = preparePersonaTurn({
+        const { messages, sources } = preparePersonaTurn({
             instanceId: personaId,
             personaType: 'analyst',
             userMessage: 'Hello'
         });
 
-        expect(hasContext).toBe(false);
-        expect(sourceIds).toEqual([]);
+        expect(sources.filter(s => s.kind === 'wire')).toHaveLength(0);
         const prompt = messages[messages.length - 1].content;
         expect(prompt).toMatch(/Connected sources have no data available yet/i);
         expect(prompt).not.toMatch(/No active data sources connected/i);

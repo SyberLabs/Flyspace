@@ -27,7 +27,7 @@ import type { ValueType } from './valueType';
 const METHODS: HttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const MAX_OPERATIONS = 100;
 
-export interface CompileIssue {
+interface CompileIssue {
     operation?: string;
     message: string;
 }
@@ -37,7 +37,7 @@ export interface CompileResult {
     errors: CompileIssue[];
 }
 
-export interface CompileOptions {
+interface CompileOptions {
     /**
      * Where the document came from, when the host knows better than the
      * document does: the catalog spec URL for a registry install. Recorded as

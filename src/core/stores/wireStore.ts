@@ -113,17 +113,11 @@ interface WireStoreState {
     /** Re-admit every wire in the store; refused wires are dropped (storage hydrate) */
     revalidatePersistedWires: () => void;
 
-    /** Get wires where block is source */
-    getWiresFromBlock: (blockId: string) => DataWire[];
-
     /** Get wires where block is target (persona) */
     getWiresToBlock: (blockId: string) => DataWire[];
 
     /** Check if wire exists between two blocks */
     wireExists: (sourceBlockId: string, targetBlockId: string) => boolean;
-
-    /** Get a specific wire */
-    getWire: (wireId: string) => DataWire | undefined;
 
     /** Get all wires for a specific shell */
     getWiresByShell: (shellId: string) => DataWire[];
@@ -206,10 +200,6 @@ export const useWireStore = create<WireStoreState>()(
                 set(state => ({ wires: readmitWires(state.wires) }));
             },
 
-            getWiresFromBlock: (blockId) => {
-                return get().wires.filter(w => w.sourceBlockId === blockId);
-            },
-
             getWiresToBlock: (blockId) => {
                 return get().wires.filter(w => w.targetBlockId === blockId);
             },
@@ -218,10 +208,6 @@ export const useWireStore = create<WireStoreState>()(
                 return get().wires.some(
                     w => w.sourceBlockId === sourceBlockId && w.targetBlockId === targetBlockId
                 );
-            },
-
-            getWire: (wireId) => {
-                return get().wires.find(w => w.id === wireId);
             },
 
             getWiresByShell: (shellId) => {

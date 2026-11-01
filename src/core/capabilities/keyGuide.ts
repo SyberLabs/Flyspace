@@ -67,7 +67,7 @@ export function checkKeyFormat(guide: KeyGuide | null, key: string): string | nu
         : `This does not look like the documented key format (${guide.format.describe}). You can still save it.`;
 }
 
-export type KeyTestResult = { ok: true; message: string } | { ok: false; message: string };
+type KeyTestResult = { ok: true; message: string } | { ok: false; message: string };
 
 /** Fields some APIs use to refuse a key while answering 200 (Alpha Vantage). */
 const NOTICE_FIELDS = ['Error Message', 'Information', 'Note', 'error', 'message'];

@@ -1,23 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { sha256 } from './hash';
-import { credentialSlot } from './identity';
+import { canonicalCapabilityId, credentialSlot } from './identity';
 import { compileOpenApi } from './openapi';
-import { compileMcpTools } from './mcp';
-import { compileBring } from './bring';
-import { validateManifest } from './manifest';
+import {
+    approvalForEffect,
+    sealManifest,
+    validateManifest,
+    type CapabilityEffect,
+    type CapabilityInput,
+    type CapabilityManifest
+} from './manifest';
 import { dropImportedApprovals } from './importAdmission';
 import {
     type CapabilitySnapshot,
     approveCapability,
     clearCapabilities,
-    exportSnapshot,
-    getCapability,
     installProposal,
     restoreSnapshot,
     runInstalledCapability,
     uninstallCapability
 } from './registry';
 import { bindMcpTransport, unbindMcpTransport } from './execute';
+import { allCapabilities, readCapability } from './state';
 // Write runs need a confirmed preview; these tests exercise the engine after one.
 import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
 import { capabilitySecrets } from './secrets';
@@ -165,6 +169,31 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+/** A manifest for one tool on an MCP server, as the host would install it. */
+function mcpManifest(
+    origin: string,
+    toolName: string,
+    effect: CapabilityEffect,
+    inputs: CapabilityInput[],
+    output: CapabilityManifest['output']
+): CapabilityManifest {
+    const transport = { kind: 'mcp' as const, serverId: 'board', origin, toolName };
+    return sealManifest({
+        version: 1,
+        id: canonicalCapabilityId(transport),
+        title: toolName,
+        source: { kind: 'mcp', locator: 'board', operationId: toolName },
+        effect,
+        effectSource: effect === 'write' ? 'declared' : 'annotation',
+        approval: approvalForEffect(effect),
+        invocation: 'manual',
+        auth: { kind: 'none' },
+        transport,
+        inputs,
+        output
+    });
+}
+
 describe('capability compiler', () => {
     it('hashes with sha256', () => {
         expect(sha256('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
@@ -265,25 +294,6 @@ describe('capability compiler', () => {
         const catalogSource = useBlockStore.getState().addBlock(blockRegistry.get('hackernews_feed')!, { x: 0, y: 200 });
         expect(wireService.createWire(catalogSource, personaId)).not.toBe('');
 
-        const count = compileBring({
-            title: 'Count posts',
-            baseUrl: 'https://board.example.test/v1',
-            method: 'POST',
-            path: '/count',
-            inputs: [{
-                name: 'count',
-                in: 'body',
-                required: true,
-                schema: { kind: 'integer' }
-            }],
-            output: { schema: { kind: 'integer' } }
-        });
-        expect(count.errors).toEqual([]);
-        expect(installProposal(count.manifests[0]).ok).toBe(true);
-        const countId = useBlockStore.getState().addBlock(blockRegistry.get(count.manifests[0].id)!, { x: 200, y: 200 });
-        expect(wireService.createWire(instanceId, countId)).toBe('');
-        expect(useWireStore.getState().wireExists(instanceId, countId)).toBe(false);
-
         const listId = byOp('listPosts').id;
         expect(uninstallCapability(listId)).toBe(true);
         expect(blockRegistry.has(listId)).toBe(false);
@@ -341,14 +351,14 @@ describe('capability compiler', () => {
         const create = byOp('createPost');
         installProposal(create);
         approveCapability(create.id);
-        const snapshot = exportSnapshot();
+        const snapshot: CapabilitySnapshot = { version: 1, manifests: allCapabilities() };
         expect(JSON.stringify(snapshot)).not.toContain('super-secret');
 
         clearCapabilities();
-        expect(getCapability(create.id)).toBeUndefined();
+        expect(readCapability(create.id)).toBeUndefined();
         const restored = restoreSnapshot(snapshot);
         expect(restored.installed).toContain(create.id);
-        expect(getCapability(create.id)?.approval).toBe('approved');
+        expect(readCapability(create.id)?.approval).toBe('approved');
 
         const forged = {
             version: 1 as const,
@@ -360,19 +370,14 @@ describe('capability compiler', () => {
     });
 
     it('gives two MCP servers with the same label and tool at different origins distinct ids that coexist', () => {
-        const tool = {
-            serverId: 'board',
-            name: 'list_board',
-            inputSchema: { type: 'object', properties: {} },
-            outputSchema: { type: 'array', items: { type: 'string' } }
-        };
-        const [first] = compileMcpTools([{ ...tool, origin: 'https://board.example.test' }]).manifests;
-        const [second] = compileMcpTools([{ ...tool, origin: 'https://other.example.test' }]).manifests;
+        const output = { schema: { kind: 'array' as const, items: { kind: 'string' as const } }, presentation: 'items' as const };
+        const first = mcpManifest('https://board.example.test', 'list_board', 'write', [], output);
+        const second = mcpManifest('https://other.example.test', 'list_board', 'write', [], output);
         expect(first.id).not.toBe(second.id);
         expect(installProposal(first).ok).toBe(true);
         expect(installProposal(second).ok).toBe(true);
-        expect(getCapability(first.id)?.transport).toMatchObject({ origin: 'https://board.example.test' });
-        expect(getCapability(second.id)?.transport).toMatchObject({ origin: 'https://other.example.test' });
+        expect(readCapability(first.id)?.transport).toMatchObject({ origin: 'https://board.example.test' });
+        expect(readCapability(second.id)?.transport).toMatchObject({ origin: 'https://other.example.test' });
     });
 
     it('an imported capability blob lands writes pending; the same blob through rehydrate keeps approval', () => {
@@ -381,7 +386,7 @@ describe('capability compiler', () => {
         installProposal(create);
         installProposal(list);
         approveCapability(create.id);
-        const snapshot = exportSnapshot();
+        const snapshot: CapabilitySnapshot = { version: 1, manifests: allCapabilities() };
         // The persisted envelope the capability store writes to the vault.
         const persisted = JSON.stringify({ state: snapshot, version: 1 });
 
@@ -397,57 +402,31 @@ describe('capability compiler', () => {
         const fromImport = restoreSnapshot(admitted.state);
         expect(fromImport.installed).toEqual(expect.arrayContaining([create.id, list.id]));
         expect(fromImport.rejected).toEqual([]);
-        expect(getCapability(create.id)?.approval).toBe('pending');
-        expect(getCapability(create.id)?.digest).toBe(create.digest);
-        expect(getCapability(list.id)?.approval).toBe('auto');
+        expect(readCapability(create.id)?.approval).toBe('pending');
+        expect(readCapability(create.id)?.digest).toBe(create.digest);
+        expect(readCapability(list.id)?.approval).toBe('auto');
         // Pending is the same state installProposal leaves; approval is the only way out.
-        expect(getCapability(create.id)).toEqual(installProposal({ ...create, approval: 'approved' }).manifest);
+        expect(readCapability(create.id)).toEqual(installProposal({ ...create, approval: 'approved' }).manifest);
 
         // Rehydrate path (the browser's own blob): the granted approval survives.
         clearCapabilities();
         restoreSnapshot(snapshot);
-        expect(getCapability(create.id)?.approval).toBe('approved');
+        expect(readCapability(create.id)?.approval).toBe('approved');
     });
 
-    it('compiles MCP tools and Bring descriptions through the same gate', async () => {
-        const compiled = compileMcpTools([
-            {
-                serverId: 'board',
-                origin: 'https://board.example.test',
-                name: 'list_board',
-                description: 'Read the board',
-                annotations: { readOnlyHint: true },
-                inputSchema: {
-                    type: 'object',
-                    properties: { q: { type: 'string' } }
-                },
-                outputSchema: { type: 'array', items: { type: 'string' } }
-            },
-            {
-                serverId: 'board',
-                origin: 'https://board.example.test',
-                name: 'wipe_board',
-                annotations: { readOnlyHint: true, destructiveHint: true },
-                outputSchema: { type: 'boolean' }
-            }
-        ]);
-        expect(compiled.errors).toEqual([]);
-        const read = compiled.manifests.find(manifest => manifest.source.operationId === 'list_board');
-        const wipe = compiled.manifests.find(manifest => manifest.source.operationId === 'wipe_board');
-        expect(read).toMatchObject({ effect: 'write', approval: 'pending' });
-        const trusted = compileMcpTools([{
-            serverId: 'board',
-            origin: 'https://board.example.test',
-            name: 'list_board',
-            annotations: { readOnlyHint: true },
-            inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
-            outputSchema: { type: 'array', items: { type: 'string' } }
-        }], { trustedAnnotations: true });
-        expect(trusted.manifests[0]).toMatchObject({ effect: 'read', approval: 'auto' });
+    it('runs an MCP read only through its bound transport and holds a destructive tool for approval', async () => {
+        const trustedRead = mcpManifest(
+            'https://board.example.test',
+            'list_board',
+            'read',
+            [{ name: 'q', in: 'argument', required: false, schema: { kind: 'string' } }],
+            { schema: { kind: 'array', items: { kind: 'string' } }, presentation: 'items' }
+        );
+        const wipe = mcpManifest('https://board.example.test', 'wipe_board', 'destructive', [], { schema: { kind: 'boolean' }, presentation: 'raw' });
+        expect(trustedRead).toMatchObject({ effect: 'read', approval: 'auto' });
         expect(wipe).toMatchObject({ effect: 'destructive', approval: 'pending' });
-        const trustedRead = trusted.manifests[0];
-        installProposal(trustedRead);
-        installProposal(wipe);
+        expect(installProposal(trustedRead).ok).toBe(true);
+        expect(installProposal(wipe).ok).toBe(true);
 
         const calls: unknown[] = [];
         bindMcpTransport('board', {
@@ -458,7 +437,7 @@ describe('capability compiler', () => {
             }
         });
 
-        const wiped = await executeCapability(wipe!.id, {});
+        const wiped = await executeCapability(wipe.id, {});
         expect(wiped.error?.code).toBe('EFFECT_NOT_APPROVED');
         expect(calls).toHaveLength(0);
 
@@ -470,15 +449,5 @@ describe('capability compiler', () => {
         unbindMcpTransport('board');
         const unbound = await executeCapability(trustedRead.id, {});
         expect(unbound.error?.code).toBe('TRANSPORT_NOT_BOUND');
-
-        const brought = compileBring({
-            title: 'Ping board',
-            baseUrl: 'https://board.example.test/v1',
-            method: 'GET',
-            path: '/health',
-            output: { schema: { kind: 'object', properties: { ok: { kind: 'boolean' } }, required: ['ok'] } }
-        });
-        expect(brought.manifests[0]).toMatchObject({ effect: 'read', approval: 'auto', source: { kind: 'bring' } });
-        expect(installProposal({ ...brought.manifests[0], token: 'raw-token' }).ok).toBe(false);
     });
 });

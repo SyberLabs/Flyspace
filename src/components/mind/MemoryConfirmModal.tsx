@@ -165,5 +165,3 @@ export function MemoryConfirmModal({
         </AnimatePresence>
     );
 }
-
-export default MemoryConfirmModal;

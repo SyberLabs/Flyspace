@@ -81,7 +81,6 @@ function mockStream(opts: {
         return {
             success: true,
             content: (opts.chunks ?? ['ok']).join(''),
-            sourceIds: opts.sources.map(s => s.id),
             sources: opts.sources,
             ...opts.result
         };
@@ -203,7 +202,6 @@ describe('runPersonaTurn — streaming commits', () => {
             return {
                 success: true,
                 content: 'ABCD',
-                sourceIds: [],
                 sources: []
             };
         });
@@ -266,7 +264,7 @@ describe('runPersonaTurn — persisted writes during a stream (O4)', () => {
                 now += STREAM_COMMIT_MS;
                 yield `token${i} `;
             }
-            return { success: true, content: 'answer', sourceIds: [], sources: [] };
+            return { success: true, content: 'answer', sources: [] };
         });
         await settle(); // beforeEach's setState lands before counting starts
         const put = vi.spyOn(IDBObjectStore.prototype, 'put');
@@ -358,7 +356,6 @@ describe('runPersonaTurn — stop keeps the partial', () => {
             return {
                 success: true,
                 content: 'Partial insight',
-                sourceIds: [],
                 sources: [],
                 stopped: true
             };

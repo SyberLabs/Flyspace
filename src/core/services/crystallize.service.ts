@@ -19,7 +19,7 @@ import { createMemoryBlockData, type MemoryBlockData } from '@/core/schemas/mind
 
 export const CRYSTAL_POOL = 'memory';
 
-export interface CrystallizeResult {
+interface CrystallizeResult {
     ok: boolean;
     /** The Memory block the insight is now visible in. */
     memoryBlockId?: string;
@@ -81,7 +81,7 @@ export function crystallize(content: string, sourceBlockId: string): Crystallize
         createdBlock = true;
     }
 
-    useMindStore.getState().addToPool(CRYSTAL_POOL, {
+    useMindStore.getState().pushContext(CRYSTAL_POOL, {
         type: 'memory',
         content: text,
         importance: 0.8,

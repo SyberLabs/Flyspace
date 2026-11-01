@@ -3,7 +3,6 @@ import {
     SHELL_TEMPLATES,
     getShellTemplate,
     validateTemplate,
-    validateAllTemplates,
     keyedProvidersForTemplate,
     type ShellTemplate
 } from './templates';
@@ -24,7 +23,7 @@ describe('SHELL_TEMPLATES integrity (against the real registry)', () => {
     });
 
     it('every template references only registered block_ids and valid refs', () => {
-        const problems = validateAllTemplates(isRegistered);
+        const problems = SHELL_TEMPLATES.flatMap(t => validateTemplate(t, isRegistered));
         // If this fails, a template names a block that does not exist in the
         // registry, or a connection points at a missing block.
         expect(problems).toEqual([]);

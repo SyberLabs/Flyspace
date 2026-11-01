@@ -12,12 +12,12 @@ export interface LLMMessage {
     content: string;
 }
 
-export interface LLMOptions {
+interface LLMOptions {
     temperature?: number;
     maxTokens?: number;
 }
 
-export interface LLMResponse {
+interface LLMResponse {
     content: string;
     tokensUsed?: number;
     finishReason?: string;

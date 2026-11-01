@@ -8,12 +8,12 @@ import { useBlockStore, useSettingsStore } from '@/core/stores';
 import { useOmniData } from '@/core/hooks';
 import type { OmniItem, OmniMetrics } from '@/core/gateway';
 
-export interface WorldBankBlockData {
+interface WorldBankBlockData {
     items: OmniItem[];
     metrics: OmniMetrics | null;
 }
 
-export interface WorldBankBlockParams {
+interface WorldBankBlockParams {
     indicator?: string;
     country?: string;
     per_page?: number;
@@ -32,8 +32,7 @@ export function useWorldBankBlock(instanceId: string, params?: WorldBankBlockPar
         items,
         isLoading,
         error,
-        refresh,
-        fromCache
+        refresh
     } = useOmniData('worldbank', instanceId, {
         immediate: true,
         params,
@@ -69,7 +68,6 @@ export function useWorldBankBlock(instanceId: string, params?: WorldBankBlockPar
         metrics: cachedData?.metrics || metrics,
         status: block?.status || (isLoading ? 'connecting' : 'connected'),
         lastUpdated: block?.last_updated,
-        fromCache,
         refresh,
         error
     };

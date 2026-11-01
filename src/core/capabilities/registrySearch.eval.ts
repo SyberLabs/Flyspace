@@ -49,7 +49,7 @@ export const SEMANTIC_QUESTIONS: EvalQuestion[] = [
     // 'schedule a meeting' dropped with 'calendar events': no usable calendar API.
 ];
 
-export interface EvalScore {
+interface EvalScore {
     k: number;
     hits: number;
     total: number;

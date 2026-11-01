@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { routeWires, WireRouter, segmentHits, splitPoint, polylineToPath, DEFAULT_ROUTE_OPTIONS } from './index';
+import { WireRouter, segmentHits, splitPoint, polylineToPath, DEFAULT_ROUTE_OPTIONS } from './index';
 import type { Point, RouteBlock, RouteWire, RoutedWire } from './types';
 
 const EPS = 1e-6;
@@ -83,13 +83,13 @@ function blockHits(blocks: RouteBlock[], w: RoutedWire): string[] {
     return hits;
 }
 
-describe('routeWires: circuit-style routing', () => {
+describe('WireRouter.route: circuit-style routing', () => {
     it('leaves the output port and enters the input port horizontally, heading east', () => {
         const blocks: RouteBlock[] = [
             { id: 'a', x: 0, y: 0, width: 200, height: 100 },
             { id: 'b', x: 400, y: 300, width: 200, height: 100 }
         ];
-        const [w] = routeWires(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
+        const [w] = new WireRouter().route(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
         const p = w.points;
         const o = DEFAULT_ROUTE_OPTIONS;
         expect(p[0]).toEqual({ x: 200 + o.portOutset, y: 50 });
@@ -109,7 +109,7 @@ describe('routeWires: circuit-style routing', () => {
             { id: 'wall', x: 320, y: 0, width: 200, height: 300 },
             { id: 'b', x: 640, y: 100, width: 200, height: 100 }
         ];
-        const [w] = routeWires(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
+        const [w] = new WireRouter().route(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
         expect(blockHits(blocks, w)).toEqual([]);
         // It keeps the clearance from the wall, not just the wall itself.
         const wall = blocks[1];
@@ -123,7 +123,7 @@ describe('routeWires: circuit-style routing', () => {
             { id: 'a', x: 500, y: 0, width: 200, height: 100 },
             { id: 'b', x: 0, y: 40, width: 200, height: 100 }
         ];
-        const [w] = routeWires(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
+        const [w] = new WireRouter().route(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
         expect(w.routed).toBe(true);
         expect(blockHits(blocks, w)).toEqual([]);
         expectOrthogonal(w);
@@ -132,7 +132,7 @@ describe('routeWires: circuit-style routing', () => {
     it('never runs a wire through any block on random layouts (property)', () => {
         for (let seed = 1; seed <= 120; seed++) {
             const { blocks, wires } = layout(seed, 12 + (seed % 10), 18 + (seed % 15), 4 + (seed % 3));
-            const res = routeWires(blocks, wires);
+            const res = new WireRouter().route(blocks, wires);
             expect(res.wires).toHaveLength(wires.length);
             for (const w of res.wires) {
                 expect(w.routed, `seed ${seed} wire ${w.id} found no path`).toBe(true);
@@ -145,12 +145,12 @@ describe('routeWires: circuit-style routing', () => {
 
     it('is deterministic: the same layout gives the same wires, whatever the input order', () => {
         const { blocks, wires } = layout(7, 20, 30);
-        const a = routeWires(blocks, wires);
-        const b = routeWires(blocks, wires);
+        const a = new WireRouter().route(blocks, wires);
+        const b = new WireRouter().route(blocks, wires);
         expect(b.wires).toEqual(a.wires);
         expect(b.junctions).toEqual(a.junctions);
 
-        const shuffled = routeWires([...blocks].reverse(), [...wires].reverse());
+        const shuffled = new WireRouter().route([...blocks].reverse(), [...wires].reverse());
         const byId = new Map(shuffled.wires.map(w => [w.id, w]));
         for (const w of a.wires) expect(byId.get(w.id)).toEqual(w);
     });
@@ -158,7 +158,7 @@ describe('routeWires: circuit-style routing', () => {
     it('spreads parallel runs of different outputs into lanes that never overlap', () => {
         let nearPort = 0;
         const check = (blocks: RouteBlock[], wires: RouteWire[], label: string) => {
-            const res = routeWires(blocks, wires);
+            const res = new WireRouter().route(blocks, wires);
             type Seg = { w: RoutedWire; a: Point; b: Point };
             // A port jog (the short step a moved lane takes onto its port row,
             // within `mergeJog` of the port) is where lanes merge; it is the one
@@ -213,7 +213,7 @@ describe('routeWires: circuit-style routing', () => {
 
     it('fans seven sources into one input along one trunk, with junction dots', () => {
         const { blocks, wires } = fanIn();
-        const res = routeWires(blocks, wires);
+        const res = new WireRouter().route(blocks, wires);
         for (const w of res.wires) expect(blockHits(blocks, w)).toEqual([]);
         // Every wire reaches the port on the same final run: the trunk.
         const lastVertical = res.wires.map(w => w.points[w.points.length - 3]?.x);
@@ -230,7 +230,7 @@ describe('routeWires: circuit-style routing', () => {
             { id: 'c', x: 200, y: 400, width: 100, height: 100 },
             { id: 'b', x: 450, y: -300, width: 100, height: 100 }
         ];
-        const res = routeWires(blocks, [
+        const res = new WireRouter().route(blocks, [
             { id: 'h', source: 'a', target: 'd' },
             { id: 'v', source: 'c', target: 'b' }
         ]);
@@ -246,7 +246,7 @@ describe('routeWires: circuit-style routing', () => {
             { id: 'over', x: 150, y: -20, width: 200, height: 140 },
             { id: 'b', x: 600, y: 0, width: 200, height: 100 }
         ];
-        const [w] = routeWires(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
+        const [w] = new WireRouter().route(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
         expectOrthogonal(w);
         expect(w.points[0].x).toBeCloseTo(216);
     });
@@ -258,13 +258,13 @@ describe('routeWires: circuit-style routing', () => {
             { id: 'n', x: 220, y: 0, width: 200, height: 400 },
             { id: 'b', x: 700, y: 100, width: 200, height: 100 }
         ];
-        const [w] = routeWires(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
+        const [w] = new WireRouter().route(blocks, [{ id: 'w', source: 'a', target: 'b' }]).wires;
         expect(blockHits(blocks, w)).toEqual([]);
         expectOrthogonal(w);
     });
 
     it('skips wires whose blocks are missing', () => {
-        const res = routeWires([{ id: 'a', x: 0, y: 0, width: 10, height: 10 }], [{ id: 'w', source: 'a', target: 'gone' }]);
+        const res = new WireRouter().route([{ id: 'a', x: 0, y: 0, width: 10, height: 10 }], [{ id: 'w', source: 'a', target: 'gone' }]);
         expect(res.wires).toEqual([]);
     });
 });
@@ -294,7 +294,7 @@ describe('WireRouter: live drag', () => {
         router.route(blocks, wires);
         const moved = blocks.map(b => (b.id === 'hn' ? { ...b, y: b.y + 80 } : b));
         router.routeLive(moved, wires, 'hn');
-        expect(router.route(moved, wires).wires).toEqual(routeWires(moved, wires).wires);
+        expect(router.route(moved, wires).wires).toEqual(new WireRouter().route(moved, wires).wires);
     });
 });
 
@@ -309,11 +309,11 @@ describe('routing performance budget', () => {
 
     it('routes the screenshot fan-in layout well inside one frame', () => {
         const { blocks, wires } = fanIn();
-        routeWires(blocks, wires);
+        new WireRouter().route(blocks, wires);
         const times: number[] = [];
         for (let i = 0; i < 20; i++) {
             const t0 = performance.now();
-            routeWires(blocks, wires);
+            new WireRouter().route(blocks, wires);
             times.push(performance.now() - t0);
         }
         expect(median(times)).toBeLessThan(8);
@@ -321,11 +321,11 @@ describe('routing performance budget', () => {
 
     it('routes 30 blocks / 60 wires within budget, and a live drag frame faster', () => {
         const { blocks, wires } = layout(42, 30, 60);
-        routeWires(blocks, wires);
+        new WireRouter().route(blocks, wires);
         const full: number[] = [];
         for (let i = 0; i < 5; i++) {
             const t0 = performance.now();
-            routeWires(blocks, wires);
+            new WireRouter().route(blocks, wires);
             full.push(performance.now() - t0);
         }
         const router = new WireRouter();

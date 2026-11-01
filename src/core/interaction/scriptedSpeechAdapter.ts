@@ -21,7 +21,7 @@ export interface SpeechScript {
     echoFinal?: boolean;
 }
 
-export interface ScriptedSpeechAdapter extends SpeechAdapter {
+interface ScriptedSpeechAdapter extends SpeechAdapter {
     starts: number;
     stops: number;
     cancels: number;
@@ -29,7 +29,7 @@ export interface ScriptedSpeechAdapter extends SpeechAdapter {
     sessions: string[];
 }
 
-export const SCRIPTED_ADAPTER_ID = 'scripted-speech';
+const SCRIPTED_ADAPTER_ID = 'scripted-speech';
 
 export function scriptedSpeechAdapter(
     script: SpeechScript | (() => SpeechScript),

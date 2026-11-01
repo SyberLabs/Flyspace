@@ -16,7 +16,7 @@
 // bounds the claim: measured on author-written questions, not on users.
 // ============================================
 
-export interface IntentQuestion {
+interface IntentQuestion {
     query: string;
     /** Any of these as JEV's top intent counts as right. */
     accept: string[];

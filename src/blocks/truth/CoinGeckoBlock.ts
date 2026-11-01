@@ -11,7 +11,7 @@ import { debug } from '@/core/debug';
 /**
  * CoinGecko cryptocurrency data for block display
  */
-export interface CryptoAsset {
+interface CryptoAsset {
     id: string;
     symbol: string;
     name: string;
@@ -26,7 +26,6 @@ export interface CryptoAsset {
     high24h: number;
     low24h: number;
     trend: 'up' | 'down' | 'neutral';
-    sparkline?: number[];
 }
 
 /**
@@ -122,7 +121,6 @@ export function useCoinGeckoBlock(instanceId: string) {
         assets: cachedData.length > 0 ? cachedData : assets,
         status: block?.status || (isLoading ? 'connecting' : 'connected'),
         lastUpdated: block?.last_updated,
-        fromCache,
         refresh,
         error
     };

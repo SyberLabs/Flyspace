@@ -22,13 +22,13 @@ export const TYPESAFE_MODEL = 'jev-latest';
 const RESOLVED_MODEL = /^jev-\d+\.\d+(\.\d+)?$/;
 
 export const MAX_QUERY_CHARS = 200;
-export const INTENT_DEADLINE_MS = 8000;
+const INTENT_DEADLINE_MS = 8000;
 
 const INSTRUCTIONS =
     'Which kind of API is this person looking for? Choose the closest option. '
     + 'This only routes a search; it does not answer the request.';
 
-export type IntentFailure =
+type IntentFailure =
     | 'not_configured'
     | 'query_invalid'
     | 'timeout'
@@ -36,11 +36,11 @@ export type IntentFailure =
     | 'upstream_status'
     | 'upstream_shape';
 
-export type IntentOutcome =
+type IntentOutcome =
     | { ok: true; scores: IntentScore[]; model: string }
     | { ok: false; failure: IntentFailure };
 
-export interface ClassifyOptions {
+interface ClassifyOptions {
     apiKey?: string;
     fetchImpl?: typeof fetch;
     signal?: AbortSignal;
