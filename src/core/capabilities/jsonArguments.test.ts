@@ -18,7 +18,6 @@ vi.mock('./hash', async (importOriginal) => {
 import { compileOpenApi } from './openapi';
 import { canonicalCapabilityId } from './identity';
 import { sealManifest, type CapabilityInput } from './manifest';
-import { admitProposal } from './admission';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
 import {
     bindLocalHandler,
@@ -31,7 +30,6 @@ import {
 import { bindAsyncRuntime, unbindAsyncRuntime, type AsyncClock } from './asyncRuntime';
 import { clearExecutionLedger } from './executionLedger';
 import { capabilitySecrets } from './secrets';
-import type { CapabilityProposalV1 } from './provider';
 import type { CapabilityResult } from './project';
 
 const NOW = 1_790_000_000_000;
@@ -95,19 +93,22 @@ function httpFixture(): Fixture {
 }
 
 function mcpFixture(): Fixture {
-    const proposal: CapabilityProposalV1 = {
+    const transport = { kind: 'mcp' as const, serverId: 'board', origin: 'https://board.example.test', toolName: 'post' };
+    const installed = installProposal(sealManifest({
         version: 1,
-        provider: { id: 'fixture.mcp', kind: 'mcp' },
-        externalIdentity: { operationId: 'post', sourceLocator: 'fixture://mcp/board' },
+        id: canonicalCapabilityId(transport),
         title: 'Post',
+        source: { kind: 'mcp', locator: 'fixture://mcp/board', operationId: 'post' },
+        effect: 'write',
+        effectSource: 'declared',
+        approval: 'pending',
+        invocation: 'manual',
+        trigger: { kind: 'manual' },
         auth: { kind: 'none' },
-        transport: { kind: 'mcp', serverId: 'board', origin: 'https://board.example.test', toolName: 'post' },
+        transport,
         inputs: [PAYLOAD],
-        output: { schema: { kind: 'null' }, presentation: 'raw' },
-        execution: { kind: 'sync' },
-        provenance: { providerId: 'fixture.mcp', sourceLocator: 'fixture://mcp/board', discoveredAtMs: NOW }
-    };
-    const installed = admitProposal(proposal, { nowMs: NOW });
+        output: { schema: { kind: 'null' }, presentation: 'raw' }
+    }));
     expect(installed.ok, installed.errors.join('; ')).toBe(true);
     const manifest = approveCapability(installed.manifest!.id).manifest!;
     expect(manifest.effect).toBe('write');
@@ -123,19 +124,23 @@ function mcpFixture(): Fixture {
 }
 
 function asyncFixture(): Fixture {
-    const proposal: CapabilityProposalV1 = {
+    const transport = { kind: 'async' as const, runtimeId: 'jobs', operation: 'job-7' };
+    const installed = installProposal(sealManifest({
         version: 1,
-        provider: { id: 'fixture.jobs', kind: 'manual' },
-        externalIdentity: { operationId: 'job-7', sourceLocator: 'fixture://jobs/job-7' },
+        id: canonicalCapabilityId(transport),
         title: 'Submit job',
+        source: { kind: 'bring', locator: 'fixture://jobs/job-7', operationId: 'job-7' },
+        effect: 'write',
+        effectSource: 'declared',
+        approval: 'pending',
+        invocation: 'manual',
+        trigger: { kind: 'manual' },
         auth: { kind: 'none' },
-        transport: { kind: 'async', runtimeId: 'jobs', operation: 'job-7' },
-        inputs: [PAYLOAD],
-        output: { schema: { kind: 'object' }, presentation: 'raw' },
+        transport,
         execution: { kind: 'async_poll', pollIntervalMs: 5_000, maxDurationMs: 120_000 },
-        provenance: { providerId: 'fixture.jobs', sourceLocator: 'fixture://jobs/job-7', discoveredAtMs: NOW }
-    };
-    const installed = admitProposal(proposal, { nowMs: NOW });
+        inputs: [PAYLOAD],
+        output: { schema: { kind: 'object' }, presentation: 'raw' }
+    }));
     expect(installed.ok, installed.errors.join('; ')).toBe(true);
     const manifest = approveCapability(installed.manifest!.id).manifest!;
     expect(manifest.effect).toBe('write');

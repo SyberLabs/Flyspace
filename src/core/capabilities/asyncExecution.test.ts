@@ -2,12 +2,12 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { admitProposal, manifestFromProposal } from './admission';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
 import { recoverAsyncExecutions, reconcileAsyncExecution } from './execute';
 // Write runs need a confirmed preview; these tests exercise the engine after one.
 import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
-import { transportCredentialSlot } from './identity';
+import { canonicalCapabilityId, transportCredentialSlot } from './identity';
+import { canonicalize, sha256 } from './hash';
 import { capabilitySecrets } from './secrets';
 import {
     clearExecutionLedger,
@@ -24,8 +24,13 @@ import {
     type AsyncJobRuntime,
     type AsyncObservation
 } from './asyncRuntime';
-import { sealManifest, validateManifest, type CapabilityManifest } from './manifest';
-import type { CapabilityProposalV1 } from './provider';
+import {
+    sealManifest,
+    validateManifest,
+    type CapabilityEffect,
+    type CapabilityExecutionProfile,
+    type CapabilityManifest
+} from './manifest';
 import { memoryLedger } from '../services/server/capability.ledger';
 import { vaultStorage, __resetVaultConnection } from '../vault/vaultStorage';
 
@@ -93,9 +98,8 @@ function gatedClock(start = Date.now()): TestClock & { parked: Promise<void>; op
 // A runtime whose start acknowledges early with a run id, and whose poll
 // returns the run with `data` in Maxun's field names. It exercises Omni's async
 // lifecycle. It is not Maxun's start contract: Maxun's open-source server
-// answers its run start only when the run finishes, which is why the real
-// `maxun` runtime fences start (providers/maxunRuntime.ts). It measures nothing
-// about Maxun.
+// answers its run start only when the run finishes, so a real Maxun runtime
+// would have to fence start. It measures nothing about Maxun.
 // ---------------------------------------------------------------------------
 
 interface MaxunRun {
@@ -170,30 +174,56 @@ function maxunFixture(clock: AsyncClock, options: FixtureOptions = {}) {
 
 const NOW = 1_790_000_000_000;
 
-function asyncProposal(overrides: Partial<CapabilityProposalV1> = {}): CapabilityProposalV1 {
-    return {
-        version: 1,
-        provider: { id: 'fixture.jobs', kind: 'manual' },
-        externalIdentity: { operationId: 'robot-42', sourceLocator: 'fixture://maxun/robot-42' },
-        title: 'Scrape pricing page',
-        auth: { kind: 'apiKey', in: 'header', name: 'x-api-key' },
-        transport: { kind: 'async', runtimeId: 'maxun', operation: 'robot-42' },
-        inputs: [{ name: 'url', in: 'argument', required: false, schema: { kind: 'string' } }],
-        output: {
-            schema: { kind: 'object', properties: { markdown: { kind: 'string' } }, required: ['markdown'] },
-            presentation: 'raw'
-        },
-        execution: { kind: 'async_poll', pollIntervalMs: 5_000, maxDurationMs: 120_000 },
-        provenance: { providerId: 'fixture.jobs', sourceLocator: 'fixture://maxun/robot-42', discoveredAtMs: NOW },
-        ...overrides
-    };
+interface AsyncManifestOptions {
+    effect?: CapabilityEffect;
+    execution?: CapabilityExecutionProfile;
 }
 
-/** Admit and approve as the host would. The test never approves from the proposal. */
-function installApproved(overrides: Partial<CapabilityProposalV1> = {}): CapabilityManifest {
-    const installed = admitProposal(asyncProposal(overrides), { nowMs: NOW });
+/** The async manifest the host installs for the fixture robot. */
+function asyncManifest(options: AsyncManifestOptions = {}): CapabilityManifest {
+    const effect = options.effect ?? 'write';
+    const transport = { kind: 'async' as const, runtimeId: 'maxun', operation: 'robot-42' };
+    const inputs: CapabilityManifest['inputs'] = [{ name: 'url', in: 'argument', required: false, schema: { kind: 'string' } }];
+    const output: CapabilityManifest['output'] = {
+        schema: { kind: 'object', properties: { markdown: { kind: 'string' } }, required: ['markdown'] },
+        presentation: 'raw'
+    };
+    return sealManifest({
+        version: 1,
+        id: canonicalCapabilityId(transport),
+        title: 'Scrape pricing page',
+        source: { kind: 'bring', locator: 'fixture://maxun/robot-42', operationId: 'robot-42' },
+        provenance: {
+            providerId: 'fixture.jobs',
+            providerKind: 'manual',
+            externalId: 'robot-42',
+            sourceLocator: 'fixture://maxun/robot-42',
+            discoveredAtMs: NOW,
+            admittedAtMs: NOW,
+            schemaDigest: sha256(canonicalize({ inputs, output }))
+        },
+        effect,
+        effectSource: effect === 'write' ? 'declared' : 'annotation',
+        approval: effect === 'read' ? 'auto' : 'pending',
+        invocation: 'manual',
+        trigger: { kind: 'manual' },
+        auth: { kind: 'apiKey', in: 'header', name: 'x-api-key', secretRef: SLOT },
+        transport,
+        execution: options.execution ?? { kind: 'async_poll', pollIntervalMs: 5_000, maxDurationMs: 120_000 },
+        inputs,
+        output
+    });
+}
+
+function installAsync(options: AsyncManifestOptions = {}): CapabilityManifest {
+    const installed = installProposal(asyncManifest(options));
     expect(installed.ok, installed.errors?.join('; ')).toBe(true);
-    const manifest = installed.manifest!;
+    return installed.manifest!;
+}
+
+/** Install and approve as the host would. */
+function installApproved(options: AsyncManifestOptions = {}): CapabilityManifest {
+    const manifest = installAsync(options);
     if (manifest.approval === 'pending') {
         const approved = approveCapability(manifest.id);
         expect(approved.ok).toBe(true);
@@ -219,75 +249,17 @@ afterEach(() => {
     capabilitySecrets.clear();
 });
 
-describe('async_poll admission', () => {
-    it('admits an async proposal with the credential slot bound to the runtime and the profile under the digest', () => {
-        const built = manifestFromProposal(asyncProposal(), { nowMs: NOW });
-        expect(built.ok, built.errors.join('; ')).toBe(true);
-        const manifest = built.manifest!;
-        expect(manifest.transport).toEqual({ kind: 'async', runtimeId: 'maxun', operation: 'robot-42' });
-        expect(manifest.execution).toEqual({ kind: 'async_poll', pollIntervalMs: 5_000, maxDurationMs: 120_000 });
-        expect(manifest.auth.secretRef).toBe(SLOT);
+describe('async_poll manifest', () => {
+    it('keeps the profile under the digest', () => {
+        const manifest = asyncManifest();
+        expect(validateManifest(manifest).ok).toBe(true);
         expect(JSON.stringify(manifest)).not.toContain(KEY);
-
         const stretched = { ...manifest, execution: { ...manifest.execution!, maxDurationMs: 3_000_000 } };
         expect(validateManifest(stretched).ok).toBe(false);
     });
 
-    it('lands at write and pending unless the host trusts the runtime, and never takes approval from the proposal', () => {
-        const untrusted = manifestFromProposal(asyncProposal({ effectHint: 'read' }), { nowMs: NOW }).manifest!;
-        expect(untrusted.effect).toBe('write');
-        expect(untrusted.approval).toBe('pending');
-
-        const trusted = manifestFromProposal(asyncProposal({ effectHint: 'read' }), {
-            nowMs: NOW,
-            trustedEffectHints: { asyncRuntimes: ['maxun'] }
-        }).manifest!;
-        expect(trusted.effect).toBe('read');
-        expect(trusted.approval).toBe('auto');
-
-        const destructive = manifestFromProposal(asyncProposal({ effectHint: 'destructive' }), {
-            nowMs: NOW,
-            trustedEffectHints: { asyncRuntimes: ['maxun'] }
-        }).manifest!;
-        expect(destructive.effect).toBe('destructive');
-        expect(destructive.approval).toBe('pending');
-
-        const forged = manifestFromProposal({ ...asyncProposal(), approval: 'auto' }, { nowMs: NOW });
-        expect(forged.ok).toBe(false);
-        expect(forged.errors.join(' ')).toMatch(/approval is host-owned/);
-    });
-
-    it('refuses an async proposal that names its own endpoint, a mismatched profile, or an untyped result', () => {
-        const endpoint = manifestFromProposal({
-            ...asyncProposal(),
-            transport: { kind: 'async', runtimeId: 'maxun', operation: 'robot-42', baseUrl: 'https://evil.example.test' }
-        }, { nowMs: NOW });
-        expect(endpoint.ok).toBe(false);
-        expect(endpoint.errors.join(' ')).toMatch(/bound by the host runtime/);
-
-        const syncProfile = manifestFromProposal(asyncProposal({ execution: { kind: 'sync' } }), { nowMs: NOW });
-        expect(syncProfile.ok).toBe(false);
-
-        const tooFast = manifestFromProposal(
-            asyncProposal({ execution: { kind: 'async_poll', pollIntervalMs: 10, maxDurationMs: 60_000 } }),
-            { nowMs: NOW }
-        );
-        expect(tooFast.ok).toBe(false);
-
-        const untyped = manifestFromProposal(
-            asyncProposal({ output: { schema: { kind: 'any' }, presentation: 'raw' } }),
-            { nowMs: NOW }
-        );
-        expect(untyped.ok).toBe(false);
-        expect(untyped.errors.join(' ')).toMatch(/must be typed/);
-    });
-
-    it('refuses an automatic trigger on an async manifest even outside admission', () => {
-        const manifest = manifestFromProposal(asyncProposal(), {
-            nowMs: NOW,
-            trustedEffectHints: { asyncRuntimes: ['maxun'] }
-        }).manifest!;
-        const { digest: _digest, ...draft } = manifest;
+    it('refuses an automatic trigger on an async manifest', () => {
+        const { digest: _digest, ...draft } = asyncManifest({ effect: 'read' });
         const onInterval = sealManifest({ ...draft, invocation: 'auto', trigger: { kind: 'interval', everyMs: 60_000 } });
         const result = installProposal(onInterval);
         expect(result.ok).toBe(false);
@@ -337,16 +309,16 @@ describe('async_poll execution', () => {
         const clock = virtualClock(NOW);
         const fixture = maxunFixture(clock);
         bindAsyncRuntime('maxun', fixture.runtime);
-        const installed = admitProposal(asyncProposal(), { nowMs: NOW });
-        expect(installed.manifest?.approval).toBe('pending');
+        const installed = installAsync();
+        expect(installed.approval).toBe('pending');
 
-        const refused = await executeCapability(installed.manifest!.id, {}, { clock });
+        const refused = await executeCapability(installed.id, {}, { clock });
         expect(refused.error?.code).toBe('EFFECT_NOT_APPROVED');
         expect(fixture.calls.start).toBe(0);
         expect(executionRecords()).toHaveLength(0);
 
-        approveCapability(installed.manifest!.id);
-        const ran = await executeCapability(installed.manifest!.id, {}, { clock });
+        approveCapability(installed.id);
+        const ran = await executeCapability(installed.id, {}, { clock });
         expect(ran.ok).toBe(true);
         expect(fixture.calls.start).toBe(1);
     });
@@ -400,13 +372,10 @@ describe('async_poll execution', () => {
         expect(failed.error?.code).toBe('ASYNC_RUN_FAILED');
         expect(executionRecord(failed.runId!)?.lastObservedStatus).toBe('failed');
 
-        const read = admitProposal(asyncProposal({ effectHint: 'read' }), {
-            nowMs: NOW,
-            trustedEffectHints: { asyncRuntimes: ['maxun'] }
-        });
-        expect(read.manifest?.effect).toBe('read');
+        const read = installAsync({ effect: 'read' });
+        expect(read.effect).toBe('read');
         bindAsyncRuntime('maxun', maxunFixture(clock, { outcome: 'malformed' }).runtime);
-        const malformed = await executeCapability(read.manifest!.id, {}, { clock });
+        const malformed = await executeCapability(read.id, {}, { clock });
         expect(malformed.error?.code).toBe('TYPED_OUTPUT_MISMATCH');
         expect(executionRecord(malformed.runId!)?.status).toBe('failed');
     });
@@ -416,12 +385,7 @@ describe('async_poll execution', () => {
             const clock = virtualClock(NOW);
             const fixture = maxunFixture(clock, { outcome: 'malformed' });
             bindAsyncRuntime('maxun', fixture.runtime);
-            const manifest = effectHint === 'write'
-                ? installApproved()
-                : approveCapability(admitProposal(asyncProposal({ effectHint: 'destructive' }), {
-                    nowMs: NOW,
-                    trustedEffectHints: { asyncRuntimes: ['maxun'] }
-                }).manifest!.id).manifest!;
+            const manifest = installApproved({ effect: effectHint });
             expect(manifest.effect).toBe(effectHint);
 
             const key = `mismatch-${effectHint}-001`;
@@ -511,11 +475,8 @@ describe('async_poll execution', () => {
     it('fails a trusted read at the deadline instead of calling it uncertain', async () => {
         const clock = virtualClock(NOW);
         bindAsyncRuntime('maxun', maxunFixture(clock, { finishAfterMs: 10 * 60_000 }).runtime);
-        const installed = admitProposal(asyncProposal({ effectHint: 'read' }), {
-            nowMs: NOW,
-            trustedEffectHints: { asyncRuntimes: ['maxun'] }
-        });
-        const result = await executeCapability(installed.manifest!.id, {}, { clock });
+        const installed = installAsync({ effect: 'read' });
+        const result = await executeCapability(installed.id, {}, { clock });
         expect(result.error?.code).toBe('DEADLINE');
         expect(executionRecord(result.runId!)?.status).toBe('failed');
     });

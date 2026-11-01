@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { admitProposal } from './admission';
-import { openapiProvider } from './providers/openapiProvider';
 import { isAssignable } from './valueType';
 import { fromJsonSchema } from './jsonSchema';
 import { compileOpenApi } from './openapi';
@@ -64,16 +62,5 @@ describe('untyped fields in a response', () => {
 
     it('cannot feed a typed input: an any source is not assignable to a string', () => {
         expect(isAssignable({ kind: 'any' }, { kind: 'string' })).toBe(false);
-    });
-});
-
-describe('admitting a provider proposal with an untyped field', () => {
-    it('admits a typed result with a nested any field, through the same rule as the install dialog', async () => {
-        const request = { document: spec(EVENTS), sourceLocator: 'fixture://events', discoveredAtMs: 1 };
-        const { candidates } = await openapiProvider.discover(request);
-        const proposal = await openapiProvider.materialize(candidates[0], { request });
-        const admitted = admitProposal(proposal, { nowMs: 1 });
-        expect(admitted.errors).toEqual([]);
-        expect(admitted.ok).toBe(true);
     });
 });

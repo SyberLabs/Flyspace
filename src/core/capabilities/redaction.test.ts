@@ -2,18 +2,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { compileOpenApi } from './openapi';
 import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
 import { sealManifest, type CapabilityManifest } from './manifest';
-import { admitProposal } from './admission';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
 import { bindMcpTransport, executeCapability, previewCapabilityRun, unbindMcpTransport } from './execute';
 import { AsyncStartRejected, bindAsyncRuntime, unbindAsyncRuntime } from './asyncRuntime';
 import { latestExecutionRecord } from './executionLedger';
 import { capabilitySecrets } from './secrets';
 import { MAX_ERROR_MESSAGE, redact } from './redact';
-import type { CapabilityProposalV1 } from './provider';
 import { handleCapabilityBroker, createBrokerRateLimiter } from '../services/server/capabilityBroker';
 import { memoryLedger, type ServerLedger } from '../services/server/capability.ledger';
 
-const NOW = 1_790_000_000_000;
 // Characters that change under each encoding: + / = & space.
 const SECRET = 'Sk+live/Q9=z&t ok-7781';
 const BASIC = 'board-user:p@ss+w/rd=1';
@@ -133,20 +130,23 @@ describe('dispatched-call errors carry no credential', () => {
     });
 
     it('mcp', async () => {
-        const proposal: CapabilityProposalV1 = {
+        const transport = { kind: 'mcp' as const, serverId: 'board', origin: 'https://board.example.test', toolName: 'search' };
+        const placement = { kind: 'apiKey' as const, in: 'header' as const, name: 'x-api-key' };
+        const installed = installProposal(sealManifest({
             version: 1,
-            provider: { id: 'fixture.mcp', kind: 'mcp' },
-            externalIdentity: { operationId: 'search', sourceLocator: 'fixture://mcp/board' },
+            id: canonicalCapabilityId(transport),
             title: 'Search',
-            effectHint: 'read',
-            auth: { kind: 'apiKey', in: 'header', name: 'x-api-key' },
-            transport: { kind: 'mcp', serverId: 'board', origin: 'https://board.example.test', toolName: 'search' },
+            source: { kind: 'mcp', locator: 'fixture://mcp/board', operationId: 'search' },
+            effect: 'read',
+            effectSource: 'annotation',
+            approval: 'auto',
+            invocation: 'manual',
+            trigger: { kind: 'manual' },
+            auth: { ...placement, secretRef: transportCredentialSlot(transport, placement)! },
+            transport,
             inputs: [],
-            output: { schema: { kind: 'array', items: { kind: 'string' } }, presentation: 'raw' },
-            execution: { kind: 'sync' },
-            provenance: { providerId: 'fixture.mcp', sourceLocator: 'fixture://mcp/board', discoveredAtMs: NOW }
-        };
-        const installed = admitProposal(proposal, { nowMs: NOW, trustedEffectHints: { mcpServers: ['board'] } });
+            output: { schema: { kind: 'array', items: { kind: 'string' } }, presentation: 'raw' }
+        }));
         expect(installed.ok, installed.errors.join('; ')).toBe(true);
         const manifest = installed.manifest!;
         capabilitySecrets.set(transportCredentialSlot(manifest.transport, manifest.auth)!, SECRET);
@@ -155,19 +155,24 @@ describe('dispatched-call errors carry no credential', () => {
     });
 
     it('async', async () => {
-        const proposal: CapabilityProposalV1 = {
+        const transport = { kind: 'async' as const, runtimeId: 'jobs', operation: 'robot-1' };
+        const placement = { kind: 'apiKey' as const, in: 'header' as const, name: 'x-api-key' };
+        const installed = installProposal(sealManifest({
             version: 1,
-            provider: { id: 'fixture.jobs', kind: 'manual' },
-            externalIdentity: { operationId: 'robot-1', sourceLocator: 'fixture://jobs/robot-1' },
+            id: canonicalCapabilityId(transport),
             title: 'Scrape',
-            auth: { kind: 'apiKey', in: 'header', name: 'x-api-key' },
-            transport: { kind: 'async', runtimeId: 'jobs', operation: 'robot-1' },
-            inputs: [],
-            output: { schema: { kind: 'object', properties: { markdown: { kind: 'string' } }, required: ['markdown'] }, presentation: 'raw' },
+            source: { kind: 'bring', locator: 'fixture://jobs/robot-1', operationId: 'robot-1' },
+            effect: 'write',
+            effectSource: 'declared',
+            approval: 'pending',
+            invocation: 'manual',
+            trigger: { kind: 'manual' },
+            auth: { ...placement, secretRef: transportCredentialSlot(transport, placement)! },
+            transport,
             execution: { kind: 'async_poll', pollIntervalMs: 5_000, maxDurationMs: 120_000 },
-            provenance: { providerId: 'fixture.jobs', sourceLocator: 'fixture://jobs/robot-1', discoveredAtMs: NOW }
-        };
-        const installed = admitProposal(proposal, { nowMs: NOW });
+            inputs: [],
+            output: { schema: { kind: 'object', properties: { markdown: { kind: 'string' } }, required: ['markdown'] }, presentation: 'raw' }
+        }));
         expect(installed.ok, installed.errors.join('; ')).toBe(true);
         const manifest = approveCapability(installed.manifest!.id).manifest!;
         capabilitySecrets.set(transportCredentialSlot(manifest.transport, manifest.auth)!, SECRET);
