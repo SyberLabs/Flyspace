@@ -5,11 +5,11 @@
 // Compact, always-visible Mind interface
 // ============================================
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, MessageCircle, Sparkles, ChevronUp, Settings, Zap } from 'lucide-react';
 import { useMindStore } from '@/core/stores';
-import { getMindEngine } from '@/core/services/mind.engine';
+import { thinkInPreview } from '@/core/services/mind.engine';
 import { cn } from '@/lib/utils';
 
 interface MindDockProps {
@@ -17,7 +17,6 @@ interface MindDockProps {
 }
 
 export function MindDock({ onExpandPanel }: MindDockProps) {
-    const [isThinking, setIsThinking] = useState(false);
     const [quickChatOpen, setQuickChatOpen] = useState(false);
     const [quickMessage, setQuickMessage] = useState('');
     const [quickResponse, setQuickResponse] = useState<string | null>(null);
@@ -36,52 +35,18 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
         return sum + pool.entries.length;
     }, 0);
 
-    // Quick Think action
-    const handleQuickThink = useCallback(async () => {
-        if (isThinking) return;
+    const showBriefly = (message: string) => {
+        setQuickResponse(message);
+        setTimeout(() => setQuickResponse(null), 5000);
+    };
 
-        setIsThinking(true);
-        try {
-            const engine = getMindEngine();
-            const result = await engine.think();
-            if (result.success && result.response) {
-                setQuickResponse(result.response.slice(0, 200) + (result.response.length > 200 ? '...' : ''));
-                setTimeout(() => setQuickResponse(null), 5000);
-            } else if (result.error) {
-                setQuickResponse(result.error);
-                setTimeout(() => setQuickResponse(null), 5000);
-            }
-        } catch (error) {
-            console.error('Quick think error:', error);
-        } finally {
-            setIsThinking(false);
-        }
-    }, [isThinking]);
+    const handleQuickThink = () => showBriefly(thinkInPreview());
 
-    // Quick Ask action - uses think with a message prefix
-    const handleQuickAsk = useCallback(async () => {
-        if (!quickMessage.trim() || isThinking) return;
-
-        setIsThinking(true);
-        try {
-            const engine = getMindEngine();
-            // Use think with the user's question as context
-            const result = await engine.think(`User asks: ${quickMessage}`);
-            if (result.success && result.response) {
-                setQuickResponse(result.response.slice(0, 300) + (result.response.length > 300 ? '...' : ''));
-                setQuickMessage('');
-                setTimeout(() => setQuickResponse(null), 8000);
-            } else if (result.error) {
-                setQuickResponse(result.error);
-                setTimeout(() => setQuickResponse(null), 5000);
-            }
-        } catch (error) {
-            console.error('Quick ask error:', error);
-        } finally {
-            setIsThinking(false);
-            setQuickChatOpen(false);
-        }
-    }, [quickMessage, isThinking]);
+    const handleQuickAsk = () => {
+        if (!quickMessage.trim()) return;
+        showBriefly(thinkInPreview(`User asks: ${quickMessage}`));
+        setQuickChatOpen(false);
+    };
 
     // Keyboard shortcut: M to expand
     useEffect(() => {
@@ -153,7 +118,7 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
                                 />
                                 <button
                                     onClick={handleQuickAsk}
-                                    disabled={isThinking || !quickMessage.trim()}
+                                    disabled={!quickMessage.trim()}
                                     className="p-2 rounded-lg bg-[var(--mind-aqua-glow)]/20 text-[var(--mind-aqua-glow)] hover:bg-[var(--mind-aqua-glow)]/30 disabled:opacity-50 transition-colors"
                                 >
                                     <Zap className="w-4 h-4" />
@@ -178,9 +143,7 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
                     >
                         <div className={cn(
                             "w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-all",
-                            isThinking
-                                ? "bg-[var(--mind-aqua-glow)]/30 animate-pulse"
-                                : "bg-[var(--mind-aqua-glow)]/20"
+                            "bg-[var(--mind-aqua-glow)]/20"
                         )}>
                             {activePersona?.avatar || '🧠'}
                         </div>
@@ -209,13 +172,7 @@ export function MindDock({ onExpandPanel }: MindDockProps) {
                         {/* Think */}
                         <button
                             onClick={handleQuickThink}
-                            disabled={isThinking}
-                            className={cn(
-                                "p-2.5 rounded-xl transition-all",
-                                isThinking
-                                    ? "bg-[var(--mind-aqua-glow)]/20 text-[var(--mind-aqua-glow)] animate-pulse"
-                                    : "hover:bg-[var(--citadel-elevated)] text-[var(--text-muted)] hover:text-[var(--mind-aqua-glow)]"
-                            )}
+                            className="p-2.5 rounded-xl transition-all hover:bg-[var(--citadel-elevated)] text-[var(--text-muted)] hover:text-[var(--mind-aqua-glow)]"
                             title="Think (analyze context)"
                         >
                             <Sparkles className="w-5 h-5" />

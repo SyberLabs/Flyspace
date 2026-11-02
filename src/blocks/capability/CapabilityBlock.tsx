@@ -12,9 +12,10 @@ import { triggerIdempotencyKey } from '@/core/capabilities/triggers';
 import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
 import { EffectPill } from '@/components/apis/ApiReview';
-import { KeyField, keySlotOf, useHasKey, useHouseKeyCovers } from '@/components/apis/KeyField';
+import { KeyField, keySlotOf, useHasKey } from '@/components/apis/KeyField';
 import { useRememberingKeys } from '@/components/apis/RememberKeys';
-import { SignInPrompt, useSignIn } from '@/components/apis/SignIn';
+import { SignInPrompt } from '@/components/apis/SignIn';
+import { signInSlotOf } from '@/core/capabilities/connect';
 import { ProviderAttribution } from '@/components/apis/ProviderAttribution';
 import { attributionFor } from '@/core/capabilities/curatedApis';
 import { argumentsFrom, CapabilityInputs, constantOf, inputSummaryOf, missingInputs } from './CapabilityInputs';
@@ -90,14 +91,11 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const keySlot = keySlotOf(manifest);
     const hasKey = useHasKey(keySlot);
     const remembering = useRememberingKeys();
-    // The server may hold its own key for this curated API (dataPlant.ts).
-    const houseKey = useHouseKeyCovers(manifest);
-    const onHouseKey = houseKey && keySlot !== null && !hasKey;
     // Keys live for the session, so after a reload a keyed block asks again.
-    const needsKey = keySlot !== null && !hasKey && !houseKey;
-    // An oauth API needs a sign-in instead (connect.ts), for this session.
-    const signIn = useSignIn(manifest);
-    const needsSignIn = signIn !== null && !signIn.signedIn;
+    const needsKey = keySlot !== null && !hasKey;
+    // An oauth API needs a sign-in instead, which the preview cannot give (connect.ts).
+    const signIn = signInSlotOf(manifest);
+    const needsSignIn = signIn !== null;
     const needsCredential = needsKey || needsSignIn;
     // A provider whose terms require a notice on every app screen that uses it (FRED).
     const attribution = attributionFor(manifest);
@@ -207,32 +205,19 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 ) : null}
 
                 {/* What you look at after Run comes first: the error or the result. */}
-                {needsSignIn && manifest && signIn ? <SignInPrompt manifest={manifest} signIn={signIn} /> : null}
+                {signIn ? <SignInPrompt signIn={signIn} /> : null}
 
                 {block?.error && !(needsCredential && isUnboundKeyError(block.error)) ? (
                     <p role="alert" className="rounded-md border border-[var(--truth-red)]/40 px-2 py-1 text-xs text-[var(--truth-red)] [overflow-wrap:anywhere]">
                         {block.error}
                         {errorHint(block.error) ? <span className="block text-[var(--text-muted)]">{errorHint(block.error)}</span> : null}
-                        {signIn?.signedIn && isRefusal(block.error) && !changingKey ? (
-                            <button type="button" onClick={() => setChangingKey(true)}
-                                className="mt-1 block text-[11px] text-[var(--text-secondary)] underline">Sign in again</button>
-                        ) : null}
                         {keySlot && hasKey && isRefusal(block.error) && !changingKey ? (
                             <button type="button" onClick={() => setChangingKey(true)}
                                 className="mt-1 block text-[11px] text-[var(--text-secondary)] underline">Change key</button>
                         ) : null}
                     </p>
                 ) : null}
-                {onHouseKey && !changingKey ? (
-                    <p className="text-[10px] text-[var(--text-muted)]">
-                        Runs on this server&apos;s key. It is shared, so an answer can be up to 5 minutes old and there is a daily limit.{' '}
-                        <button type="button" onClick={() => setChangingKey(true)} className="underline">Use my own key</button>
-                    </p>
-                ) : null}
-                {changingKey && manifest && signIn?.signedIn ? (
-                    <SignInPrompt manifest={manifest} signIn={signIn} again onDone={() => setChangingKey(false)} />
-                ) : null}
-                {changingKey && manifest && (hasKey || onHouseKey) ? (
+                {changingKey && manifest && hasKey ? (
                     <KeyField manifest={manifest} compact autoFocus onSaved={() => setChangingKey(false)} onCancel={() => setChangingKey(false)} />
                 ) : null}
 

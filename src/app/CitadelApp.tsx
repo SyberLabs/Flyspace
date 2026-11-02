@@ -18,8 +18,6 @@ import { useToolStore } from '@/core/stores';
 import { useMindShellSync, useShellNavigation } from '@/core/hooks';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { startKeyVault } from '@/core/capabilities/keyVault';
-import { loadHouseKeys } from '@/core/capabilities/houseKeys';
-import { loadConnectProviders } from '@/core/capabilities/connect';
 
 export default function CitadelApp() {
     // The removed API Dashboard stored client-side keys under this key; drop any that remain.
@@ -30,12 +28,6 @@ export default function CitadelApp() {
     // Put back keys remembered on this device, if the person turned that on.
     useEffect(() => {
         void startKeyVault();
-    }, []);
-
-    // Which curated APIs this server answers on its own key, if the owner set any.
-    useEffect(() => {
-        void loadHouseKeys();
-        void loadConnectProviders();
     }, []);
 
     const { activeTool, selection, captureSelection, clearSelection } = useToolStore();
@@ -72,11 +64,9 @@ export default function CitadelApp() {
                 onOpenShells={() => setIsShellsOpen(true)}
             />
 
-            {process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1' && (
-                <div className="demo-banner" role="note">
-                    Public preview: your canvas stays in this browser unless you save an account backup. AI answers and keyed data sources are disabled.
-                </div>
-            )}
+            <div className="demo-banner" role="note">
+                Public preview: your canvas stays in this browser unless you save an account backup. AI answers and keyed data sources are disabled.
+            </div>
 
             {/* Main Content */}
             <div className="flex flex-1 overflow-hidden">

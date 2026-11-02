@@ -39,46 +39,10 @@ export function onCapabilityRehydrate(handler: RehydrateHandler): void {
     }
 }
 
-const ORIGIN_RULE = 'MCP manifests now carry the server origin, which this one predates and does not name. Re-install it from its server.';
-
-/** An MCP manifest persisted before `transport.origin` existed. Nothing in it names the server URL. */
-function isOriginlessMcp(entry: unknown): entry is { id: string; title?: unknown } {
-    if (typeof entry !== 'object' || entry === null) return false;
-    const record = entry as { id?: unknown; transport?: { kind?: unknown; origin?: unknown } };
-    return typeof record.id === 'string'
-        && typeof record.transport === 'object' && record.transport !== null
-        && record.transport.kind === 'mcp'
-        && typeof record.transport.origin !== 'string';
-}
-
-/**
- * omni-capabilities persist migrations.
- * v1 → v2: the mcp transport gained `origin`, and the credential slot and
- * capability id are derived from it. A stored MCP manifest has no URL to
- * derive it from, so it moves to `stale` rather than failing validation on
- * restore (which would drop it from the next persisted write).
- */
-export function migrateCapabilityStore(persistedState: unknown, fromVersion: number): Record<string, unknown> {
+/** Stored state from before `stale` existed gets an empty list. */
+export function migrateCapabilityStore(persistedState: unknown): Record<string, unknown> {
     const persisted = { ...((persistedState || {}) as Record<string, unknown>) };
-    const manifests = Array.isArray(persisted.manifests) ? persisted.manifests : [];
-    const stale: StaleCapability[] = Array.isArray(persisted.stale) ? [...(persisted.stale as StaleCapability[])] : [];
-    if (fromVersion < 2) {
-        const kept: unknown[] = [];
-        for (const entry of manifests) {
-            if (isOriginlessMcp(entry)) {
-                stale.push({
-                    id: entry.id,
-                    title: typeof entry.title === 'string' ? entry.title : entry.id,
-                    reason: ORIGIN_RULE,
-                    manifest: entry
-                });
-            } else {
-                kept.push(entry);
-            }
-        }
-        persisted.manifests = kept;
-    }
-    persisted.stale = stale;
+    if (!Array.isArray(persisted.stale)) persisted.stale = [];
     return persisted;
 }
 

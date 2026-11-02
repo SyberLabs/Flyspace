@@ -11,34 +11,6 @@
 
 import type { LLMProvider } from './schemas/mind.schema';
 
-interface ModelInfo {
-    id: string;
-    label: string;
-    /**
-     * Minimum sensible output-token budget. "Thinking" models (Gemini 2.5)
-     * spend budget on internal reasoning before visible output — small caps
-     * return empty/truncated text (learned live).
-     */
-    minOutputTokens?: number;
-}
-
-/** Known-good models per provider (verified or high-confidence current ids). */
-export const MODEL_REGISTRY: Record<LLMProvider, ModelInfo[]> = {
-    local: [
-        // Local is whatever Ollama has pulled; this is only the default suggestion.
-        { id: 'tinyllama', label: 'TinyLlama (Ollama)' }
-    ],
-    anthropic: [
-        { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (fast)' },
-        { id: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
-        { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' }
-    ],
-    google: [
-        { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', minOutputTokens: 2048 },
-        { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', minOutputTokens: 2048 }
-    ]
-};
-
 /** The default model per provider. */
 export const DEFAULT_MODEL: Record<LLMProvider, string> = {
     local: 'tinyllama',
@@ -68,18 +40,4 @@ export function resolveModel(provider: LLMProvider, modelId?: string): string {
     const id = modelId?.trim();
     if (!id) return DEFAULT_MODEL[provider];
     return DEPRECATED_MODELS[id] ?? id;
-}
-
-/** Look up registry info for a model id (undefined if unlisted). */
-export function getModelInfo(modelId: string): ModelInfo | undefined {
-    for (const models of Object.values(MODEL_REGISTRY)) {
-        const found = models.find(m => m.id === modelId);
-        if (found) return found;
-    }
-    return undefined;
-}
-
-/** Minimum output-token budget for a model (0 if unknown/not applicable). */
-export function minOutputTokensFor(modelId: string): number {
-    return getModelInfo(modelId)?.minOutputTokens ?? 0;
 }

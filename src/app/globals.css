@@ -670,28 +670,7 @@ body {
    ANIMATIONS
    ============================================ */
 
-/* Source → target flow while a persona is reading this wire.
-   Motion is CSS (no per-frame React). The data-reading attribute is the
-   honest signal; reduced-motion keeps a static emphasis so the information
-   survives when animation does not. */
-@keyframes wire-flow {
-  to {
-    stroke-dashoffset: -28;
-  }
-}
-
-.wire-reading {
-  stroke-dasharray: 10 8;
-  animation: wire-flow 0.7s linear infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .wire-reading {
-    animation: none;
-    stroke-dasharray: none;
-    filter: brightness(1.35);
-  }
-
   .btn,
   .block-card,
   .command-item {

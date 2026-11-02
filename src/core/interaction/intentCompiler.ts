@@ -3,11 +3,7 @@
 // InteractionEngine is the only committer.
 
 import { parseSpeech, type SpeechCatalog, type SpeechIntent } from './speech';
-import {
-    validateProposal,
-    type ReferentExpression,
-    type SpatialCommandProposalV1
-} from './proposal';
+import type { ReferentExpression, SpatialCommandProposalV1 } from './proposal';
 import type { SpeechObservationV1 } from './speechObservation';
 
 /** Stable descriptors the host chooses to expose. Never the store itself. */
@@ -18,24 +14,12 @@ export interface IntentContext {
     selection: string[];
 }
 
-type CompilerPath = 'grammar' | 'semantic';
+type CompilerPath = 'grammar';
 
 export type IntentCompilerResult =
     | { kind: 'proposal'; proposal: SpatialCommandProposalV1; via: CompilerPath }
     | { kind: 'needs-input'; question: string; reason: string; via: CompilerPath }
     | { kind: 'refuse'; reason: string; via: CompilerPath };
-
-interface SemanticInput {
-    transcript: string;
-    observationId: string;
-    context: IntentContext;
-}
-
-/** The step that runs only when the grammar has no exact match. */
-export interface SemanticCompiler {
-    readonly id: string;
-    compile(input: SemanticInput): IntentCompilerResult | null | Promise<IntentCompilerResult | null>;
-}
 
 export interface IntentCompiler {
     compile(observation: SpeechObservationV1, context: IntentContext): Promise<IntentCompilerResult>;
@@ -129,135 +113,10 @@ export function compileDeterministic(observation: Pick<SpeechObservationV1, 'tra
     return intent ? intentToResult(intent, observation.observationId) : null;
 }
 
-export function createIntentCompiler(options: { semantic?: SemanticCompiler | null } = {}): IntentCompiler {
+export function createIntentCompiler(): IntentCompiler {
     return {
         async compile(observation, context) {
-            const fast = compileDeterministic(observation, context);
-            if (fast) return fast;
-            const semantic = options.semantic;
-            if (!semantic) return refuse('unrecognized-speech', 'grammar');
-            let result: IntentCompilerResult | null;
-            try {
-                result = await semantic.compile({ transcript: observation.transcript, observationId: observation.observationId, context });
-            } catch {
-                return refuse('semantic-compiler-failed', 'semantic');
-            }
-            if (!result) return refuse('unrecognized-speech', 'semantic');
-            if (result.kind !== 'proposal') return result;
-            const checked = validateProposal(result.proposal, {
-                observationId: observation.observationId,
-                vocabulary: context.vocabulary,
-                allowReserved: false,
-                candidateIds: new Set(context.visibleBlocks.map(block => block.id))
-            });
-            if (!checked.ok) return refuse(`invalid-proposal:${checked.reason}`, result.via);
-            return { kind: 'proposal', proposal: checked.proposal, via: result.via };
-        }
-    };
-}
-
-// ---------------------------------------------------------------------------
-// Strict paraphrase parser. A finite set of anchored patterns over the host
-// vocabulary. Not a model; nothing here guesses.
-// ---------------------------------------------------------------------------
-
-const DEICTIC_WORDS = new Set(['this', 'that', 'it', 'these', 'those', 'here', 'there']);
-const POLITE_PREFIX = /^(?:(?:hey |ok |okay )?omni,? |please |(?:can|could|would|will) you (?:please )?|i want you to |i'd like you to |let's )/;
-const POLITE_SUFFIX = / (?:please|for me|now|thanks|thank you)$/;
-
-function normalize(transcript: string): string {
-    let text = transcript.trim().toLowerCase().replace(/[.?!,]+$/g, '').replace(/\s+/g, ' ');
-    for (let pass = 0; pass < 4; pass += 1) {
-        const next = text.replace(POLITE_PREFIX, '').replace(POLITE_SUFFIX, '').trim();
-        if (next === text) break;
-        text = next;
-    }
-    return text;
-}
-
-function cleanName(raw: string): string | null {
-    const name = raw.replace(/^(?:the |a |an )/, '').replace(/ (?:block|feed block)$/, '').trim();
-    if (!name || name.length > 80 || DEICTIC_WORDS.has(name)) return null;
-    return name;
-}
-
-function vocabularyMatch(query: string, vocabulary: SpeechCatalog): { blockId: string } | 'ambiguous' | null {
-    const matches = vocabulary.blocks.filter(block => block.aliases.includes(query) || block.displayName.toLowerCase() === query);
-    if (matches.length === 1) return { blockId: matches[0].blockId };
-    if (matches.length > 1) return 'ambiguous';
-    return null;
-}
-
-export function paraphraseCompiler(): SemanticCompiler {
-    return {
-        id: 'strict-paraphrase-v1',
-        compile({ transcript, observationId, context }) {
-            const text = normalize(transcript);
-            if (!text) return null;
-            const via: CompilerPath = 'semantic';
-
-            // Politeness around an exact grammar line. Reserved words stay grammar-only.
-            if (text !== transcript.trim().toLowerCase().replace(/[.?!]+$/g, '')) {
-                const intent = parseSpeech(text, context.vocabulary);
-                if (intent && intent.action !== 'confirm' && intent.action !== 'undo' && intent.action !== 'cancel') {
-                    return intentToResult(intent, observationId, via);
-                }
-            }
-
-            const placed = text.match(/^(?:put|place|drop|add) (?:a |an |the )?(.+?) (?:over here|right here|over there|right there|here|there)$/);
-            if (placed) {
-                const name = cleanName(placed[1]);
-                if (!name) return null;
-                const match = vocabularyMatch(name, context.vocabulary);
-                if (match === 'ambiguous') return { kind: 'needs-input', reason: 'ambiguous-block', question: 'Which block do you mean?', via };
-                if (!match) return null;
-                return proposal('CREATE', observationId, { subject: { kind: 'block-type', blockId: match.blockId }, placement: { kind: 'pointed' } }, via);
-            }
-
-            if (/^(?:move|drag|bring) (?:this|that|it) (?:over here|right here|over there|here|there)$/.test(text)) {
-                return proposal('MOVE', observationId, { subject: deictic('this'), placement: { kind: 'pointed' } }, via);
-            }
-
-            if (/^(?:get rid of|throw away|trash) (?:this|that|it)$/.test(text)) {
-                return proposal('DELETE', observationId, { subject: deictic('this') }, via);
-            }
-
-            const fed = text.match(/^(?:feed|send|pipe|route|hook up|plug) (?:the )?(.+?) (?:into|to|up to) (?:the )?(.+)$/);
-            if (fed) {
-                const target = cleanName(fed[2]);
-                const sourceIsDeictic = /^(?:this|that|it)$/.test(fed[1]);
-                const source = sourceIsDeictic ? null : cleanName(fed[1]);
-                if (!target || (!source && !sourceIsDeictic)) return null;
-                return proposal('CONNECT', observationId, {
-                    subject: source ? { kind: 'named', name: source } : deictic('this'),
-                    target: { kind: 'named', name: target }
-                }, via);
-            }
-
-            const given = text.match(/^give (?:the )?(.+?) the (.+)$/);
-            if (given) {
-                const target = cleanName(given[1]);
-                const source = cleanName(given[2]);
-                if (!target || !source) return null;
-                return proposal('CONNECT', observationId, {
-                    subject: { kind: 'named', name: source },
-                    target: { kind: 'named', name: target }
-                }, via);
-            }
-
-            const brought = text.match(/^(?:bring in|pull in|import|fetch|get me) (?:some |the )?(.+?) (?:data|feed|api|numbers|prices)$/)
-                ?? text.match(/^(?:bring in|pull in|import) data from (?:the )?(.+)$/);
-            if (brought) {
-                const query = cleanName(brought[1]);
-                if (!query) return null;
-                const known = vocabularyMatch(query, context.vocabulary);
-                if (known && known !== 'ambiguous') {
-                    return proposal('CREATE', observationId, { subject: { kind: 'block-type', blockId: known.blockId }, placement: { kind: 'default' } }, via);
-                }
-                return proposal('RESOLVE_CAPABILITY', observationId, { capabilityQuery: { text: query } }, via);
-            }
-
-            return null;
+            return compileDeterministic(observation, context) ?? refuse('unrecognized-speech', 'grammar');
         }
     };
 }

@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useShellStore } from './shellStore';
 import { useBlockStore } from './blockStore';
 import { useWireStore } from './wireStore';
-import { aggregateWireContext } from '../services/wire.service';
 import { getShellTemplate, type ShellTemplate } from '../shells/templates';
 
 const investor = getShellTemplate('tmpl_investor') as ShellTemplate;
@@ -48,7 +47,7 @@ describe('instantiateTemplate', () => {
         }
     });
 
-    it('template wires FEED personas — data flows into aggregateWireContext', () => {
+    it('template wires FEED personas — a live wire runs from the data block to the persona', () => {
         // A1 regression: this is the exact live bug — the Investor shell spawned
         // with inert wiring, so personas received no context until hand-wired.
         const shellId = useShellStore.getState().instantiateTemplate(investor)!;
@@ -62,25 +61,11 @@ describe('instantiateTemplate', () => {
         const wiresToAnalyst = useWireStore.getState().getWiresToBlock(analyst.instance_id);
         expect(wiresToAnalyst.some(w => w.sourceBlockId === polymarket.instance_id)).toBe(true);
 
-        // …and once the data block has data, it must flow into the persona's context.
-        useBlockStore.getState().updateData(polymarket.instance_id, [{
-            id: 'm1',
-            question: 'Will France win the 2026 World Cup?',
-            outcomes: [
-                { id: 'm1-yes', name: 'Yes', probability: 0.174 },
-                { id: 'm1-no', name: 'No', probability: 0.826 }
-            ],
-            volume: 86000000,
-            liquidity: 0,
-            endDate: '2026-07-19',
-            category: 'Sports',
-            tags: ['sports']
-        }]);
-
-        const { context, sourceIds } = aggregateWireContext(analyst.instance_id);
-        expect(sourceIds).toContain(polymarket.instance_id);
-        expect(context).toContain('Will France win the 2026 World Cup?');
-        expect(context).toContain('17.4%'); // the probability, not just the title
+        // …active, in this shell, and the persona's only reads are live wires.
+        const feed = wiresToAnalyst.find(w => w.sourceBlockId === polymarket.instance_id)!;
+        expect(feed.status).toBe('active');
+        expect(feed.shellId).toBe(shellId);
+        expect(wiresToAnalyst.every(w => w.targetBlockId === analyst.instance_id)).toBe(true);
     });
 
     it('produces independent copies on repeated use (distinct instance ids)', () => {

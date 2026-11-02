@@ -1,30 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import {
-    MODEL_REGISTRY,
-    DEFAULT_MODEL,
-    DEPRECATED_MODELS,
-    resolveModel,
-    getModelInfo,
-    minOutputTokensFor
-} from './models.registry';
+import { DEFAULT_MODEL, resolveModel } from './models.registry';
 import { LLM_DEFAULTS } from './schemas/mind.schema';
 
 describe('model registry — integrity', () => {
-    it('every provider default exists in its registry list', () => {
-        for (const [provider, defaultId] of Object.entries(DEFAULT_MODEL)) {
-            const models = MODEL_REGISTRY[provider as keyof typeof MODEL_REGISTRY];
-            expect(models.some(m => m.id === defaultId), `${provider} default in registry`).toBe(true);
-        }
-    });
-
-    it('every deprecated id maps to a model listed in the registry', () => {
-        const allIds = Object.values(MODEL_REGISTRY).flat().map(m => m.id);
-        for (const [dead, replacement] of Object.entries(DEPRECATED_MODELS)) {
-            expect(allIds, `${dead} → ${replacement}`).toContain(replacement);
-            expect(dead).not.toBe(replacement);
-        }
-    });
-
     it('LLM_DEFAULTS uses the registry defaults (single source of truth)', () => {
         expect(LLM_DEFAULTS.anthropic.model).toBe(DEFAULT_MODEL.anthropic);
         expect(LLM_DEFAULTS.google.model).toBe(DEFAULT_MODEL.google);
@@ -46,14 +24,5 @@ describe('resolveModel — self-healing', () => {
     it('passes through unlisted (potentially valid) ids untouched', () => {
         expect(resolveModel('local', 'qwen2.5:14b')).toBe('qwen2.5:14b');
         expect(resolveModel('google', 'gemini-9-ultra')).toBe('gemini-9-ultra');
-    });
-});
-
-describe('minOutputTokensFor — thinking-model headroom', () => {
-    it('returns the floor for thinking models and 0 for others', () => {
-        expect(minOutputTokensFor('gemini-2.5-flash')).toBe(2048);
-        expect(minOutputTokensFor('claude-haiku-4-5-20251001')).toBe(0);
-        expect(minOutputTokensFor('unknown-model')).toBe(0);
-        expect(getModelInfo('gemini-2.5-flash')?.label).toContain('Gemini');
     });
 });
