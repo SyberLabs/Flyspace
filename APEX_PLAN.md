@@ -1,16 +1,16 @@
 # OmniOS roadmap
 
-Reviewed 2026-09-26. OmniOS is a local-first canvas for connecting data blocks to
-AI personas and seeing which sources informed each response.
+Reviewed 2026-09-26. OmniOS is a local-first canvas for connecting data blocks.
+Section 7 records what was cut on 2026-11-02; sections 3 and 6 are history and
+name work that section removed.
 
 ## 1. Product core
 
 - Shells save blocks, positions, and wires; built-in templates create working shells.
 - Data blocks fetch and normalize public or configured provider data.
-- Persona turns use active inbound wires, stream a response, and retain source
-  provenance. Optional Postgres records inference runs and their lineage.
-- IndexedDB stores local canvas state. Provider calls that use credentials pass
-  through server routes.
+- Personas sit on the canvas and say AI answers are off in the public preview.
+- IndexedDB stores local canvas state. Keyless public data goes through server
+  routes; a key a person enters goes straight from the browser to that API.
 
 ## 2. Current boundaries
 
@@ -21,16 +21,8 @@ AI personas and seeing which sources informed each response.
   `src/core/interaction/ports.ts`), and only the first input and first output
   port are checked. An untyped output acts as `any`: it feeds `any` inputs
   (personas) or string-sink schemas through a `text` projection, and typed
-  text/json inputs without a string sink refuse it. Persona context
-  (`aggregateWireContext`) ignores ports and projections; projections apply
-  only in capability execution (`wireInputs.ts`).
-- **Mind-panel Think sees what the canvas shows.** `captureShellSnapshot`
-  (used by `think()`) keeps only blocks of the active shell that have a wire in
-  or out, or are pinned, plus only the wires between them and the pins on them.
-  It does not read the observations pool, so earlier answers do not reach the
-  prompt. With
-  nothing in scope, Think is refused unless the caller passes a question
-  (Quick Ask).
+  text/json inputs without a string sink refuse it. Projections apply only in
+  capability execution (`wireInputs.ts`).
 
 ## 3. Done (merged 2026-10-01)
 
@@ -38,10 +30,7 @@ AI personas and seeing which sources informed each response.
    are spread on the grip only (`src/components/blocks/BlockCard.tsx`), so a
    card is no longer a `role="button"` around its own controls. See
    `FINDINGS.md`.
-2. **Recorded inference lineage** (#72). `src/blocks/persona/RunLineage.tsx`
-   reads the runs behind a persona answer through
-   `GET /api/inference-runs/:id/lineage` and draws the tree from a toggle
-   under the answer.
+2. **Recorded inference lineage** (#72). Removed in section 7.
 3. **Persisted wires re-validated on load** (#74). Every load path runs the
    same `admitWire` as the live canvas: shell restore and templates through
    `replaceWiresForShell`, vault-hydrated wires through
@@ -106,3 +95,29 @@ this order:
    with read-only scopes only. No live sign-in has been run (no client is
    registered). The API index still counts Google APIs as unusable until it
    is rebuilt (`npm run catalog:build`).
+
+Items 1, 6, 7 and 8 were removed in section 7.
+
+## 7. Reachability cut (2026-11-02)
+
+Rule from the owner: a path is dead if no live deployed app can reach it. The one
+live app is the Worker at omni.syberlabs.io, with demo mode on, no secret and no
+database, so everything behind those facts went. Last present at `8a21350`:
+
+- Model answers: the LLM client and route, persona prompts and engine, the Mind
+  engine, kernel, crystallize, run lineage, the Think result modal, markdown
+  rendering of answers. A turn now commits the preview's refusal.
+- Postgres, migrations, the inference ledger, hosted OIDC auth.
+- The capability broker's server side and data plant (house keys). A brokered
+  block still runs and shows the broker's 503.
+- OAuth sign-in. A Google block still says sign-in is not set up.
+- Remote speech (OpenAI Realtime). The browser recognizer remains.
+- Jev and Kev persona suggestions and meaning search. Keyword search remains.
+- MCP and async transports, manifest provenance: no production caller bound one.
+- Tooling only those paths used: `forge:spec`, `eval:registry-jev`,
+  `metrics:line`, `db:migrate`, the speech field harness.
+
+Kept because they build or guard the live artifact: `verify:curated` and the
+nightly quality line (they write `public/curated-quality.json`, which search
+shows), `catalog:build` (`public/api-index.json`), `scan:bundle`, the tests of
+live code, and the 503 stubs the deploy gate checks.
