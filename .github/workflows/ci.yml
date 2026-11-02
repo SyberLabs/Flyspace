@@ -7,7 +7,6 @@ name: CI
 # Required check names:
 #   - Typecheck, Test & Build
 #   - Client bundle carries no secrets
-#   - Inference Ledger (Postgres)
 #   - Dependency audit
 
 on:
@@ -110,14 +109,10 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
-      # Golden-path e2e (apex A3): drives the real built app — spawn Investor
-      # shell → blocks render → wires live → mock-LLM Think streams → persists
-      # across reload. The LLM is the OMNI_E2E server double (no keys needed).
-      # This guards the UI wiring layer where unit tests can't see.
-      #
-      # The harness is `next start`, not the Worker: the Worker bundle compiles
-      # demo mode in (vite.config.ts `define`), which turns /api/llm into a 503
-      # and so cannot run this path. Nothing deploys `.next`; it is a test rig.
+      # Golden-path e2e (apex A3): drives the built app — spawn Investor shell →
+      # blocks render → wires live → Think explains AI is off → persists across
+      # reload. This guards the UI wiring layer where unit tests can't see.
+      # Nothing deploys `.next`; it is a test rig.
       - name: Build the e2e harness (Next server)
         run: npm run build:next
 
@@ -202,67 +197,6 @@ jobs:
 
       - name: Scan client bundle
         run: npm run scan:bundle
-
-  # ============================================
-  # The inference ledger against a real Postgres.
-  #
-  # Its own job so the main gate stays dependency-free: `npm test` skips the
-  # integration file unless OMNI_TEST_DATABASE_URL is set. This is the only
-  # place the CHECK constraints, the foreign keys, the cascade, the recursive
-  # lineage walk and the migration runner are actually executed rather than
-  # asserted about.
-  # ============================================
-  ledger:
-    name: Inference Ledger (Postgres)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: omni
-          POSTGRES_PASSWORD: omni
-          POSTGRES_DB: omni_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      OMNI_TEST_DATABASE_URL: postgres://omni:omni@localhost:5432/omni_test
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-
-      - name: Setup Node
-        uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      # Proves the runner and the migrations themselves, not just the SQL text.
-      - name: Migrate
-        run: npm run db:migrate
-        env:
-          DATABASE_URL: postgres://omni:omni@localhost:5432/omni_test
-
-      # Re-running must be a no-op: migrations are IF NOT EXISTS, constraint
-      # adds are guarded on pg_constraint, and applied files are recorded.
-      - name: Migrate again (idempotent)
-        run: npm run db:migrate
-        env:
-          DATABASE_URL: postgres://omni:omni@localhost:5432/omni_test
-
-      - name: Test (integration included)
-        run: npm test
 
   # ============================================
   # Dependency audit.

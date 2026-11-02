@@ -1,171 +1,80 @@
-// ============================================
-// MIND ENGINE — the Mind panel's think path.
-//
-// Persona turns do not go through here (those are personaTurn.service).
-// This still has to fail closed, never leave status stuck on processing,
-// and return the answer without writing it anywhere: the observations pool
-// is persisted and wireable into prompts, so a reply enters it by click only.
-// ============================================
-
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { MindEngine } from './mind.engine';
-import { useMindStore } from '@/core/stores/mindStore';
-import { useBlockStore } from '@/core/stores/blockStore';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { thinkInPreview } from './mind.engine';
+import { PREVIEW_AI_OFF_MESSAGE } from './personaTurn.service';
+import { useBlockStore, useMindStore } from '@/core/stores';
 import { useWireStore } from '@/core/stores/wireStore';
-import { createInitialMindState } from '@/core/schemas/mind.schema';
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import type { DataWire } from '@/core/schemas/wire.schema';
-import { runTurn } from '@/core/cognition';
 
-vi.mock('@/core/cognition', () => ({
-    runTurn: vi.fn()
-}));
+const NOTHING_IN_SCOPE = /^Nothing to think about/;
+const firstPersona = useMindStore.getState().personas[0].id;
 
-function block(id: string, name: string, shellId: string): BlockInstance {
+function block(id: string, shellId = 'root'): BlockInstance {
     return {
         instance_id: id,
-        schema: { block_id: 'hackernews_feed', display_name: name, category: 'pulse' },
+        schema: { block_id: 'fred_series', display_name: id, category: 'truth' },
         status: 'connected',
-        last_updated: Date.now(),
-        data: { items: [{ title: 'Story' }] },
+        last_updated: null,
+        data: { value: 1 },
         position: { x: 0, y: 0 },
-        dimensions: { width: 1, height: 1 },
+        dimensions: { width: 100, height: 80 },
         shellId
     } as unknown as BlockInstance;
 }
 
-function wire(id: string, from: string, to: string, shellId: string): DataWire {
-    return {
-        id,
-        sourceBlockId: from,
-        targetBlockId: to,
-        wireType: 'push',
-        status: 'active',
-        filters: { autoRefresh: true },
-        shellId
-    } as unknown as DataWire;
+function wire(from: string, to: string): DataWire {
+    return { id: `${from}-${to}`, sourceBlockId: from, targetBlockId: to, shellId: 'root' } as unknown as DataWire;
 }
 
-function seedBlock() {
-    const b = block('b1', 'Hacker News', 'root');
-    useBlockStore.setState({ blocks: [b], activeShellId: 'root' });
-    // Think only sees wired or pinned blocks; pinning is the explicit way in.
-    useMindStore.getState().pinBlock('b1', 'hackernews_feed', b.data);
-}
-
-/** Everything the model was sent for the nth Think. */
-function sentPrompt(call = 0): string {
-    const messages = vi.mocked(runTurn).mock.calls[call][0];
-    return messages.map(m => m.content).join('\n');
+function expectOutcome(question: string | undefined, message: string | RegExp, status: 'error' | 'ready') {
+    const said = thinkInPreview(question);
+    if (typeof message === 'string') expect(said).toBe(message);
+    else expect(said).toMatch(message);
+    expect(useMindStore.getState().status).toBe(status);
 }
 
 beforeEach(() => {
-    useMindStore.setState(createInitialMindState());
     useBlockStore.setState({ blocks: [], activeShellId: 'root' });
     useWireStore.setState({ wires: [] });
-    vi.mocked(runTurn).mockReset();
+    useMindStore.setState({ activePersonaId: firstPersona, status: 'initializing' });
+    useMindStore.getState().clearFocus();
 });
 
-describe('MindEngine.think', () => {
-    it.each([undefined, '   '])('refuses a context-only Think (%j) with nothing wired or pinned', async (question) => {
-        const result = await new MindEngine().think(question);
-        expect(result.success).toBe(false);
-        expect(result.error).toMatch(/wired or pinned/);
-        expect(runTurn).not.toHaveBeenCalled();
-        expect(useMindStore.getState().status).toBe('ready');
+describe('thinkInPreview', () => {
+    it('says so when no persona is active, whatever is in scope', () => {
+        useMindStore.setState({ activePersonaId: 'nobody' });
+        expectOutcome(undefined, 'No active persona', 'error');
+        expectOutcome('A question', 'No active persona', 'error');
     });
 
-    it('answers an explicit question with nothing wired or pinned (Quick Ask)', async () => {
-        vi.mocked(runTurn).mockResolvedValue({ success: true, content: 'A market prices an event.', tokensUsed: 1 });
-
-        const result = await new MindEngine().think('User asks: what is a prediction market?');
-
-        expect(result).toMatchObject({ success: true, response: 'A market prices an event.' });
-        const prompt = sentPrompt();
-        expect(prompt).toContain('what is a prediction market?');
-        expect(prompt).toContain('Blocks in scope: 0');
-        expect(useMindStore.getState().status).toBe('ready');
+    it('refuses for an empty scope and leaves the Mind ready', () => {
+        expectOutcome(undefined, NOTHING_IN_SCOPE, 'ready');
     });
 
-    it('fails closed when the LLM turn fails, and is not left processing', async () => {
-        seedBlock();
-        vi.mocked(runTurn).mockResolvedValue({ success: false, content: '', error: 'Ollama is not running' });
-
-        const engine = new MindEngine();
-        const result = await engine.think();
-
-        expect(result).toEqual({ success: false, error: 'Ollama is not running' });
-        expect(useMindStore.getState().status).toBe('error');
-
-        vi.mocked(runTurn).mockResolvedValue({ success: true, content: 'ok', tokensUsed: 1 });
-        const second = await engine.think();
-        expect(second.success).toBe(true);
+    it('treats a blank question as no question', () => {
+        expectOutcome('   ', NOTHING_IN_SCOPE, 'ready');
     });
 
-    it('returns a successful answer and writes it into no pool without confirmation', async () => {
-        seedBlock();
-        const before = useMindStore.getState().contextPools.map(p => p.entries.length);
-        vi.mocked(runTurn).mockResolvedValue({
-            success: true,
-            content: 'Rates look steady.',
-            tokensUsed: 12
-        });
-
-        const engine = new MindEngine();
-        const result = await engine.think('What do you see?');
-
-        expect(result.success).toBe(true);
-        expect(result.response).toBe('Rates look steady.');
-        const pools = useMindStore.getState().contextPools;
-        expect(pools.map(p => p.entries.length)).toEqual(before);
-        expect(pools.some(p => p.entries.some(e => e.content.includes('Rates look steady.')))).toBe(false);
-        expect(useMindStore.getState().status).toBe('ready');
+    it('gives a question with nothing in scope the AI-off message', () => {
+        expectOutcome('A question', PREVIEW_AI_OFF_MESSAGE, 'error');
     });
 
-    it('rejects a second think while one is in flight', async () => {
-        seedBlock();
-        let release!: (value: { success: true; content: string }) => void;
-        vi.mocked(runTurn).mockImplementation(
-            () => new Promise(resolve => { release = resolve; })
-        );
-
-        const engine = new MindEngine();
-        const first = engine.think();
-        const second = await engine.think();
-        expect(second).toEqual({ success: false, error: 'Already processing' });
-
-        release({ success: true, content: 'done' });
-        await first;
+    it('gives a wired scope the AI-off message', () => {
+        useBlockStore.setState({ blocks: [block('a'), block('b')] });
+        useWireStore.setState({ wires: [wire('a', 'b')] });
+        expectOutcome(undefined, PREVIEW_AI_OFF_MESSAGE, 'error');
     });
-});
 
-// ---- Think's context is what the canvas shows ------------------------------
-// Which blocks count (wired, pinned, active shell) is covered against the
-// snapshot itself in shell.snapshot.test.ts; this is the two-turn engine path.
+    it('gives a pinned scope the AI-off message', () => {
+        useBlockStore.setState({ blocks: [block('a')] });
+        expect(useMindStore.getState().pinBlock('a', 'fred_series', { value: 1 })).toBe(true);
+        expectOutcome(undefined, PREVIEW_AI_OFF_MESSAGE, 'error');
+    });
 
-describe('MindEngine.think — context is what the canvas shows', () => {
-    it('does not carry a shell A answer into the prompt for shell B', async () => {
-        useBlockStore.setState({
-            blocks: [
-                block('a1', 'A-One', 'A'), block('a2', 'A-Two', 'A'),
-                block('b1', 'B-One', 'B'), block('b2', 'B-Two', 'B'), block('b3', 'B-Loose', 'B')
-            ],
-            activeShellId: 'A'
-        });
-        useWireStore.setState({ wires: [wire('wa', 'a1', 'a2', 'A'), wire('wb', 'b1', 'b2', 'B')] });
-        const engine = new MindEngine();
-
-        vi.mocked(runTurn).mockResolvedValueOnce({ success: true, content: 'A-ANSWER-SECRET', tokensUsed: 1 });
-        expect((await engine.think()).success).toBe(true);
-
-        useBlockStore.setState({ activeShellId: 'B' });
-        vi.mocked(runTurn).mockResolvedValueOnce({ success: true, content: 'ok', tokensUsed: 1 });
-        expect((await engine.think()).success).toBe(true);
-
-        const second = sentPrompt(1);
-        expect(second).toContain('B-One');
-        expect(second).not.toContain('B-Loose');
-        expect(second).not.toContain('A-One');
-        expect(second).not.toContain('A-ANSWER-SECRET');
+    it('does not count a wire or pin in another shell', () => {
+        useBlockStore.setState({ blocks: [block('a'), block('b'), block('elsewhere', 'other')] });
+        useWireStore.setState({ wires: [wire('a', 'elsewhere')] });
+        useMindStore.getState().pinBlock('elsewhere', 'fred_series', { value: 1 });
+        expectOutcome(undefined, NOTHING_IN_SCOPE, 'ready');
     });
 });

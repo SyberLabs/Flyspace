@@ -4,9 +4,6 @@
 // read-only scope: a token Flyspace asks for can read, never change, the
 // person's data. Write and destructive OAuth surface is not built (AGENTS.md
 // stop condition 3).
-//
-// Whether the owner registered an OAuth client for a provider is a server
-// fact (GET /api/oauth); this list is what the compiler may bind.
 
 export interface ConnectProvider {
     id: 'google';
@@ -30,11 +27,6 @@ const CONNECT_PROVIDERS: readonly ConnectProvider[] = [
         isReadOnlyScope: scope => /^https:\/\/www\.googleapis\.com\/auth\/[a-z0-9._-]+\.readonly$/i.test(scope)
     }
 ];
-
-/** The same-origin BroadcastChannel a sign-in's callback page answers on. */
-export const CONNECT_CHANNEL = 'flyspace-connect';
-
-export type ConnectProviderId = ConnectProvider['id'];
 
 export function connectProvider(id: string): ConnectProvider | undefined {
     return CONNECT_PROVIDERS.find(provider => provider.id === id);

@@ -21,13 +21,10 @@ import { sealManifest, type CapabilityInput } from './manifest';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
 import {
     bindLocalHandler,
-    bindMcpTransport,
     executeCapability,
     previewCapabilityRun,
-    unbindLocalHandler,
-    unbindMcpTransport
+    unbindLocalHandler
 } from './execute';
-import { bindAsyncRuntime, unbindAsyncRuntime, type AsyncClock } from './asyncRuntime';
 import { clearExecutionLedger } from './executionLedger';
 import { capabilitySecrets } from './secrets';
 import type { CapabilityResult } from './project';
@@ -44,19 +41,7 @@ interface Fixture {
     hashedForm(digestInput: Record<string, unknown>): unknown;
     /** What the transport received, in the same form. */
     sentForm(received: unknown): unknown;
-    clock?: AsyncClock;
     cleanup(): void;
-}
-
-function clock(): AsyncClock {
-    let now = NOW;
-    return {
-        now: () => now,
-        async sleep(ms) {
-            now += ms;
-            await Promise.resolve();
-        }
-    };
 }
 
 function httpFixture(): Fixture {
@@ -92,78 +77,6 @@ function httpFixture(): Fixture {
     };
 }
 
-function mcpFixture(): Fixture {
-    const transport = { kind: 'mcp' as const, serverId: 'board', origin: 'https://board.example.test', toolName: 'post' };
-    const installed = installProposal(sealManifest({
-        version: 1,
-        id: canonicalCapabilityId(transport),
-        title: 'Post',
-        source: { kind: 'mcp', locator: 'fixture://mcp/board', operationId: 'post' },
-        effect: 'write',
-        effectSource: 'declared',
-        approval: 'pending',
-        invocation: 'manual',
-        trigger: { kind: 'manual' },
-        auth: { kind: 'none' },
-        transport,
-        inputs: [PAYLOAD],
-        output: { schema: { kind: 'null' }, presentation: 'raw' }
-    }));
-    expect(installed.ok, installed.errors.join('; ')).toBe(true);
-    const manifest = approveCapability(installed.manifest!.id).manifest!;
-    expect(manifest.effect).toBe('write');
-    const received: unknown[] = [];
-    bindMcpTransport('board', { origin: 'https://board.example.test', call: async (_server, _tool, args) => { received.push(args); return null; } });
-    return {
-        id: manifest.id,
-        received,
-        hashedForm: digestInput => digestInput.argumentsJson,
-        sentForm: args => JSON.stringify(args),
-        cleanup: () => unbindMcpTransport('board')
-    };
-}
-
-function asyncFixture(): Fixture {
-    const transport = { kind: 'async' as const, runtimeId: 'jobs', operation: 'job-7' };
-    const installed = installProposal(sealManifest({
-        version: 1,
-        id: canonicalCapabilityId(transport),
-        title: 'Submit job',
-        source: { kind: 'bring', locator: 'fixture://jobs/job-7', operationId: 'job-7' },
-        effect: 'write',
-        effectSource: 'declared',
-        approval: 'pending',
-        invocation: 'manual',
-        trigger: { kind: 'manual' },
-        auth: { kind: 'none' },
-        transport,
-        execution: { kind: 'async_poll', pollIntervalMs: 5_000, maxDurationMs: 120_000 },
-        inputs: [PAYLOAD],
-        output: { schema: { kind: 'object' }, presentation: 'raw' }
-    }));
-    expect(installed.ok, installed.errors.join('; ')).toBe(true);
-    const manifest = approveCapability(installed.manifest!.id).manifest!;
-    expect(manifest.effect).toBe('write');
-    const received: unknown[] = [];
-    bindAsyncRuntime('jobs', {
-        async start(_operation, args) {
-            received.push(args);
-            return { externalRunId: `ext_${received.length}` };
-        },
-        async poll() {
-            return { status: 'succeeded', value: {} };
-        }
-    });
-    return {
-        id: manifest.id,
-        received,
-        hashedForm: digestInput => digestInput.argumentsJson,
-        sentForm: args => JSON.stringify(args),
-        clock: clock(),
-        cleanup: () => unbindAsyncRuntime('jobs')
-    };
-}
-
 function localFixture(): Fixture {
     const transport = { kind: 'local' as const, handler: 'fixture.write' };
     const manifest = sealManifest({
@@ -196,8 +109,6 @@ function localFixture(): Fixture {
 
 const TRANSPORTS: Array<[string, () => Fixture]> = [
     ['http', httpFixture],
-    ['mcp', mcpFixture],
-    ['async', asyncFixture],
     ['local', localFixture]
 ];
 
@@ -264,10 +175,7 @@ describe.each(TRANSPORTS)('%s write: the confirmed arguments are the sent argume
     async function confirmAndRun(input: Record<string, unknown>, confirmedInput = input): Promise<CapabilityResult> {
         const preview = previewCapabilityRun(fixture.id, confirmedInput);
         if (!preview.ok) throw new Error(preview.result.error?.message);
-        return executeCapability(fixture.id, input, {
-            confirmedRun: preview.preview.digest,
-            ...(fixture.clock ? { clock: fixture.clock } : {})
-        });
+        return executeCapability(fixture.id, input, { confirmedRun: preview.preview.digest });
     }
 
     it('refuses an undefined property instead of sharing a confirmation with an object without it', async () => {
@@ -335,7 +243,7 @@ describe.each(TRANSPORTS)('%s write: the confirmed arguments are the sent argume
 
 describe('the run ledger keys on the dispatched arguments', () => {
     it('a different argument under the same idempotency key conflicts instead of replaying', async () => {
-        const fixture = mcpFixture();
+        const fixture = localFixture();
         try {
             const run = async (payload: Record<string, unknown>) => {
                 const preview = previewCapabilityRun(fixture.id, { payload });
@@ -351,7 +259,7 @@ describe('the run ledger keys on the dispatched arguments', () => {
     });
 
     it('arguments that serialize differently conflict even when a canonical form would match', async () => {
-        const fixture = mcpFixture();
+        const fixture = localFixture();
         try {
             const run = async (payload: Record<string, unknown>) => {
                 const preview = previewCapabilityRun(fixture.id, { payload });

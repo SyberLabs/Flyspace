@@ -104,21 +104,6 @@ export const MUTATION_INVENTORY: InventoryEntry[] = [
         ]
     },
     {
-        file: 'src/components/mind/ThinkResultModal.tsx',
-        routed: [],
-        exceptions: [
-            { write: 'addBlock', in: 'handleCrystallize', reason: 'places an insight note with a custom schema and a content payload; the engine add takes a vocabulary type and no data, and no speech verb makes this note' }
-        ]
-    },
-    {
-        file: 'src/core/services/crystallize.service.ts',
-        routed: [],
-        exceptions: [
-            { write: 'addBlock', in: 'crystallize', reason: 'writes the Mind pool and its memory block together; a separate authority from speech "remember this"' },
-            { write: 'addWire', in: 'crystallize', reason: 'wires the memory block it just created, through wireStore admission' }
-        ]
-    },
-    {
         file: 'src/core/services/wire.service.ts',
         routed: [],
         exceptions: [

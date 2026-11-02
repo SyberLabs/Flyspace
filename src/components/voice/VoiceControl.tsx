@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { browserSpeechAdapter } from '@/core/interaction/browserSpeechAdapter';
-import { fallbackSpeechAdapter, openaiRealtimeAdapter } from '@/core/interaction/openaiRealtimeAdapter';
 import { spatialSession } from '@/core/interaction/session';
 import { browserSpeechFeedback, emitFeedback, silenceFeedback, type SpeechFeedbackAdapter } from '@/core/interaction/speechFeedback';
 import { createSpeechInput, type SpeechOutcome } from '@/core/interaction/speechInput';
@@ -28,11 +27,6 @@ function providerLabel(capture: SpeechCapture): string {
     return name;
 }
 
-/** Remote transcription when the server says it is configured, the browser recognizer otherwise. */
-function defaultSpeechAdapter(): SpeechAdapter {
-    return fallbackSpeechAdapter(openaiRealtimeAdapter(), browserSpeechAdapter());
-}
-
 function outcomeText(outcome: SpeechOutcome): string {
     if (outcome.kind === 'error') return outcome.message;
     if (outcome.kind === 'silence') return "I didn't hear anything.";
@@ -51,7 +45,7 @@ export function VoiceControl({
 }) {
     const [provider, setProvider] = useState<string | null>(null);
     const [input] = useState(() => createSpeechInput({
-        adapter: adapter ?? defaultSpeechAdapter(),
+        adapter: adapter ?? browserSpeechAdapter(),
         authority: spatialSession,
         onListening: capture => setProvider(providerLabel(capture))
     }));

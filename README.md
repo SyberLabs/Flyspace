@@ -2,10 +2,13 @@
 
 <h1 align="center">Flyspace</h1>
 
-A canvas for thinking with AI over live data. Drop **blocks** that pull real
-numbers - prediction markets, economic series, crypto, news, research - wire
-them into **personas**, and ask a question that is answered from what the
-wires are actually carrying.
+A canvas over live data. Drop **blocks** that pull real numbers - prediction
+markets, economic series, crypto, news, research - and wire them together.
+
+This repo is what runs at https://omni.syberlabs.io, a keyless public preview.
+Personas appear on the canvas, but AI answers are off: the code that called a
+model, and every other server backend the preview could not reach, was deleted
+on 2026-11-02 (last present at commit `8a21350`).
 
 ## Run
 
@@ -14,18 +17,13 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-Without any keys the canvas still runs: every built-in data source is public
-(Polymarket, CoinGecko, Hacker News, World Bank, OpenAlex, and others). A persona
-needs an LLM - Ollama runs locally with no key.
+Open [http://localhost:3000](http://localhost:3000). No keys are needed: every
+built-in data source is public (Polymarket, CoinGecko, Hacker News, World Bank,
+OpenAlex, and others).
 
 ## The idea
 
-A block is a live view of one source. A wire says *this feeds that*. A persona
-is a mind whose entire context is what its incoming wires carry - so the
-question "what does this thing actually know?" has a literal answer you can
-point at on screen.
+A block is a live view of one source. A wire says *this feeds that*.
 
 Shells are saved canvases. The Shell Store spawns pre-wired ones; the
 **Investor** shell arrives with its blocks and wires already connected.
@@ -33,15 +31,15 @@ Shells are saved canvases. The Shell Store spawns pre-wired ones; the
 ## Capability compiler
 
 An unknown API can be compiled into a native block instead of hand-written. The
-compilers in `src/core/capabilities/` turn an OpenAPI document, MCP tool schemas,
-or a structured "bring" description into a `CapabilityManifest`.
+compiler in `src/core/capabilities/` turns an OpenAPI document into a
+`CapabilityManifest`.
 `installProposal` is the only gate that registers one. Write and destructive
 capabilities stay `pending` until `approveCapability`, and a manifest never
 grants itself authority. Execution has idempotency keys and reports
 `EFFECT_UNCERTAIN` when a write may have left the process. See
 `src/core/capabilities/DESIGN.md`. Claim ceiling: this is tested against
-fixtures and stubbed transports; no third-party API or MCP server has been
-measured in production use.
+fixtures and stubbed transports; no third-party API has been measured in
+production use.
 
 ## Spoken canvas control
 
@@ -51,61 +49,6 @@ propose commands; the interaction engine (`src/core/interaction/`) decides. It
 refuses unknown or ambiguous names, previews a delete until you confirm, and
 supports undo. Claim ceiling: tested with typed-in transcripts; there is no live
 microphone measurement of recognition accuracy or latency.
-
-## Configuration
-
-Keys are read **server-side** from `process.env` and are never sent to the
-browser. Copy the example and fill in only what you need:
-
-```bash
-cp .env.example .env
-```
-
-| Variable | Purpose |
-|----------|---------|
-| `OLLAMA_BASE_URL` | Local LLM (Ollama). Default `http://localhost:11434`. No key. |
-| `ANTHROPIC_API_KEY` | Claude for Mind / personas. |
-| `GOOGLE_API_KEY` | Gemini for Mind / personas. |
-| `DATABASE_URL` | **Optional.** Postgres for the inference ledger. Blank = off. |
-
-Only Ollama streams an answer token by token today. Anthropic and Google
-answers arrive whole and are shown when complete; the ledger records those
-runs as `streamed: false`.
-
-### The inference ledger (optional)
-
-Set `DATABASE_URL` and run `npm run db:migrate` to keep a durable server-side
-record of every LLM execution - provider, model, status, latency, token
-counts, and which wired sources actually fed the turn:
-
-```bash
-npm run db:migrate
-curl 'http://localhost:3000/api/inference-runs?limit=5'
-
-# everything that made one answer, however many personas deep
-curl 'http://localhost:3000/api/inference-runs/42/lineage'
-```
-
-When one persona feeds another, the ledger records which *run* was consumed,
-not just which block - so the full chain behind a cascade's answer stays
-walkable long after the upstream blocks have refetched.
-
-Postgres owns **only** server-side run records (these, plus the capability
-broker's execution rows). The canvas - blocks, wires, shells, personas,
-memory - stays in IndexedDB, because it belongs to the person at the keyboard
-and must work with no server at all. A run belongs to the server: it is the
-only party that held the key, called the provider and timed it. Leave
-`DATABASE_URL` blank and the ledger is a no-op. See `INFERENCE_LEDGER.md`.
-
-> **Hosting:** this is local-first and single-user. Keys are shared
-> server-side, and there is no application authentication, so a public URL
-> would hand every visitor your API credits *and* the prompt and answer
-> excerpts in the ledger. The decision on record is that a deployed OmniOS
-> goes on a private network (Tailscale / WireGuard / IP allowlist), not a
-> public one. The dev and start scripts bind `127.0.0.1`. The one exception
-> is the limited public preview at omni.syberlabs.io, keyless and run with
-> `OMNI_PUBLIC_DEMO=1`; `DEPLOYMENT.md` records it, and the checklist that
-> has to clear before anything more is reachable.
 
 ## Development
 
@@ -122,25 +65,16 @@ npm run test:e2e    # playwright golden path (needs npm run build:next first)
 Node version comes from `.nvmrc`, which CI reads too, so local and CI cannot
 drift apart.
 
-CI runs four jobs on every push and pull request:
+CI runs three jobs on every push and pull request:
 
 | Job | What it proves |
 |-----|----------------|
 | Typecheck, Test & Build | the five checks above, including the Playwright golden path |
-| Client bundle carries no secrets | builds with a canary value per secret env var, fails if one reaches `.next/static` |
-| Inference Ledger (Postgres) | migrations apply and re-apply against a real `postgres:16`; constraints, foreign keys and the recursive lineage walk execute |
+| Client bundle carries no secrets | builds with a canary value per secret env var, fails if one reaches `dist/client` |
 | Dependency audit | production deps block on `high`; dev-only advisories are advisory |
 
 `npm run scan:bundle` is the interesting one - it is the check that used to be
 a grep someone had to remember. See `DEPLOYMENT.md`.
-
-The ledger's Postgres-backed tests are skipped unless you give them a scratch
-database of their own. They `TRUNCATE`, so never point this at the database in
-your `.env`:
-
-```bash
-OMNI_TEST_DATABASE_URL=postgres://localhost:5432/omni_test npm test
-```
 
 ## Not in this repo
 
@@ -148,12 +82,13 @@ OMNI_TEST_DATABASE_URL=postgres://localhost:5432/omni_test npm test
   `/api/agent` - moved to
   [SyberLabs/omni-agent](https://github.com/SyberLabs/omni-agent) on
   2026-09-01. It shared no module with the canvas.
+- **Model answers, the inference ledger, the capability broker, OAuth sign-in,
+  remote speech** - deleted on 2026-11-02 because no deployment reaches them.
+  See `APEX_PLAN.md` §7. To bring one back, start from `8a21350`.
 - **The Garden and the life OS** - `/garden`, life-system domains, stability
   and equilibrium modelling - deleted on 2026-09-01. It was a second product
   in the same repo, ~15k lines whose value was gated on history that was
   never built. See `APEX_PLAN.md` §5.
-
-The canvas is the product.
 
 ## Docs
 
@@ -161,5 +96,4 @@ The canvas is the product.
 `TYPED_PORT_SYSTEM.md` covers the port layer (declared ports are enforced when a
 wire is created; blocks without ports stay untyped).
 `AGENTS.md` holds the rules for agents working in this repo.
-`INFERENCE_LEDGER.md` covers the one thing Postgres owns, and why the rest stays
-local. `DEPLOYMENT.md` records the hosting decision and what CI guarantees.
+`DEPLOYMENT.md` records how the preview ships and what CI guarantees.

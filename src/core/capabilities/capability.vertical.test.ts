@@ -20,7 +20,7 @@ import {
     runInstalledCapability,
     uninstallCapability
 } from './registry';
-import { bindMcpTransport, unbindMcpTransport } from './execute';
+import { bindLocalHandler, unbindLocalHandler } from './execute';
 import { allCapabilities, readCapability } from './state';
 // Write runs need a confirmed preview; these tests exercise the engine after one.
 import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
@@ -28,7 +28,7 @@ import { capabilitySecrets } from './secrets';
 import { blockRegistry } from '../registry/BlockRegistry';
 import { useBlockStore } from '../stores/blockStore';
 import { useWireStore } from '../stores/wireStore';
-import { aggregateWireContext, wireService } from '../services/wire.service';
+import { wireService } from '../services/wire.service';
 
 const SPEC = {
     openapi: '3.0.3',
@@ -157,7 +157,7 @@ function manifests() {
 beforeEach(() => {
     clearCapabilities();
     capabilitySecrets.clear();
-    unbindMcpTransport('board');
+    unbindLocalHandler('board.list_board');
     useBlockStore.setState({ blocks: [], activeShellId: 'root' });
     useWireStore.setState({ wires: [] });
 });
@@ -169,20 +169,19 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-/** A manifest for one tool on an MCP server, as the host would install it. */
-function mcpManifest(
-    origin: string,
+/** A manifest for one local handler, as the host would install it. */
+function localManifest(
     toolName: string,
     effect: CapabilityEffect,
     inputs: CapabilityInput[],
     output: CapabilityManifest['output']
 ): CapabilityManifest {
-    const transport = { kind: 'mcp' as const, serverId: 'board', origin, toolName };
+    const transport = { kind: 'local' as const, handler: `board.${toolName}` };
     return sealManifest({
         version: 1,
         id: canonicalCapabilityId(transport),
         title: toolName,
-        source: { kind: 'mcp', locator: 'board', operationId: toolName },
+        source: { kind: 'bring', locator: 'board', operationId: toolName },
         effect,
         effectSource: effect === 'write' ? 'declared' : 'annotation',
         approval: approvalForEffect(effect),
@@ -289,7 +288,8 @@ describe('capability compiler', () => {
         await runInstalledCapability(instanceId);
         const wireId = wireService.createWire(instanceId, personaId);
         expect(wireId).not.toBe('');
-        expect(aggregateWireContext(personaId).context).toContain('Hello from the board');
+        expect(JSON.stringify(useBlockStore.getState().getBlock(instanceId)?.data)).toContain('Hello from the board');
+        expect(useWireStore.getState().getWiresToBlock(personaId).map(wire => wire.id)).toContain(wireId);
 
         const catalogSource = useBlockStore.getState().addBlock(blockRegistry.get('hackernews_feed')!, { x: 0, y: 200 });
         expect(wireService.createWire(catalogSource, personaId)).not.toBe('');
@@ -369,15 +369,16 @@ describe('capability compiler', () => {
         expect(rejected.rejected[0]?.errors.join(' ')).toMatch(/digest/);
     });
 
-    it('gives two MCP servers with the same label and tool at different origins distinct ids that coexist', () => {
-        const output = { schema: { kind: 'array' as const, items: { kind: 'string' as const } }, presentation: 'items' as const };
-        const first = mcpManifest('https://board.example.test', 'list_board', 'write', [], output);
-        const second = mcpManifest('https://other.example.test', 'list_board', 'write', [], output);
+    it('gives the same operation at two origins distinct ids and credential slots that coexist', () => {
+        const first = byOp('listPosts');
+        const second = compileOpenApi({ ...SPEC, servers: [{ url: 'https://other.example.test/v1' }] }).manifests
+            .find(entry => entry.source.operationId === 'listPosts')!;
         expect(first.id).not.toBe(second.id);
+        expect(first.auth.secretRef).not.toBe(second.auth.secretRef);
         expect(installProposal(first).ok).toBe(true);
         expect(installProposal(second).ok).toBe(true);
-        expect(readCapability(first.id)?.transport).toMatchObject({ origin: 'https://board.example.test' });
-        expect(readCapability(second.id)?.transport).toMatchObject({ origin: 'https://other.example.test' });
+        expect(readCapability(first.id)?.transport).toMatchObject({ baseUrl: 'https://board.example.test/v1' });
+        expect(readCapability(second.id)?.transport).toMatchObject({ baseUrl: 'https://other.example.test/v1' });
     });
 
     it('an imported capability blob lands writes pending; the same blob through rehydrate keeps approval', () => {
@@ -414,27 +415,23 @@ describe('capability compiler', () => {
         expect(readCapability(create.id)?.approval).toBe('approved');
     });
 
-    it('runs an MCP read only through its bound transport and holds a destructive tool for approval', async () => {
-        const trustedRead = mcpManifest(
-            'https://board.example.test',
+    it('runs a local read only through its bound handler and holds a destructive one for approval', async () => {
+        const trustedRead = localManifest(
             'list_board',
             'read',
             [{ name: 'q', in: 'argument', required: false, schema: { kind: 'string' } }],
             { schema: { kind: 'array', items: { kind: 'string' } }, presentation: 'items' }
         );
-        const wipe = mcpManifest('https://board.example.test', 'wipe_board', 'destructive', [], { schema: { kind: 'boolean' }, presentation: 'raw' });
+        const wipe = localManifest('wipe_board', 'destructive', [], { schema: { kind: 'boolean' }, presentation: 'raw' });
         expect(trustedRead).toMatchObject({ effect: 'read', approval: 'auto' });
         expect(wipe).toMatchObject({ effect: 'destructive', approval: 'pending' });
         expect(installProposal(trustedRead).ok).toBe(true);
         expect(installProposal(wipe).ok).toBe(true);
 
         const calls: unknown[] = [];
-        bindMcpTransport('board', {
-            origin: 'https://board.example.test',
-            call: async (_server, tool, args) => {
-                calls.push({ tool, args });
-                return ['alpha'];
-            }
+        bindLocalHandler('board.list_board', async (args) => {
+            calls.push({ args: { ...args } });
+            return ['alpha'];
         });
 
         const wiped = await executeCapability(wipe.id, {});
@@ -444,9 +441,9 @@ describe('capability compiler', () => {
         const listed = await executeCapability(trustedRead.id, { q: 'alpha' });
         expect(listed.ok).toBe(true);
         expect(listed.typed?.value).toEqual(['alpha']);
-        expect(calls).toEqual([{ tool: 'list_board', args: { q: 'alpha' } }]);
+        expect(calls).toEqual([{ args: { q: 'alpha' } }]);
 
-        unbindMcpTransport('board');
+        unbindLocalHandler('board.list_board');
         const unbound = await executeCapability(trustedRead.id, {});
         expect(unbound.error?.code).toBe('TRANSPORT_NOT_BOUND');
     });

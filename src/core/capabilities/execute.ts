@@ -6,37 +6,21 @@ import { resolveHttpPath, setQueryParam, stringifyParam } from './httpTarget';
 import { redact } from './redact';
 import {
     admitExecution,
-    executionRecord,
-    executionRecords,
     finishExecution,
     markExecutionDispatched,
-    observeExecution,
-    recordExternalRun,
-    recordUncertainObservation,
-    settleUncertainExecution,
     type ExecutionPhase,
     type ExecutionReceipt,
     type ExecutionRecord
 } from './executionLedger';
-import {
-    AsyncStartRejected,
-    EXTERNAL_RUN_ID_PATTERN,
-    asyncRuntime,
-    pollUntilSettled,
-    systemClock,
-    type AsyncClock,
-    type PollOutcome
-} from './asyncRuntime';
 import { readCapability } from './state';
 import { capabilitySecrets } from './secrets';
-import { houseKeyCovers } from './houseKeys';
 import {
     projectError,
     projectSuccess,
     type CapabilityResult,
     type TypedValue
 } from './project';
-import type { CapabilityExecutionProfile, CapabilityManifest } from './manifest';
+import type { CapabilityManifest } from './manifest';
 import { isRecord, validateValue } from './valueType';
 import { toJsonValue } from './jsonValue';
 import { newId } from '../id';
@@ -44,28 +28,10 @@ import { newId } from '../id';
 const MAX_BODY_CHARS = 1_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 
-/** Per-call credential placement resolved from the manifest's slot. */
-export interface McpCallContext {
-    headers: Record<string, string>;
-}
-
-export interface McpTransport {
-    /** URL origin this transport sends to. A manifest whose transport.origin differs is not bound to it. */
-    origin: string;
-    call(
-        serverId: string,
-        toolName: string,
-        args: Record<string, unknown>,
-        signal?: AbortSignal,
-        context?: McpCallContext
-    ): Promise<unknown>;
-}
-
 export interface LocalCall {
     signal?: AbortSignal;
 }
 
-const mcpTransports = new Map<string, McpTransport>();
 const localHandlers = new Map<string, (args: Record<string, unknown>, call?: LocalCall) => Promise<unknown>>();
 
 export function bindLocalHandler(
@@ -79,21 +45,11 @@ export function unbindLocalHandler(handler: string): void {
     localHandlers.delete(handler);
 }
 
-export function bindMcpTransport(serverId: string, transport: McpTransport): void {
-    mcpTransports.set(serverId, transport);
-}
-
-export function unbindMcpTransport(serverId: string): void {
-    mcpTransports.delete(serverId);
-}
-
 export interface ExecuteOptions {
     fetchImpl?: typeof fetch;
     signal?: AbortSignal;
     /** Same key and same input replays. Same key and different input conflicts. */
     idempotencyKey?: string;
-    /** Time source for async_poll waits. Tests inject one instead of sleeping. */
-    clock?: AsyncClock;
     /**
      * Write and destructive runs only: the digest of the RunPreview a person
      * confirmed. A run whose request differs from that preview is refused.
@@ -105,9 +61,9 @@ export interface ExecuteOptions {
 export interface RunPreview {
     capabilityId: string;
     effect: CapabilityManifest['effect'];
-    /** HTTP method, or CALL / START for a tool or job transport. */
+    /** HTTP method, or CALL for a local handler. */
     method: string;
-    /** The resolved request URL without any credential, or the tool or job it targets. */
+    /** The resolved request URL without any credential, or the local handler. */
     url: string;
     arguments: Record<string, unknown>;
     /** Where the credential travels, never its value. */
@@ -185,12 +141,6 @@ function prepareRun(manifest: CapabilityManifest, args: Readonly<Record<string, 
         method = transport.method;
         url = target.url.toString();
         http = { url, headers, ...(body !== undefined ? { body } : {}) };
-    } else if (transport.kind === 'mcp') {
-        method = 'CALL';
-        url = `mcp:${transport.serverId}/${transport.toolName}`;
-    } else if (transport.kind === 'async') {
-        method = 'START';
-        url = `async:${transport.runtimeId}/${transport.operation}`;
     } else {
         method = 'CALL';
         url = `local:${transport.handler}`;
@@ -239,258 +189,6 @@ export function credentialPlacement(manifest: CapabilityManifest): string | unde
     return 'Authorization header';
 }
 
-type AsyncProfile = Extract<CapabilityExecutionProfile, { kind: 'async_poll' }>;
-
-const UNOBSERVED = 'The external run started and its outcome was not observed. Do not retry automatically.';
-
-/** Runs this session is polling right now. Recovery leaves them alone. */
-const activeAsyncRuns = new Set<string>();
-
-async function executeAsync(
-    manifest: CapabilityManifest,
-    profile: AsyncProfile,
-    args: Readonly<Record<string, unknown>>,
-    headers: Record<string, string>,
-    record: ExecutionRecord,
-    idempotencyKey: string,
-    signal: AbortSignal | undefined,
-    clock: AsyncClock,
-    secret: string | undefined
-): Promise<CapabilityResult> {
-    const runId = record.runId;
-    const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
-    if (manifest.transport.kind !== 'async') {
-        return finish(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an async capability', false), runId, 'failed', clock.now());
-    }
-    const { runtimeId, operation } = manifest.transport;
-    const runtime = asyncRuntime(runtimeId);
-    if (!runtime) {
-        return finish(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No async runtime bound for ${runtimeId}`, false), runId, 'failed', clock.now());
-    }
-    if (signal?.aborted) {
-        return finish(failure(manifest.id, 'CANCELED', 'Execution was canceled', false), runId, 'canceled', clock.now());
-    }
-
-    activeAsyncRuns.add(runId);
-    try {
-        markExecutionDispatched(runId, clock.now());
-        let externalRunId: unknown;
-        try {
-            const started = await runtime.start(operation, args, {
-                headers: { ...headers },
-                signal: bounded(signal),
-                idempotencyKey
-            });
-            externalRunId = started?.externalRunId;
-        } catch (error) {
-            if (error instanceof AsyncStartRejected) {
-                return finish(dispatchedFailure(manifest, 'ASYNC_START_REJECTED', error.message, false, secret), runId, 'failed', clock.now());
-            }
-            if (sideEffect || signal?.aborted) {
-                return finish(failure(manifest.id, 'EFFECT_UNCERTAIN', UNOBSERVED, false), runId, 'uncertain', clock.now());
-            }
-            return finish(dispatchedFailure(
-                manifest,
-                'UPSTREAM_ERROR',
-                error instanceof Error ? error.message : 'The start request failed',
-                false,
-                secret
-            ), runId, 'failed', clock.now());
-        }
-        if (typeof externalRunId !== 'string' || !EXTERNAL_RUN_ID_PATTERN.test(externalRunId)) {
-            return sideEffect
-                ? finish(failure(manifest.id, 'EFFECT_UNCERTAIN', `The start returned no usable run id. ${UNOBSERVED}`, false), runId, 'uncertain', clock.now())
-                : finish(failure(manifest.id, 'UPSTREAM_PARSE', 'The start returned no usable run id', false), runId, 'failed', clock.now());
-        }
-        recordExternalRun(runId, externalRunId, clock.now());
-        const outcome = await pollUntilSettled({
-            runtime,
-            operation,
-            externalRunId,
-            headers,
-            idempotencyKey,
-            pollIntervalMs: profile.pollIntervalMs,
-            deadlineAt: record.startedAt + profile.maxDurationMs,
-            requestTimeoutMs: REQUEST_TIMEOUT_MS,
-            clock,
-            signal,
-            onObserve: (status, at) => observeExecution(runId, status, at)
-        });
-        return settleAsync(manifest, runId, outcome, 'running', clock.now(), secret);
-    } finally {
-        activeAsyncRuns.delete(runId);
-    }
-}
-
-function settleAsync(
-    manifest: CapabilityManifest,
-    runId: string,
-    outcome: PollOutcome,
-    from: 'running' | 'uncertain',
-    at: number,
-    secret: string | undefined
-): CapabilityResult {
-    const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
-    let result: CapabilityResult;
-    let status: 'succeeded' | 'failed' | 'uncertain';
-    if (outcome.kind === 'succeeded') {
-        const schemaErrors = validateValue(manifest.output.schema, outcome.value);
-        if (schemaErrors.length > 0) {
-            const detail = schemaErrors.slice(0, 6).join('; ');
-            if (sideEffect) {
-                // The external run id is already recorded, and the destination
-                // said the run succeeded. Rejecting the value must not read as
-                // a clean failure that invites another start under the same key.
-                result = dispatchedFailure(
-                    manifest,
-                    'TYPED_OUTPUT_MISMATCH',
-                    `The destination reported success and the value was rejected: ${detail}`,
-                    false,
-                    secret
-                );
-                status = 'uncertain';
-            } else {
-                result = dispatchedFailure(manifest, 'TYPED_OUTPUT_MISMATCH', detail, false, secret);
-                status = 'failed';
-            }
-        } else {
-            const typed: TypedValue = { schema: manifest.output.schema, value: outcome.value };
-            result = { ok: true, capabilityId: manifest.id, typed, presentation: projectSuccess(manifest, typed) };
-            status = 'succeeded';
-        }
-    } else if (outcome.kind === 'failed') {
-        result = dispatchedFailure(manifest, 'ASYNC_RUN_FAILED', outcome.message, false, secret);
-        status = 'failed';
-    } else if (outcome.kind === 'canceled') {
-        result = failure(manifest.id, 'EFFECT_UNCERTAIN', `Polling was canceled. ${UNOBSERVED}`, false);
-        status = 'uncertain';
-    } else if (sideEffect) {
-        result = failure(manifest.id, 'EFFECT_UNCERTAIN', UNOBSERVED, false);
-        status = 'uncertain';
-    } else {
-        const code = outcome.kind === 'deadline' ? 'DEADLINE' : 'UNOBSERVABLE';
-        result = dispatchedFailure(manifest, code, outcome.kind === 'deadline' ? 'The run did not finish within its profile' : outcome.message, false, secret);
-        status = 'failed';
-    }
-
-    if (from === 'running') return finish(result, runId, status, at);
-    if (outcome.kind === 'succeeded' || outcome.kind === 'failed') {
-        if (status === 'uncertain') recordUncertainObservation(runId, receiptFor(result));
-        else settleUncertainExecution(runId, status, receiptFor(result), at);
-    }
-    result.runId = runId;
-    return result;
-}
-
-interface ReconcileReport {
-    runId: string;
-    status: ExecutionPhase;
-    observed: boolean;
-    reason?: string;
-    result?: CapabilityResult;
-}
-
-/**
- * Query the destination for one async run by its external run id. This
- * observes; it never starts the job again. An uncertain run closes only if
- * the destination reports a terminal status.
- */
-export async function reconcileAsyncExecution(
-    runId: string,
-    options: { clock?: AsyncClock; signal?: AbortSignal } = {}
-): Promise<ReconcileReport> {
-    const clock = options.clock ?? systemClock;
-    const record = executionRecord(runId);
-    if (!record || record.executionProfile !== 'async_poll') {
-        return { runId, status: record?.status ?? 'failed', observed: false, reason: 'not an async run' };
-    }
-    if (activeAsyncRuns.has(runId)) return { runId, status: record.status, observed: false, reason: 'polling in this session' };
-    const sideEffect = record.effect === 'write' || record.effect === 'destructive';
-
-    if (record.status === 'admitted') {
-        finishExecution(runId, 'failed', { ok: false, code: 'INTERRUPTED', message: 'The start was never dispatched' }, clock.now());
-        return { runId, status: 'failed', observed: false, reason: 'never dispatched' };
-    }
-    if (record.status !== 'running' && record.status !== 'uncertain') {
-        return { runId, status: record.status, observed: false, reason: 'already settled' };
-    }
-    if (!record.externalRunId) {
-        if (record.status === 'running') {
-            const status = sideEffect ? 'uncertain' : 'failed';
-            finishExecution(runId, status, {
-                ok: false,
-                code: sideEffect ? 'EFFECT_UNCERTAIN' : 'UNOBSERVABLE',
-                message: `The start was dispatched and no external run id was recorded. ${UNOBSERVED}`
-            }, clock.now());
-            return { runId, status, observed: false, reason: 'no external run id' };
-        }
-        return { runId, status: record.status, observed: false, reason: 'no external run id' };
-    }
-
-    const manifest = readCapability(record.capabilityId);
-    if (!manifest || manifest.digest !== record.manifestDigest || manifest.transport.kind !== 'async' || manifest.execution?.kind !== 'async_poll') {
-        return { runId, status: record.status, observed: false, reason: 'the manifest that started this run is not installed' };
-    }
-    if (manifest.approval === 'denied' || manifest.approval === 'pending') {
-        return { runId, status: record.status, observed: false, reason: `capability is ${manifest.approval}` };
-    }
-    const runtime = asyncRuntime(manifest.transport.runtimeId);
-    if (!runtime) return { runId, status: record.status, observed: false, reason: 'runtime not bound' };
-    const auth = applyAuth(manifest);
-    if ('error' in auth) return { runId, status: record.status, observed: false, reason: 'credential slot is empty' };
-
-    activeAsyncRuns.add(runId);
-    try {
-        const outcome = await pollUntilSettled({
-            runtime,
-            operation: manifest.transport.operation,
-            externalRunId: record.externalRunId,
-            headers: auth.headers,
-            idempotencyKey: record.idempotencyKey,
-            pollIntervalMs: manifest.execution.pollIntervalMs,
-            deadlineAt: record.startedAt + manifest.execution.maxDurationMs,
-            requestTimeoutMs: REQUEST_TIMEOUT_MS,
-            clock,
-            signal: options.signal,
-            onObserve: (status, at) => observeExecution(runId, status, at)
-        });
-        const result = settleAsync(manifest, runId, outcome, record.status, clock.now(), auth.secret);
-        const after = executionRecord(runId);
-        return {
-            runId,
-            status: after?.status ?? record.status,
-            observed: outcome.kind === 'succeeded' || outcome.kind === 'failed',
-            result
-        };
-    } finally {
-        activeAsyncRuns.delete(runId);
-    }
-}
-
-/**
- * After a reload: every async run the ledger still shows open, and every
- * uncertain one with an external run id, is observed through that id.
- * Nothing is dispatched again.
- */
-export async function recoverAsyncExecutions(
-    options: { clock?: AsyncClock; signal?: AbortSignal } = {}
-): Promise<ReconcileReport[]> {
-    const open = executionRecords().filter(record =>
-        record.executionProfile === 'async_poll'
-        && (record.status === 'admitted' || record.status === 'running'
-            || (record.status === 'uncertain' && record.externalRunId !== undefined))
-        && !activeAsyncRuns.has(record.runId)
-    );
-    const reports: ReconcileReport[] = [];
-    for (const record of open) reports.push(await reconcileAsyncExecution(record.runId, options));
-    return reports;
-}
-
-function bounded(signal: AbortSignal | undefined): AbortSignal {
-    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-    return signal ? AbortSignal.any([signal, timeout]) : timeout;
-}
-
 export async function executeCapability(
     capabilityId: string,
     input: Record<string, unknown> = {},
@@ -536,8 +234,6 @@ export async function executeCapability(
     }
     const idempotencyKey = options.idempotencyKey
         ?? `once_${newId()}`;
-    const profile = manifest.execution?.kind === 'async_poll' ? manifest.execution : undefined;
-    const clock = options.clock ?? systemClock;
     const admission = admitExecution({
         capabilityId,
         manifestDigest: manifest.digest,
@@ -547,14 +243,9 @@ export async function executeCapability(
         // instead of replaying.
         input: run.preview.digest,
         idempotencyKey,
-        // An async job's budget is its profile, not the per-request timeout.
-        deadlineMs: profile ? profile.maxDurationMs + REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS + 5_000,
-        ...(profile ? { now: clock.now(), executionProfile: 'async_poll' as const } : {}),
-        ...(manifest.provenance ? { providerId: manifest.provenance.providerId } : {}),
-        observing: activeAsyncRuns
+        deadlineMs: REQUEST_TIMEOUT_MS + 5_000
     });
     if (admission.kind !== 'admit') return replay(manifest, admission.record, admission.kind);
-    if (profile) return executeAsync(manifest, profile, run.args, auth.headers, admission.record, idempotencyKey, options.signal, clock, auth.secret);
 
     const runId = admission.record.runId;
     const sideEffect = manifest.effect === 'write' || manifest.effect === 'destructive';
@@ -673,9 +364,6 @@ function applyAuth(manifest: CapabilityManifest): { headers: Record<string, stri
     const auth = manifest.auth;
     if (auth.kind === 'none') return { headers, query };
     const secret = auth.secretRef ? capabilitySecrets.get(auth.secretRef) : undefined;
-    // No key of the person's own, but the server holds one for this exact
-    // curated manifest: the broker attaches it (dataPlant.ts).
-    if (!secret && houseKeyCovers(manifest)) return { headers, query };
     if (!secret) {
         return {
             error: failure(manifest.id, 'AUTH_UNBOUND', `Secret slot ${auth.secretRef ?? '(missing)'} is empty`, false)
@@ -710,7 +398,6 @@ async function dispatch(
         return executeHttp(manifest, run, authHeaders, authQuery, fetchImpl, signal, idempotencyKey, secret, markDispatched);
     }
     markDispatched();
-    if (manifest.transport.kind === 'mcp') return executeMcp(manifest, run.args, authHeaders, signal);
     return executeLocal(manifest, run.args, signal);
 }
 
@@ -864,43 +551,6 @@ async function executeBroker(
         return halt(failure(manifest.id, 'UPSTREAM_ERROR', `Broker HTTP ${response.status}`, false));
     }
     return { type: 'value', value: payload.value };
-}
-
-async function executeMcp(
-    manifest: CapabilityManifest,
-    args: Readonly<Record<string, unknown>>,
-    authHeaders: Record<string, string>,
-    signal?: AbortSignal
-): Promise<Step> {
-    if (manifest.transport.kind !== 'mcp') {
-        return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', 'Not an mcp capability', false));
-    }
-    const transport = mcpTransports.get(manifest.transport.serverId);
-    if (!transport) {
-        return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No MCP transport bound for ${manifest.transport.serverId}`, false));
-    }
-    // The slot was derived from the manifest's origin. A label rebound to
-    // another origin does not receive that origin's credential.
-    if (transport.origin !== manifest.transport.origin) {
-        return halt(failure(
-            manifest.id,
-            'TRANSPORT_NOT_BOUND',
-            `MCP transport for ${manifest.transport.serverId} is bound to ${transport.origin}, not ${manifest.transport.origin}`,
-            false
-        ));
-    }
-    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-    return {
-        type: 'value',
-        value: await transport.call(
-            manifest.transport.serverId,
-            manifest.transport.toolName,
-            args,
-            requestSignal,
-            { headers: { ...authHeaders } }
-        )
-    };
 }
 
 function encodeBase64(value: string): string {

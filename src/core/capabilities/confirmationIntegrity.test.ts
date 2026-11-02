@@ -3,7 +3,7 @@ import { compileOpenApi } from './openapi';
 import { canonicalCapabilityId, credentialSlot } from './identity';
 import { DENIED_HEADER_NAMES, sealManifest, validateManifest, type CapabilityInput, type CapabilityManifest } from './manifest';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
-import { bindMcpTransport, executeCapability, previewCapabilityRun, unbindMcpTransport } from './execute';
+import { bindLocalHandler, executeCapability, previewCapabilityRun, unbindLocalHandler } from './execute';
 import { capabilitySecrets } from './secrets';
 
 const SPEC = {
@@ -189,12 +189,12 @@ describe('the confirmed request is the dispatched request', () => {
     });
 
     it('hands a tool exactly the confirmed arguments', async () => {
-        const transport = { kind: 'mcp' as const, serverId: 'board', origin: 'https://board.example.test', toolName: 'post' };
+        const transport = { kind: 'local' as const, handler: 'board.post' };
         const installed = installProposal(sealManifest({
             version: 1,
             id: canonicalCapabilityId(transport),
             title: 'Post',
-            source: { kind: 'mcp', locator: 'fixture://mcp/board', operationId: 'post' },
+            source: { kind: 'bring', locator: 'fixture://board', operationId: 'post' },
             effect: 'write',
             effectSource: 'declared',
             approval: 'pending',
@@ -211,7 +211,7 @@ describe('the confirmed request is the dispatched request', () => {
         expect(installed.ok, installed.errors.join('; ')).toBe(true);
         const manifest = approveCapability(installed.manifest!.id).manifest!;
         const received: Array<Record<string, unknown>> = [];
-        bindMcpTransport('board', { origin: 'https://board.example.test', call: async (_server, _tool, args) => { received.push(args); return null; } });
+        bindLocalHandler('board.post', async (args) => { received.push(args); return null; });
         try {
             const input = { channel: 'ops', message: { text: 'deploy' } };
             const preview = previewCapabilityRun(manifest.id, input);
@@ -222,7 +222,7 @@ describe('the confirmed request is the dispatched request', () => {
             expect(Object.getPrototypeOf(received[0])).toBeNull();
             expect(JSON.stringify(received[0])).toBe(JSON.stringify(preview.preview.arguments));
         } finally {
-            unbindMcpTransport('board');
+            unbindLocalHandler('board.post');
         }
     });
 });

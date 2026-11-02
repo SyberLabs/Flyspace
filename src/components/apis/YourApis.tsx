@@ -8,7 +8,7 @@ import type { CapabilityManifest } from '@/core/capabilities/manifest';
 import { EffectPill, MethodBadge, destinationOf, operationParts } from './ApiReview';
 import { KeyField, keySlotOf, useHasKey } from './KeyField';
 import { keyGuideFor } from '@/core/capabilities/keyGuide';
-import { KeyGuideNote, TestKeyButton } from './KeyGuideNote';
+import { TestKeyButton } from './KeyGuideNote';
 import { RememberKeysToggle } from './RememberKeys';
 
 /**

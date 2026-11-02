@@ -48,7 +48,6 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
     const removeWire = useWireStore(state => state.removeWire);
     const blocks = useBlockStore(state => state.blocks);
     const activeShellId = useBlockStore(state => state.activeShellId);
-    const readingWireIds = useUIStore(state => state.readingWireIds);
     const selectedBlockId = useUIStore(state => state.selectedBlockId);
 
     const [hoveredWireId, setHoveredWireId] = useState<string | null>(null);
@@ -159,10 +158,9 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
         >
             {ordered.map(({ wire, path, start, end }) => {
                 const isFocused = !!focusIds?.has(wire.id);
-                const isReading = readingWireIds.includes(wire.id);
                 const color = colorById.get(wire.id)!;
-                const dimmed = hasFocus && !isFocused && !isReading;
-                const width = isFocused || isReading ? STROKE_EMPHASIS : STROKE;
+                const dimmed = hasFocus && !isFocused;
+                const width = isFocused ? STROKE_EMPHASIS : STROKE;
 
                 return (
                     <g
@@ -172,7 +170,6 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
                         data-wire-id={wire.id}
                         data-source-id={wire.sourceBlockId}
                         data-target-id={wire.targetBlockId}
-                        data-reading={isReading ? 'true' : undefined}
                         style={{ opacity: dimmed ? 0.28 : 1, transition: 'opacity 0.15s ease' }}
                     >
                         {/* Casing: a dark band under the wire */}
@@ -194,7 +191,6 @@ export function WireRenderer({ activeDragId, dragDelta, shellId }: WireRendererP
                             strokeWidth={width}
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            className={isReading ? 'wire-reading' : undefined}
                             style={{ transition: 'stroke-width 0.15s ease' }}
                         />
 

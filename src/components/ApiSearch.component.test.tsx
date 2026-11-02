@@ -32,16 +32,13 @@ const INDEX: ApiIndex = {
 interface Call { url: string; init?: RequestInit }
 let calls: Call[];
 
-function serve(routes: { intent?: unknown; indexStatus?: number } = {}) {
+function serve(routes: { indexStatus?: number } = {}) {
     calls = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         calls.push({ url, init });
         if (url === '/api-index.json') {
             return routes.indexStatus ? new Response('', { status: routes.indexStatus }) : new Response(JSON.stringify(INDEX));
-        }
-        if (url === '/api/registry-intent') {
-            return routes.intent ? new Response(JSON.stringify(routes.intent)) : new Response('{}', { status: 503 });
         }
         return new Response('not found', { status: 404 });
     }));
@@ -65,7 +62,6 @@ const resultNames = () =>
 
 afterEach(() => {
     vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
 });
 
 describe('ApiSearch', () => {
@@ -134,60 +130,13 @@ describe('ApiSearch', () => {
         expect(await screen.findByText(/Paste an OpenAPI document instead/)).toBeTruthy();
     });
 
-    it('sends nothing for meaning when the feature is off, even on Enter', async () => {
-        serve({ intent: { scores: [{ id: 'weather', p: 1 }], model: 'jev-1.13.0' } });
+    it('searches by keyword only: Enter asks nothing of a server', async () => {
+        serve();
         render(<ApiSearch onSelect={() => {}} />);
         const box = await search('is it going to rain tomorrow');
-        fireEvent.submit(box.closest('form')!);
-        expect(calls.some(c => c.url === '/api/registry-intent')).toBe(false);
-        expect(screen.queryByText(/sent to TypeSafe/)).toBeNull();
-    });
-
-    it('with search by meaning on, discloses it, asks on Enter, and puts the intent\'s API first', async () => {
-        vi.stubEnv('NEXT_PUBLIC_OMNI_REGISTRY_JEV_ENABLED', '1');
-        serve({ intent: { scores: [{ id: 'weather', p: 0.97 }, { id: 'other', p: 0.03 }], model: 'jev-1.13.0' } });
-        render(<ApiSearch onSelect={() => {}} />);
-        const box = await search('is it going to rain tomorrow');
-
-        expect(screen.getByText(/only that, is sent to TypeSafe/)).toBeTruthy();
-        expect(calls.some(c => c.url === '/api/registry-intent')).toBe(false);
         expect(resultNames()[0]).toBe('Review Archive API');
-
-        await act(async () => { fireEvent.submit(box.closest('form')!); });
-        await screen.findByText('Understood as: weather');
-        expect(resultNames()[0]).toBe('Review Visual Crossing Weather API');
-        const intentCall = calls.find(c => c.url === '/api/registry-intent')!;
-        expect(JSON.parse(String(intentCall.init?.body))).toEqual({ query: 'is it going to rain tomorrow' });
-    });
-
-    it('says plainly when the meaning has no API Flyspace can use yet', async () => {
-        vi.stubEnv('NEXT_PUBLIC_OMNI_REGISTRY_JEV_ENABLED', '1');
-        serve({ intent: { scores: [{ id: 'calendar', p: 0.93 }], model: 'jev-1.13.0' } });
-        render(<ApiSearch onSelect={() => {}} />);
-        const box = await search('schedule a meeting with sam');
-        await act(async () => { fireEvent.submit(box.closest('form')!); });
-        const notice = await screen.findByRole('status');
-        expect(notice.textContent).toMatch(/^No calendar API Flyspace can use yet\. The calendar APIs in the directory \(Google Calendar\)/);
-    });
-
-    it('drops back to keyword order once the text changes', async () => {
-        vi.stubEnv('NEXT_PUBLIC_OMNI_REGISTRY_JEV_ENABLED', '1');
-        serve({ intent: { scores: [{ id: 'weather', p: 0.97 }], model: 'jev-1.13.0' } });
-        render(<ApiSearch onSelect={() => {}} />);
-        const box = await search('is it going to rain tomorrow');
-        await act(async () => { fireEvent.submit(box.closest('form')!); });
-        await screen.findByText('Understood as: weather');
-        fireEvent.change(box, { target: { value: 'is it going to rain tomorrow headlines' } });
-        expect(screen.queryByText('Understood as: weather')).toBeNull();
-    });
-
-    it('is never on in the public preview', async () => {
-        vi.stubEnv('NEXT_PUBLIC_OMNI_REGISTRY_JEV_ENABLED', '1');
-        vi.stubEnv('NEXT_PUBLIC_OMNI_PUBLIC_DEMO', '1');
-        serve({ intent: { scores: [{ id: 'weather', p: 1 }], model: 'jev-1.13.0' } });
-        render(<ApiSearch onSelect={() => {}} />);
-        const box = await search('rain');
         fireEvent.submit(box.closest('form')!);
-        expect(calls.some(c => c.url === '/api/registry-intent')).toBe(false);
+        expect(calls.map(c => c.url)).toEqual(['/api-index.json']);
+        expect(screen.queryByText(/sent to TypeSafe/)).toBeNull();
     });
 });

@@ -1,15 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { compileOpenApi } from './openapi';
-import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
+import { canonicalCapabilityId, credentialSlot } from './identity';
 import { sealManifest, type CapabilityManifest } from './manifest';
-import { approveCapability, clearCapabilities, installProposal } from './registry';
-import { bindMcpTransport, executeCapability, previewCapabilityRun, unbindMcpTransport } from './execute';
-import { AsyncStartRejected, bindAsyncRuntime, unbindAsyncRuntime } from './asyncRuntime';
+import { clearCapabilities, installProposal } from './registry';
+import { bindLocalHandler, executeCapability, unbindLocalHandler } from './execute';
 import { latestExecutionRecord } from './executionLedger';
 import { capabilitySecrets } from './secrets';
 import { MAX_ERROR_MESSAGE, redact } from './redact';
-import { handleCapabilityBroker, createBrokerRateLimiter } from '../services/server/capabilityBroker';
-import { memoryLedger, type ServerLedger } from '../services/server/capability.ledger';
 
 // Characters that change under each encoding: + / = & space.
 const SECRET = 'Sk+live/Q9=z&t ok-7781';
@@ -51,8 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.unstubAllGlobals();
-    unbindMcpTransport('board');
-    unbindAsyncRuntime('jobs');
+    unbindLocalHandler('board.search');
 });
 
 describe('redact', () => {
@@ -129,109 +125,27 @@ describe('dispatched-call errors carry no credential', () => {
         await expectCleanRun(manifest, SECRET);
     });
 
-    it('mcp', async () => {
-        const transport = { kind: 'mcp' as const, serverId: 'board', origin: 'https://board.example.test', toolName: 'search' };
-        const placement = { kind: 'apiKey' as const, in: 'header' as const, name: 'x-api-key' };
+    it('local', async () => {
+        const transport = { kind: 'local' as const, handler: 'board.search' };
+        const secretRef = 'cred_board_fixture';
         const installed = installProposal(sealManifest({
             version: 1,
             id: canonicalCapabilityId(transport),
             title: 'Search',
-            source: { kind: 'mcp', locator: 'fixture://mcp/board', operationId: 'search' },
+            source: { kind: 'bring', locator: 'fixture://board', operationId: 'search' },
             effect: 'read',
             effectSource: 'annotation',
             approval: 'auto',
             invocation: 'manual',
             trigger: { kind: 'manual' },
-            auth: { ...placement, secretRef: transportCredentialSlot(transport, placement)! },
+            auth: { kind: 'apiKey', in: 'header', name: 'x-api-key', secretRef },
             transport,
             inputs: [],
             output: { schema: { kind: 'array', items: { kind: 'string' } }, presentation: 'raw' }
         }));
         expect(installed.ok, installed.errors.join('; ')).toBe(true);
-        const manifest = installed.manifest!;
-        capabilitySecrets.set(transportCredentialSlot(manifest.transport, manifest.auth)!, SECRET);
-        bindMcpTransport('board', { origin: 'https://board.example.test', call: async () => { throw new Error(echo(SECRET)); } });
-        await expectCleanRun(manifest, SECRET);
-    });
-
-    it('async', async () => {
-        const transport = { kind: 'async' as const, runtimeId: 'jobs', operation: 'robot-1' };
-        const placement = { kind: 'apiKey' as const, in: 'header' as const, name: 'x-api-key' };
-        const installed = installProposal(sealManifest({
-            version: 1,
-            id: canonicalCapabilityId(transport),
-            title: 'Scrape',
-            source: { kind: 'bring', locator: 'fixture://jobs/robot-1', operationId: 'robot-1' },
-            effect: 'write',
-            effectSource: 'declared',
-            approval: 'pending',
-            invocation: 'manual',
-            trigger: { kind: 'manual' },
-            auth: { ...placement, secretRef: transportCredentialSlot(transport, placement)! },
-            transport,
-            execution: { kind: 'async_poll', pollIntervalMs: 5_000, maxDurationMs: 120_000 },
-            inputs: [],
-            output: { schema: { kind: 'object', properties: { markdown: { kind: 'string' } }, required: ['markdown'] }, presentation: 'raw' }
-        }));
-        expect(installed.ok, installed.errors.join('; ')).toBe(true);
-        const manifest = approveCapability(installed.manifest!.id).manifest!;
-        capabilitySecrets.set(transportCredentialSlot(manifest.transport, manifest.auth)!, SECRET);
-        bindAsyncRuntime('jobs', {
-            start: async () => { throw new AsyncStartRejected(echo(SECRET)); },
-            poll: async () => ({ status: 'running' })
-        });
-        const preview = previewCapabilityRun(manifest.id, {});
-        if (!preview.ok) throw new Error('preview failed');
-        const result = await executeCapability(manifest.id, {}, { confirmedRun: preview.preview.digest });
-        expect(result.error?.code).toBe('ASYNC_START_REJECTED');
-        expectClean(JSON.stringify(result), SECRET);
-        expectClean(JSON.stringify(latestExecutionRecord(manifest.id)?.receipt ?? null), SECRET);
-    });
-});
-
-describe('server broker error handling', () => {
-    function brokerManifest() {
-        const compiled = compileOpenApi(readSpec({ type: 'http', scheme: 'bearer' })).manifests[0];
-        if (compiled.transport.kind !== 'http') throw new Error('expected http');
-        return sealManifest({ ...compiled, transport: { ...compiled.transport, access: 'server_broker' } });
-    }
-
-    function spiedLedger(): { ledger: ServerLedger; finished: unknown[][] } {
-        const inner = memoryLedger();
-        const finished: unknown[][] = [];
-        return {
-            finished,
-            ledger: {
-                ...inner,
-                finish: async (...args) => {
-                    finished.push(args);
-                    return inner.finish(...args);
-                }
-            }
-        };
-    }
-
-    it.each([
-        ['a transport error', async () => { throw new Error(echo(SECRET)); }],
-        ['an HTTP error whose body echoes it', async () => ({ status: 500, headers: {}, text: echo(SECRET) })],
-        ['a success body that is not JSON', async () => ({ status: 200, headers: {}, text: echo(SECRET) })]
-    ])('records a code and returns no credential for %s', async (_label, fetch) => {
-        const { ledger, finished } = spiedLedger();
-        const result = await handleCapabilityBroker({
-            manifest: brokerManifest(),
-            input: {},
-            idempotencyKey: 'broker-key-redact',
-            secret: SECRET
-        }, {
-            ledger,
-            resolve: async () => ['1.1.1.1'],
-            fetch,
-            limiter: createBrokerRateLimiter()
-        });
-        expect(result.status).toBe(502);
-        expectClean(JSON.stringify(result.body), SECRET);
-        expect(finished).toHaveLength(1);
-        expectClean(JSON.stringify(finished), SECRET);
-        expect(finished[0][2]).toMatch(/^[A-Z_]+$/);
+        capabilitySecrets.set(secretRef, SECRET);
+        bindLocalHandler('board.search', async () => { throw new Error(echo(SECRET)); });
+        await expectCleanRun(installed.manifest!, SECRET);
     });
 });

@@ -5,15 +5,10 @@
 // ============================================
 
 import type { ReactNode, ComponentProps } from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MindPanel } from './MindPanel';
 
-const think = vi.fn();
-vi.mock('@/core/services/mind.engine', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@/core/services/mind.engine')>()),
-    getMindEngine: () => ({ think })
-}));
 // happy-dom cancels framer-motion's animations as an unhandled rejection.
 vi.mock('framer-motion', () => ({
     motion: {
@@ -24,7 +19,7 @@ vi.mock('framer-motion', () => ({
     AnimatePresence: ({ children }: { children?: ReactNode }) => <>{children}</>
 }));
 
-beforeEach(() => think.mockReset());
+afterEach(() => vi.restoreAllMocks());
 
 describe('MindPanel a11y', () => {
     it('is a modal dialog labelled by its visible heading, and focus lands inside on open', () => {
@@ -47,15 +42,22 @@ describe('MindPanel a11y', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('leaves Escape to the Think result while that is open, so the panel stays', async () => {
-        think.mockResolvedValue({ success: true, response: 'A market prices an event.' });
+    it('leaves Escape to the context capture while that is open, so the panel stays', async () => {
+        vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'A market prices an event.' } as Selection);
         const onClose = vi.fn();
         render(<MindPanel isOpen onClose={onClose} />);
-        fireEvent.click(screen.getByRole('button', { name: /Think/ }));
-        await screen.findByText('A market prices an event.');
+        const dialog = screen.getByRole('dialog', { name: 'The Mind' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Context Highlighter' }));
+        fireEvent.mouseUp(dialog);
+        await screen.findByText('Capture Context', { exact: false });
 
-        fireEvent.keyDown(screen.getByRole('dialog', { name: 'The Mind' }), { key: 'Escape' });
+        fireEvent.keyDown(dialog, { key: 'Escape' });
         expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('offers no Think in the preview: the button is there and disabled', () => {
+        render(<MindPanel isOpen onClose={vi.fn()} />);
+        expect((screen.getByRole('button', { name: /Think/ }) as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('renders nothing when closed', () => {
