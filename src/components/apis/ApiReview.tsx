@@ -34,7 +34,7 @@ export function operationParts(manifest: CapabilityManifest): { method: string; 
 
 /** `city, state (optional: units)`: what you will be asked for before a run. */
 function inputSummary(manifest: CapabilityManifest): string {
-    // A one-value input (FRED's file_type) is filled in, not asked for.
+    // A one-value input is filled in, not asked for.
     const asked = manifest.inputs.filter(input => !(input.required && input.schema.enum?.length === 1));
     const required = asked.filter(input => input.required).map(input => input.name);
     const optional = asked.filter(input => !input.required).map(input => input.name);
@@ -44,15 +44,13 @@ function inputSummary(manifest: CapabilityManifest): string {
 }
 
 /** The origin a request goes to, and how a credential travels with it. */
-export function destinationOf(manifest: CapabilityManifest): { origin: string; credential: string | null; inUrl: boolean; viaServer: boolean } | null {
+export function destinationOf(manifest: CapabilityManifest): { origin: string; credential: string | null; inUrl: boolean } | null {
     if (manifest.transport.kind !== 'http') return null;
     const placement = credentialPlacement(manifest);
     return {
         origin: new URL(manifest.transport.baseUrl).origin,
         credential: placement ? `${manifest.auth.kind} in ${placement}` : null,
-        inUrl: manifest.auth.in === 'query',
-        /** Sent from Flyspace's own server (the broker), not from the browser. */
-        viaServer: manifest.transport.access === 'server_broker'
+        inUrl: manifest.auth.in === 'query'
     };
 }
 
@@ -74,7 +72,6 @@ interface ApiReviewProps {
  */
 export function ApiReview({ title, subtitle, proposals, install, placeId, onToggleInstall, onPlace }: ApiReviewProps) {
     const destinations = [...new Set(proposals.map(p => destinationOf(p)?.origin).filter(Boolean))];
-    const viaServer = proposals.some(p => destinationOf(p)?.viaServer);
     return (
         <div className="space-y-3">
             <header className="space-y-0.5">
@@ -83,12 +80,6 @@ export function ApiReview({ title, subtitle, proposals, install, placeId, onTogg
                 {destinations.length > 0 ? (
                     <p className="text-xs text-[var(--text-secondary)]">
                         Sends requests to <span className="font-mono">{destinations.join(', ')}</span>
-                        {viaServer ? ' through Flyspace’s own server' : null}
-                    </p>
-                ) : null}
-                {viaServer ? (
-                    <p className="text-[11px] text-[var(--text-muted)]">
-                        This API refuses calls from a browser, so Flyspace&apos;s server makes them. Your key goes with each request to that server and on to the API; the server does not keep it.
                     </p>
                 ) : null}
             </header>

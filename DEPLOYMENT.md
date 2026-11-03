@@ -20,10 +20,10 @@ browser's IndexedDB unless the visitor saves an account backup (below).
 | `GET /api/polymarket` | Polymarket markets |
 | `POST /api/llm`, `POST /api/jev-persona`, `POST /api/capability-broker`, `POST /api/registry-intent`, `GET /api/inference-runs` | always 503 |
 
-The 503 routes are one-line stubs. They stay because
+The 503 routes are one-line stubs that no client calls. They stay only because
 `.github/workflows/deploy-preview.yml` asserts those answers after every deploy
-and rolls back otherwise; the client calls only the capability broker one. Remove
-a stub only together with its check in that workflow.
+and rolls back otherwise. Remove a stub only together with its check in that
+workflow.
 
 ## Deploying the preview
 
@@ -83,7 +83,7 @@ Every push and PR, three jobs (`.github/workflows/ci.yml`):
 | **Dependency audit** | Production dependencies block on `high`; dev-only advisories are reported, not blocking |
 
 The bundle scan does not grep for variable *names* - a name proves nothing, and
-CI has no real keys. It builds with `FRED_API_KEY=OMNI-CANARY-FRED_API_KEY-<run id>`
+CI has no real keys. It builds with `ALPHA_VANTAGE_API_KEY=OMNI-CANARY-ALPHA_VANTAGE_API_KEY-<run id>`
 and friends, then looks for those exact values in what a browser is served.
 
 Run it locally against your own `.env`:

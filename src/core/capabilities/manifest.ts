@@ -67,7 +67,7 @@ interface CapabilityOutput {
     presentation: 'items' | 'content' | 'raw';
 }
 
-type HttpAccess = 'browser_direct' | 'server_broker';
+type HttpAccess = 'browser_direct';
 
 export type CapabilityTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
@@ -422,13 +422,9 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
     if (EFFECTS.includes(effect)) {
         const triggerError = triggerProblem(effect, trigger);
         if (triggerError) errors.push(triggerError);
-        if ((effect === 'write' || effect === 'destructive') && isRecord(input.transport) && input.transport.access === 'server_broker') {
-            errors.push('server_broker cannot carry a write or destructive effect');
-        }
     }
     if (isRecord(input.auth) && input.auth.kind === 'oauth' && isRecord(input.transport)) {
         if (input.transport.kind !== 'http') errors.push('oauth auth is only defined for http transports');
-        else if (input.transport.access === 'server_broker') errors.push('server_broker cannot carry an oauth token');
     }
 
     if (
@@ -442,8 +438,8 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
         if (typeof input.transport.method !== 'string' || !METHODS.includes(input.transport.method as HttpMethod)) {
             errors.push('transport.method is invalid');
         }
-        if (input.transport.access !== 'browser_direct' && input.transport.access !== 'server_broker') {
-            errors.push('http transport access must be browser_direct or server_broker');
+        if (input.transport.access !== 'browser_direct') {
+            errors.push('http transport access must be browser_direct');
         }
         if (typeof input.transport.path !== 'string' || !input.transport.path.startsWith('/') || input.transport.path.includes('..')) {
             errors.push('transport.path must be an absolute path without ..');
@@ -643,7 +639,7 @@ function canonicalTransport(transport: CapabilityTransport): CapabilityTransport
     }
     return {
         kind: 'http',
-        access: transport.access === 'server_broker' ? 'server_broker' : 'browser_direct',
+        access: 'browser_direct',
         baseUrl: transport.baseUrl,
         method: transport.method,
         path: transport.path

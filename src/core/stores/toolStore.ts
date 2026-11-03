@@ -14,7 +14,6 @@ type ToolType = 'navigate' | 'highlighter';
 interface SelectionData {
     text: string;
     sourceBlockId?: string;
-    sourceBlockType?: string;
 }
 
 interface ToolState {

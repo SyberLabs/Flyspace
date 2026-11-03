@@ -16,8 +16,6 @@ import { KeyField, keySlotOf, useHasKey } from '@/components/apis/KeyField';
 import { useRememberingKeys } from '@/components/apis/RememberKeys';
 import { SignInPrompt } from '@/components/apis/SignIn';
 import { signInSlotOf } from '@/core/capabilities/connect';
-import { ProviderAttribution } from '@/components/apis/ProviderAttribution';
-import { attributionFor } from '@/core/capabilities/curatedApis';
 import { argumentsFrom, CapabilityInputs, constantOf, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
 
@@ -48,7 +46,7 @@ function isUnboundKeyError(error: string): boolean {
 
 /**
  * An API that may be saying no to the credential: worth offering to change
- * the key. Some report a bad key as 400 (FRED does), not 401 or 403.
+ * the key. Some report a bad key as 400, not 401 or 403.
  */
 function isRefusal(error: string): boolean {
     return /\bHTTP (400|401|403)\b/.test(error);
@@ -97,8 +95,6 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const signIn = signInSlotOf(manifest);
     const needsSignIn = signIn !== null;
     const needsCredential = needsKey || needsSignIn;
-    // A provider whose terms require a notice on every app screen that uses it (FRED).
-    const attribution = attributionFor(manifest);
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
     const params = isPlainParams(block?.params) ? block.params : {};
@@ -185,9 +181,6 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
             <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
                 {manifest ? <EffectPill effect={manifest.effect} /> : <span>not installed</span>}
                 {destination ? <span className="min-w-0 truncate font-mono" title={destination}>{destination}</span> : null}
-                {manifest?.transport.kind === 'http' && manifest.transport.access === 'server_broker' ? (
-                    <span className="shrink-0" title="Sent from Flyspace's own server: this API refuses browser calls">via server</span>
-                ) : null}
                 {sideEffect ? (
                     <span className="ml-auto shrink-0">{manifest?.approval === 'approved' ? 'approved' : 'needs approval'}</span>
                 ) : null}
@@ -260,7 +253,6 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                     </p>
                 ) : null}
             </div>
-            {attribution ? <ProviderAttribution attribution={attribution} /> : null}
             {previewError ? (
                 <p className="text-xs text-[var(--truth-red)]">{previewError}</p>
             ) : null}

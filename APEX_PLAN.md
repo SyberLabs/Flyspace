@@ -108,8 +108,9 @@ database, so everything behind those facts went. Last present at `8a21350`:
   engine, kernel, crystallize, run lineage, the Think result modal, markdown
   rendering of answers. A turn now commits the preview's refusal.
 - Postgres, migrations, the inference ledger, hosted OIDC auth.
-- The capability broker's server side and data plant (house keys). A brokered
-  block still runs and shows the broker's 503.
+- The capability broker and data plant (house keys), and the curated APIs that
+  need them because they refuse browser calls: FRED, NewsAPI, Metaculus. Keyed
+  APIs that accept browser calls keep working with a visitor's own key.
 - OAuth sign-in. A Google block still says sign-in is not set up.
 - Remote speech (OpenAI Realtime). The browser recognizer remains.
 - Jev and Kev persona suggestions and meaning search. Keyword search remains.

@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import type { CapabilityManifest } from '@/core/capabilities/manifest';
 import { MAX_SECRET_BYTES, capabilitySecrets, secretByteLength } from '@/core/capabilities/secrets';
-import { checkKeyFormat, keyGuideFor } from '@/core/capabilities/keyGuide';
+import { keyGuideFor } from '@/core/capabilities/keyGuide';
 import { destinationOf } from './ApiReview';
 import { KeyGuideNote } from './KeyGuideNote';
 import { useKeyKeepingNote } from './RememberKeys';
@@ -45,7 +45,6 @@ export function KeyField({ manifest, onSaved, onCancel, autoFocus, compact }: Ke
     const destination = destinationOf(manifest);
     const guide = keyGuideFor(manifest);
     const keepingNote = useKeyKeepingNote();
-    const formatWarning = checkKeyFormat(guide, value);
     if (!ref) return null;
 
     const save = () => {
@@ -91,7 +90,6 @@ export function KeyField({ manifest, onSaved, onCancel, autoFocus, compact }: Ke
                     className="mt-1 w-full rounded-md border border-[var(--citadel-border)] bg-[var(--citadel-elevated)] px-2 py-1 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--citadel-primary)] focus:outline-none"
                 />
             </label>
-            {formatWarning ? <p className="text-[10px] text-[var(--truth-amber)]">{formatWarning}</p> : null}
             {guide ? <KeyGuideNote guide={guide} /> : null}
             {manifest.auth.hint && guide?.source !== 'provider' ? (
                 <p className="text-[10px] text-[var(--text-secondary)] [overflow-wrap:anywhere]">The API says: {manifest.auth.hint}</p>

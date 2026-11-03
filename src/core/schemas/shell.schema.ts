@@ -75,9 +75,6 @@ export interface ShellConfig {
     /** Visual aesthetic */
     aesthetic: AestheticTheme;
 
-    /** Custom CSS overrides (from SKIN) */
-    customCss?: string;
-
     /** Hotkey slot (1-9) for quick access */
     hotkeySlot?: number;
 

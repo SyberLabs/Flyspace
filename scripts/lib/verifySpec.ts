@@ -34,8 +34,7 @@ function sampleInput(manifest: CapabilityManifest): { ok: true; input: Record<st
 
 /**
  * Run every operation once. Without a key a keyed operation is "skipped",
- * never "failed". In Node there is no CORS, so the provider is called
- * directly: this checks the provider and the spec, not the server broker.
+ * never "failed".
  */
 export async function verifySpec(apiId: string, spec: unknown, sourceLocator: string, keyEnv?: string): Promise<QualityResult[]> {
     const results: QualityResult[] = [];

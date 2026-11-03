@@ -3,7 +3,6 @@ import {
     SHELL_TEMPLATES,
     getShellTemplate,
     validateTemplate,
-    keyedProvidersForTemplate,
     type ShellTemplate
 } from './templates';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
@@ -32,12 +31,6 @@ describe('SHELL_TEMPLATES integrity (against the real registry)', () => {
     it('template ids are unique', () => {
         const ids = SHELL_TEMPLATES.map(t => t.id);
         expect(new Set(ids).size).toBe(ids.length);
-    });
-});
-
-describe('keyedProvidersForTemplate — what a shell needs before it spawns', () => {
-    it.each(SHELL_TEMPLATES.map(t => t.id))('%s needs zero keyed providers', (id) => {
-        expect(keyedProvidersForTemplate(getShellTemplate(id)!)).toEqual([]);
     });
 });
 

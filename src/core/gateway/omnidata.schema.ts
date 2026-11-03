@@ -22,7 +22,7 @@ type ApiCategory =
  * Source metadata for any OmniData
  */
 interface OmniSource {
-    /** API provider ID (e.g., 'polymarket', 'newsapi') */
+    /** API provider ID (e.g., 'polymarket', 'coingecko') */
     apiId: string;
 
     /** Category of the API */
@@ -131,9 +131,6 @@ export interface OmniData {
         message: string;
         retryable: boolean;
     };
-
-    /** Raw response for debugging */
-    _raw?: unknown;
 }
 
 /**

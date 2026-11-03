@@ -86,13 +86,11 @@ function readSpec(security: Record<string, unknown>) {
     };
 }
 
-function installRead(security: Record<string, unknown>, secret: string, access: 'browser_direct' | 'server_broker' = 'browser_direct'): CapabilityManifest {
-    const compiled = compileOpenApi(readSpec(security)).manifests[0];
-    if (compiled.transport.kind !== 'http') throw new Error('expected http');
-    const transport = { ...compiled.transport, access };
-    const manifest = sealManifest({ ...compiled, id: canonicalCapabilityId(transport), transport });
+function installRead(security: Record<string, unknown>, secret: string): CapabilityManifest {
+    const manifest = compileOpenApi(readSpec(security)).manifests[0];
+    if (manifest.transport.kind !== 'http') throw new Error('expected http');
     expect(installProposal(manifest).ok).toBe(true);
-    capabilitySecrets.set(credentialSlot(transport.baseUrl, manifest.auth), secret);
+    capabilitySecrets.set(credentialSlot(manifest.transport.baseUrl, manifest.auth), secret);
     return manifest;
 }
 
@@ -115,14 +113,6 @@ describe('dispatched-call errors carry no credential', () => {
         vi.stubGlobal('fetch', vi.fn(async () => { throw new Error(echo(secret)); }));
         const result = await expectCleanRun(manifest, secret);
         expect(result.error?.code).toBe('UPSTREAM_ERROR');
-    });
-
-    it('server_broker as seen by the browser', async () => {
-        const manifest = installRead({ type: 'http', scheme: 'bearer' }, SECRET, 'server_broker');
-        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-            error: { code: 'UPSTREAM_ERROR', message: echo(SECRET) }
-        }), { status: 502, headers: { 'content-type': 'application/json' } })));
-        await expectCleanRun(manifest, SECRET);
     });
 
     it('local', async () => {

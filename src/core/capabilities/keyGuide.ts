@@ -3,8 +3,7 @@
 // A curated API carries a guide written from the provider's own pages
 // (curatedApis.ts). Any other API gets what its spec says: the first link in
 // the key's description ("Register at www.interzoid.com/register"). Nothing
-// here claims what a provider's page did not say: no time estimates, and a
-// key format only where the provider documents one.
+// here claims what a provider's page did not say: no time estimates.
 
 import { CURATED_APIS } from './curatedApis';
 import { executeCapability } from './execute';
@@ -19,8 +18,6 @@ export interface KeyGuide {
     freeTier?: string;
     /** A limit a person should know before relying on the key. */
     caveat?: string;
-    /** The documented key format, for a warning on paste. Never blocks saving. */
-    format?: { pattern: string; describe: string };
     /**
      * A cheap read that proves the key works once the API is installed.
      * `provesKey: false` when the provider answers any key, so a pass only
@@ -57,14 +54,6 @@ export function keyGuideFor(manifest: CapabilityManifest): KeyGuide | null {
     if (curated?.keyGuide) return { ...curated.keyGuide, source: 'provider' };
     const url = firstLink(manifest.auth.hint);
     return url ? { url, requires: 'See the provider’s page.', source: 'spec' } : null;
-}
-
-/** A warning when a pasted key does not look like the documented format, or null. */
-export function checkKeyFormat(guide: KeyGuide | null, key: string): string | null {
-    if (!guide?.format || !key.trim()) return null;
-    return new RegExp(guide.format.pattern).test(key.trim())
-        ? null
-        : `This does not look like the documented key format (${guide.format.describe}). You can still save it.`;
 }
 
 type KeyTestResult = { ok: true; message: string } | { ok: false; message: string };

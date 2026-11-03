@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { compileOpenApi } from './openapi';
-import { sealManifest } from './manifest';
 import { approveCapability, clearCapabilities, installProposal } from './registry';
 // Write runs need a confirmed preview; these tests exercise the engine after one.
 import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
@@ -75,16 +74,5 @@ describe('capability execution ledger', () => {
         expect(claimCreateTrigger('block-a')).toBe(true);
         expect(claimCreateTrigger('block-a')).toBe(false);
         expect(claimCreateTrigger('block-b')).toBe(true);
-    });
-
-    it('seals a read capability onto the broker transport', () => {
-        const list = compileOpenApi(SPEC).manifests.find(manifest => manifest.source.operationId === 'list')!;
-        if (list.transport.kind !== 'http') throw new Error('expected http');
-        const brokered = sealManifest({
-            ...list,
-            transport: { ...list.transport, access: 'server_broker' }
-        });
-        expect(brokered.transport).toMatchObject({ access: 'server_broker' });
-        expect(brokered.trigger).toEqual({ kind: 'manual' });
     });
 });
