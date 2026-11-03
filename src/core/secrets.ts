@@ -17,7 +17,7 @@ export const SECRET_ENV_VARS = [
     'TYPESAFE_API_KEY',
     // Remote speech transcription 
     'OPENAI_API_KEY',
-    // Keyed data providers (proxied through /api/data)
+    // Keyed data providers
     'NEWSAPI_KEY',
     'FRED_API_KEY',
     'BLS_API_KEY',

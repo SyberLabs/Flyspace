@@ -83,8 +83,8 @@ export function coerceInput(input: CapabilityInput, draft: unknown): unknown {
 }
 
 /**
- * A required input with exactly one allowed value is not a choice: FRED's
- * `file_type` must be `json`. It is sent without a field.
+ * A required input with exactly one allowed value is not a choice. It is
+ * sent without a field.
  */
 export function constantOf(input: CapabilityInput): { value: unknown } | null {
     const options = input.schema.enum;

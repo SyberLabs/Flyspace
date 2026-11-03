@@ -438,9 +438,6 @@ async function executeHttp(
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     markDispatched();
-    if (manifest.transport.access === 'server_broker') {
-        return executeBroker(manifest, run.args, idempotencyKey, secret, fetchImpl, requestSignal);
-    }
     const response = await fetchImpl(url.toString(), {
         method: manifest.transport.method,
         headers,
@@ -515,42 +512,6 @@ async function executeLocal(manifest: CapabilityManifest, args: Readonly<Record<
         return halt(failure(manifest.id, 'TRANSPORT_NOT_BOUND', `No local handler bound for ${manifest.transport.handler}`, false));
     }
     return { type: 'value', value: await handler(args, { signal }) };
-}
-
-async function executeBroker(
-    manifest: CapabilityManifest,
-    input: Readonly<Record<string, unknown>>,
-    idempotencyKey: string,
-    secret: string | undefined,
-    fetchImpl: typeof fetch,
-    signal: AbortSignal
-): Promise<Step> {
-    const response = await fetchImpl('/api/capability-broker', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-            manifest,
-            input,
-            idempotencyKey,
-            ...(secret ? { secret } : {})
-        }),
-        signal
-    });
-    const payload = await response.json() as {
-        value?: unknown;
-        error?: { code?: string; message?: string };
-        executionStatus?: string;
-    };
-    if (payload.error) {
-        const code = typeof payload.error.code === 'string' && /^[A-Z_]{1,40}$/.test(payload.error.code)
-            ? payload.error.code
-            : 'UPSTREAM_ERROR';
-        return halt(dispatchedFailure(manifest, code, payload.error.message || 'Broker request failed', false, secret));
-    }
-    if (!response.ok) {
-        return halt(failure(manifest.id, 'UPSTREAM_ERROR', `Broker HTTP ${response.status}`, false));
-    }
-    return { type: 'value', value: payload.value };
 }
 
 function encodeBase64(value: string): string {

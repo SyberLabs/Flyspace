@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkKeyFormat, firstLink, keyGuideFor, testKey } from './keyGuide';
+import { firstLink, keyGuideFor, testKey } from './keyGuide';
 import { curatedApi } from './curatedApis';
 import { compileOpenApi } from './openapi';
 import { clearCapabilities, installProposal } from './registry';
 import { capabilitySecrets } from './secrets';
 
-const fred = curatedApi('omni:fred')!;
 const alpha = curatedApi('omni:alpha-vantage')!;
-const compiled = (api: typeof fred) => compileOpenApi(api.spec, { sourceLocator: api.entry.specUrl, brokerOrigins: api.brokerOrigins }).manifests;
+const compiled = (api: typeof alpha) => compileOpenApi(api.spec, { sourceLocator: api.entry.specUrl }).manifests;
 
 describe('firstLink', () => {
     it('finds the link in a key description, as https', () => {
@@ -21,10 +20,10 @@ describe('firstLink', () => {
 
 describe('keyGuideFor', () => {
     it('gives a curated API the guide written from its provider', () => {
-        const guide = keyGuideFor(compiled(fred)[0])!;
+        const guide = keyGuideFor(compiled(alpha)[0])!;
         expect(guide.source).toBe('provider');
-        expect(guide.url).toBe('https://fredaccount.stlouisfed.org/apikeys');
-        expect(guide.requires).toMatch(/free FRED account/);
+        expect(guide.url).toBe('https://www.alphavantage.co/support/#api-key');
+        expect(guide.requires).toMatch(/what describes you, your organization, and your email/);
     });
 
     it('gives any other API the link from its own key description', () => {
@@ -40,20 +39,6 @@ describe('keyGuideFor', () => {
 
     it('has nothing to say for a keyless API', () => {
         expect(keyGuideFor(compiled(curatedApi('omni:bls')!)[0])).toBeNull();
-    });
-});
-
-describe('checkKeyFormat', () => {
-    const guide = keyGuideFor(compiled(fred)[0]);
-
-    it('warns, without blocking, when a key does not match the documented format', () => {
-        expect(checkKeyFormat(guide, 'abc123')).toMatch(/32 lowercase letters and digits/);
-        expect(checkKeyFormat(guide, 'a'.repeat(32))).toBeNull();
-        expect(checkKeyFormat(guide, '')).toBeNull();
-    });
-
-    it('says nothing where the provider documents no format', () => {
-        expect(checkKeyFormat(keyGuideFor(compiled(alpha)[0]), 'anything')).toBeNull();
     });
 });
 

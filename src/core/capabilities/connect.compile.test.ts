@@ -57,11 +57,6 @@ describe('compiling a Google sign-in', () => {
         expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('browser_direct');
     });
 
-    it('never routes a sign-in through the broker, even for a host the app brokers', () => {
-        const [manifest] = compileOpenApi(googleSpec(), { brokerOrigins: ['https://www.googleapis.com'] }).manifests;
-        expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('browser_direct');
-    });
-
     it('refuses a write operation that needs a sign-in', () => {
         const { manifests, errors } = compileOpenApi(googleSpec({ post: true }));
         expect(manifests.map(manifest => manifest.source.operationId)).toEqual(['calendar.calendars.get']);

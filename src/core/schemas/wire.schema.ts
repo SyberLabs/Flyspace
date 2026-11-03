@@ -100,14 +100,6 @@ export interface ContextSource {
     kind: ContextSourceKind;
     /** Short human label for the provenance chip. */
     label: string;
-    /**
-     * For `kind: 'inference'` — one persona feeding another — the inference
-     * ledger row id of the ANSWER that was consumed, not the block that holds
-     * it. This is what lets the server walk a cascade's full lineage instead
-     * of stopping at "some persona said something". Absent without Postgres,
-     * or when the upstream answer predates the ledger.
-     */
-    parentRunId?: string;
 }
 
 /**

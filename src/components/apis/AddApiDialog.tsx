@@ -5,8 +5,8 @@ import { X } from 'lucide-react';
 import { ApiSearch } from '@/components/ApiSearch';
 import type { ApiIndexEntry } from '@/core/capabilities/apiIndex';
 import { compileOpenApi } from '@/core/capabilities/openapi';
-import { attributionFor, curatedApi } from '@/core/capabilities/curatedApis';
-import { checkKeyFormat, keyGuideFor } from '@/core/capabilities/keyGuide';
+import { curatedApi } from '@/core/capabilities/curatedApis';
+import { keyGuideFor } from '@/core/capabilities/keyGuide';
 import { KeyGuideNote } from './KeyGuideNote';
 import { useKeyKeepingNote } from './RememberKeys';
 import { fetchCatalogSpec, RegistryFetchError } from '@/core/capabilities/registrySearch';
@@ -18,7 +18,6 @@ import { spatialSession } from '@/core/interaction/session';
 import { useUIStore } from '@/core/stores/uiStore';
 import { ApiReview, destinationOf } from './ApiReview';
 import { isUserInstalled, YourApis } from './YourApis';
-import { ProviderAttribution } from './ProviderAttribution';
 
 /** A capability block's default footprint, used to center it on the canvas. */
 const BLOCK_SIZE = { width: 320, height: 240 };
@@ -109,8 +108,8 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
 
     if (!open) return null;
 
-    const showProposals = (document: unknown, title: string, subtitle: string, locator?: string, brokerOrigins?: readonly string[]) => {
-        const result = compileOpenApi(document, { ...(locator ? { sourceLocator: locator } : {}), ...(brokerOrigins ? { brokerOrigins } : {}) });
+    const showProposals = (document: unknown, title: string, subtitle: string, locator?: string) => {
+        const result = compileOpenApi(document, locator ? { sourceLocator: locator } : {});
         setInstall(Object.fromEntries(result.manifests.map(m => [m.id, true])));
         setPlaceId(defaultPlacement(result.manifests));
         setSecrets({});
@@ -137,7 +136,7 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
             const subtitle = curated
                 ? `Spec written by Flyspace from the provider's docs · ${entry.updated}`
                 : entry.updated ? `Spec updated ${entry.updated} · ${entry.id}` : entry.id;
-            showProposals(document, entry.title, subtitle, entry.specUrl, curated?.brokerOrigins);
+            showProposals(document, entry.title, subtitle, entry.specUrl);
         } catch (err) {
             if (abort.signal.aborted) return;
             setReview({ state: 'failed', message: err instanceof RegistryFetchError ? err.message : `${entry.title}: the spec could not be fetched` });
@@ -310,10 +309,6 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                 <ul className="mt-1 space-y-0.5">{review.issues.map(issue => <li key={issue}>{issue}</li>)}</ul>
                                             </details>
                                         ) : null}
-                                        {(() => {
-                                            const attribution = proposals.map(attributionFor).find(Boolean);
-                                            return attribution ? <ProviderAttribution attribution={attribution} /> : null;
-                                        })()}
                                         {proposals.some(manifest => install[manifest.id] && manifest.auth.kind === 'oauth') ? (
                                             <p className="text-xs text-[var(--text-muted)]">
                                                 These operations read your own account, so they need a sign-in with read-only access. Place them, then sign in from the block.
@@ -325,7 +320,6 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                 {[...secretSlots].map(([ref, manifest]) => {
                                                     const destination = destinationOf(manifest);
                                                     const guide = keyGuideFor(manifest);
-                                                    const formatWarning = checkKeyFormat(guide, secrets[ref] ?? '');
                                                     return (
                                                         <div key={ref} className="space-y-1">
                                                         <label className="block text-xs text-[var(--text-muted)]">
@@ -339,7 +333,6 @@ export function AddApiDialog({ open, onClose }: AddApiDialogProps) {
                                                                 onChange={event => setSecrets(prev => ({ ...prev, [ref]: event.target.value }))}
                                                                 className="mt-1 w-full rounded-lg border border-[var(--citadel-border)] bg-[var(--citadel-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
                                                             />
-                                                            {formatWarning ? <span className="mt-0.5 block text-[11px] text-[var(--truth-amber)]">{formatWarning}</span> : null}
                                                             {manifest.auth.hint && guide?.source !== 'provider' ? (
                                                                 <span className="mt-0.5 block text-[11px] text-[var(--text-secondary)] [overflow-wrap:anywhere]">
                                                                     The API says: {manifest.auth.hint}

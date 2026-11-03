@@ -250,6 +250,15 @@ describe('capability compiler', () => {
         expect(installProposal(blessed).manifest?.approval).toBe('pending');
     });
 
+    it('rejects a sealed manifest whose http transport is not browser_direct', () => {
+        const list = byOp('listPosts');
+        if (list.transport.kind !== 'http') throw new Error('expected http');
+        const brokered = sealManifest({ ...list, transport: { ...list.transport, access: 'server_broker' as never } });
+        const validation = validateManifest(brokered);
+        expect(validation.ok).toBe(false);
+        expect(validation.errors).toEqual(['http transport access must be browser_direct']);
+    });
+
     it('turns the sample API into a wired block, and removes it, without a catalog edit', async () => {
         expect(blockRegistry.has('polymarket_live_odds')).toBe(true);
 

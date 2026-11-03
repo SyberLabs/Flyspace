@@ -29,7 +29,7 @@ other transport is `local`, for the built-in speech handlers.
 An `oauth` binding carries scopes and a slot (one slot per origin and scope
 set). The public preview has no sign-in, so nothing fills that slot: the block
 says sign-in is not set up (`connect.ts`) and execution is `AUTH_UNBOUND`.
-`oauth` is http-only and never rides `server_broker`. `compileOpenApi` binds
+`oauth` is http-only. `compileOpenApi` binds
 an OpenAPI oauth2 scheme only for a provider in `connectProviders.ts`
 (Google), only when the API is on that provider's own hosts, and only for a
 read operation with a read-only scope; a write that needs a sign-in is
@@ -59,7 +59,7 @@ A manifest describes a capability. It does not grant itself authority.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
 - Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and the same request replays; a different request under that key conflicts. The request is compared by its digest (the one a write confirms). A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable.
 - Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
-- HTTP capabilities are `browser_direct` or `server_broker`. `compileOpenApi` sets `server_broker` only when the host asks for it, and then only for read and compute; `validateManifest` refuses a brokered write, destructive or oauth manifest. The public preview has no broker: `/api/capability-broker` answers 503, and a brokered block shows that error.
+- HTTP capabilities are `browser_direct`: the browser calls the API itself, and a key goes straight to that API. The preview has no broker.
 - A base URL is https, carries no query or fragment, and an IP literal in it must be public. Loopback (http or https) is allowed only when the host itself built the manifest (`validateManifest(..., { hostCreated: true })`). Unsupported OpenAPI constructs fail compilation instead of becoming `any`, with one exception: a response field below the top level that declares no type is typed `any` (`ConvertOptions` in `jsonSchema.ts`), because the API does return it and an `any` source is never assignable to a typed input. A response that is untyped as a whole, or a result list of untyped items, still fails, and so does an untyped input.
 - Speech has a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. A denied microphone is `Permission denied`, not the browser error code.
 

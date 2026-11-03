@@ -7,7 +7,6 @@
 // ============================================
 
 import type { PersonaType, AestheticTheme } from '@/core/schemas/shell.schema';
-import { API_CATALOG, type ApiProvider } from '@/core/schemas/api.schema';
 
 /** A block placement inside a template (placeholder instanceId, remapped on use). */
 interface TemplateBlock {
@@ -150,17 +149,6 @@ export const SHELL_TEMPLATES: ShellTemplate[] = [
 /** Look up a template by id. */
 export function getShellTemplate(id: string): ShellTemplate | undefined {
     return SHELL_TEMPLATES.find(t => t.id === id);
-}
-
-/**
- * Providers a template will ask for a key. Derived from catalog blockIds so
- * a shell can say, before spawning, whether it works on a fresh clone.
- */
-export function keyedProvidersForTemplate(template: ShellTemplate): ApiProvider[] {
-    const blockIds = new Set(template.blocks.map(b => b.blockId));
-    return API_CATALOG.filter(
-        p => p.requiresAuth && p.blockIds?.some(id => blockIds.has(id))
-    );
 }
 
 /**

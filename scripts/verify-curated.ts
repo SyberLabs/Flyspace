@@ -12,9 +12,7 @@
 // no example is reported as untestable rather than guessed at.
 //
 // Keys come from the environment (each curated entry's `keyEnv`); without
-// one, a keyed operation is "skipped", never "failed". In Node there is no
-// CORS, so a broker-routed API is called directly here: this verifies the
-// provider and the spec, not the broker.
+// one, a keyed operation is "skipped", never "failed".
 //
 // Exit 1 when any operation failed. Nothing is written without --write.
 // ============================================

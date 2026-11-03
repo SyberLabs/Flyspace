@@ -4,7 +4,6 @@ import { useShellStore, SHELL_CONFIG_SHAPE, SHELL_BLOCK_SHAPE } from '../stores/
 import { useMindStore, LLM_CONFIG_SHAPE, GRAPH_SHAPE, PERSONA_SHAPE, CONTEXT_POOL_SHAPE, CONTEXT_ENTRY_SHAPE } from '../stores/mindStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useCapabilityStore } from '../capabilities/store';
-import { validateManifest } from '../capabilities/manifest';
 import { fieldError, type FieldSpec } from '../vault/hydration';
 import type { OmniVaultExport } from '../vault/vaultExport';
 
@@ -54,5 +53,5 @@ export function validateStoreEnvelopes(snapshot: OmniVaultExport): void {
     for (const pool of mind.contextPools as Record<string, unknown>[]) records(pool.entries, CONTEXT_ENTRY_SHAPE, 'pool.entries');
     check(states['omni-settings'], { useMockData: 'boolean', gridSnapping: 'boolean', gridSize: 'number' }, 'settings');
     const capabilities = states['omni-capabilities']; check(capabilities.manifests, 'array', 'manifests'); records(capabilities.stale, { id: 'string', title: 'string', reason: 'string', manifest: 'unknown' }, 'stale');
-    for (const manifest of capabilities.manifests as unknown[]) if (!validateManifest(manifest).ok) throw new Error('A capability in this backup is invalid.');
+    for (const manifest of capabilities.manifests as unknown[]) if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest)) throw new Error('A capability in this backup is invalid.');
 }
