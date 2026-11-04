@@ -4,7 +4,6 @@ import { render } from '@testing-library/react';
 import { WireRenderer } from './WireRenderer';
 import { useBlockStore } from '@/core/stores/blockStore';
 import { useWireStore } from '@/core/stores/wireStore';
-import { useUIStore } from '@/core/stores/uiStore';
 import { DEFAULT_WIRE_FILTERS } from '@/core/schemas/wire.schema';
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import type { DataWire } from '@/core/schemas/wire.schema';
@@ -41,22 +40,14 @@ beforeEach(() => {
         activeShellId: 'root'
     });
     useWireStore.setState({ wires: [wire('w-live', 'src', 'dst')] } as never);
-    useUIStore.setState({ readingWireIds: [] });
 });
 
-describe('WireRenderer — the visible read', () => {
-    it('marks a reading wire with data-reading, and leaves others unmarked', () => {
-        // Assert the attribute, not pixels: motion is CSS; honesty is which
-        // wire is flagged.
-        useUIStore.setState({ readingWireIds: ['w-live'] });
+describe('WireRenderer', () => {
+    it('draws a live wire with its id and both endpoints', () => {
         const { container } = render(<WireRenderer />);
-        const marked = container.querySelector('[data-testid="wire"][data-reading="true"]');
-        expect(marked).toBeTruthy();
-        expect(marked?.getAttribute('data-wire-id')).toBe('w-live');
-    });
-
-    it('does not mark a wire that is not being read', () => {
-        const { container } = render(<WireRenderer />);
-        expect(container.querySelector('[data-reading="true"]')).toBeNull();
+        const drawn = container.querySelector('[data-testid="wire"]');
+        expect(drawn?.getAttribute('data-wire-id')).toBe('w-live');
+        expect(drawn?.getAttribute('data-source-id')).toBe('src');
+        expect(drawn?.getAttribute('data-target-id')).toBe('dst');
     });
 });

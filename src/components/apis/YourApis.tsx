@@ -8,7 +8,7 @@ import type { CapabilityManifest } from '@/core/capabilities/manifest';
 import { EffectPill, MethodBadge, destinationOf, operationParts } from './ApiReview';
 import { KeyField, keySlotOf, useHasKey } from './KeyField';
 import { keyGuideFor } from '@/core/capabilities/keyGuide';
-import { KeyGuideNote, TestKeyButton } from './KeyGuideNote';
+import { TestKeyButton } from './KeyGuideNote';
 import { RememberKeysToggle } from './RememberKeys';
 
 /**
@@ -59,7 +59,7 @@ export function isUserInstalled(manifest: CapabilityManifest): boolean {
     return manifest.source.locator !== 'speech';
 }
 
-export interface YourApisProps {
+interface YourApisProps {
     /** Put an installed operation on the canvas again. */
     onPlace: (manifest: CapabilityManifest) => void;
 }

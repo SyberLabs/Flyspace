@@ -7,11 +7,11 @@
 // loopback, link-local, private, or metadata addresses. One private answer
 // from DNS rejects the name: a mixed result is how rebinding hides.
 
-export interface ResolvedAddress {
+interface ResolvedAddress {
     address: string;
 }
 
-export type EgressDecision = { ok: true } | { ok: false; reason: string };
+type EgressDecision = { ok: true } | { ok: false; reason: string };
 
 const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata.google.com']);
 
@@ -20,7 +20,7 @@ const BLOCKED_HOSTS = new Set([
     ...METADATA_HOSTS
 ]);
 
-export interface DestinationUrlOptions {
+interface DestinationUrlOptions {
     /**
      * The host itself built the thing that names this URL (not a compiler,
      * provider, model or stored snapshot). Only then may it target loopback.
@@ -100,7 +100,7 @@ export function classifyAddress(address: string): EgressDecision {
 }
 
 /** 127.0.0.0/8 or ::1, in any spelling, including an IPv4-mapped one. */
-export function isLoopbackAddress(address: string): boolean {
+function isLoopbackAddress(address: string): boolean {
     if (!address.includes(':')) return /^127(\.\d{1,3}){3}$/.test(address);
     const hextets = parseIpv6(address);
     if (!hextets) return false;
@@ -109,7 +109,7 @@ export function isLoopbackAddress(address: string): boolean {
     return hextets.slice(0, 7).every(group => group === 0) && hextets[7] === 1;
 }
 
-export function isIpLiteral(host: string): boolean {
+function isIpLiteral(host: string): boolean {
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
 }
 

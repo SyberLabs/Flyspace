@@ -5,9 +5,6 @@ import { setQueryParam } from './httpTarget';
 import { compileOpenApi } from './openapi';
 import { clearCapabilities, installProposal } from './registry';
 import { capabilitySecrets } from './secrets';
-import { createBrokerRateLimiter, handleCapabilityBroker } from '../services/server/capabilityBroker';
-import { memoryLedger } from '../services/server/capability.ledger';
-import type { PinnedRequest } from '../services/server/pinnedFetch';
 
 /** YouTube's shape: `part` is a required list in the query. */
 function spec(part: Record<string, unknown>, method = 'get') {
@@ -96,21 +93,6 @@ describe('sending a list in the query', () => {
         expect(result.error?.code).toBe('INPUT_INVALID');
         expect(result.error?.message).toContain('part needs at least one value');
         expect(fetchMock).not.toHaveBeenCalled();
-    });
-
-    it('through the broker', async () => {
-        const [manifest] = compileOpenApi(spec(LIST), { brokerOrigins: ['https://videos.example.test'] }).manifests;
-        const seen: PinnedRequest[] = [];
-        await handleCapabilityBroker({ manifest, input: { part: ['snippet', 'statistics'] }, idempotencyKey: 'list-param-1' }, {
-            ledger: memoryLedger(),
-            limiter: createBrokerRateLimiter(),
-            resolve: async () => ['1.1.1.1'],
-            fetch: async request => {
-                seen.push(request);
-                return { status: 200, headers: {}, text: '{"kind":"list"}' };
-            }
-        });
-        expect(seen[0].url.searchParams.getAll('part')).toEqual(['snippet', 'statistics']);
     });
 });
 

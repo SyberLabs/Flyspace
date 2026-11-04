@@ -82,7 +82,7 @@ describe('undo of a delete', () => {
     });
 
     it('does not duplicate a wire the canvas already has back', () => {
-        const saved = useWireStore.getState().getWire(wireId)!;
+        const saved = useWireStore.getState().wires.find(w => w.id === wireId)!;
         deleteBlock('dst');
         // Between the delete and its undo, a shell load (say, an undone
         // navigation) restored the block and the same wire from the saved shell.

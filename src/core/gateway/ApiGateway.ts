@@ -88,25 +88,6 @@ class ApiGatewayService {
     private subscriptions: GatewaySubscription[] = [];
 
     /**
-     * Register a custom API type
-     */
-    registerType<TRaw>(apiId: string, definition: ApiTypeDefinition<TRaw>): void {
-        apiTypeRegistry.set(apiId, definition as RegisteredApi);
-    }
-
-    /**
-     * Remove a runtime capability registration.
-     * Catalog ids are not removable through this path.
-     */
-    unregisterType(apiId: string): boolean {
-        if (!apiId.startsWith('cap_')) return false;
-        defaultParamsRegistry.delete(apiId);
-        const removed = apiTypeRegistry.delete(apiId);
-        this.clearCache(apiId);
-        return removed;
-    }
-
-    /**
      * Check if data is cached and still valid
      */
     private getCached(apiId: string, params?: Record<string, unknown>): OmniData | null {
@@ -267,29 +248,6 @@ class ApiGatewayService {
                     console.error(`Error in subscription callback for ${s.blockId}:`, err);
                 }
             });
-    }
-
-    /**
-     * Clear cache for a specific API or all
-     */
-    clearCache(apiId?: string): void {
-        if (apiId) {
-            // Clear all cache entries for this API
-            for (const key of this.cache.keys()) {
-                if (key.startsWith(apiId)) {
-                    this.cache.delete(key);
-                }
-            }
-        } else {
-            this.cache.clear();
-        }
-    }
-
-    /**
-     * Check if an API type is registered
-     */
-    isRegistered(apiId: string): boolean {
-        return apiTypeRegistry.has(apiId);
     }
 }
 

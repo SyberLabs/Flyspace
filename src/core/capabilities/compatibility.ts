@@ -16,7 +16,7 @@ function isStringSink(schema: ValueType | undefined): boolean {
     return schema.properties?.[required[0]]?.kind === 'string';
 }
 
-export type WireProjectionKind = 'identity' | 'text' | 'join_titles';
+type WireProjectionKind = 'identity' | 'text' | 'join_titles';
 
 export interface WireProjection {
     kind: WireProjectionKind;
@@ -61,11 +61,6 @@ export function admitConnection(sourceBlockId: string, targetBlockId: string): C
     }
 
     return { ok: true, ...ports, projection: { kind: 'identity' } };
-}
-
-export function explainPortWire(sourceBlockId: string, targetBlockId: string): string | null {
-    const admission = admitConnection(sourceBlockId, targetBlockId);
-    return admission.ok ? null : admission.reason;
 }
 
 export function portDataTypeFor(kind: string): PortSchema['dataType'] {

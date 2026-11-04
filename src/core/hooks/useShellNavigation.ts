@@ -57,7 +57,6 @@ export function useShellNavigation() {
                 const customShellId = hotkeySlots[slot];
                 if (customShellId) {
                     setActiveShell(customShellId);
-                    // TODO: Add navigation to shell view when shell viewer is implemented
                     return;
                 }
 

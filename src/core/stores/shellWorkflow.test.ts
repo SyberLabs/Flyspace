@@ -104,7 +104,7 @@ describe('shell workflow — wire cleanup (A1 orphan-wire regressions)', () => {
         useBlockStore.getState().removeBlock(analyst.instance_id);
 
         expect(useWireStore.getState().getWiresToBlock(analyst.instance_id)).toHaveLength(0);
-        expect(useWireStore.getState().getWiresFromBlock(analyst.instance_id)).toHaveLength(0);
+        expect(useWireStore.getState().wires.filter(w => w.sourceBlockId === analyst.instance_id)).toHaveLength(0);
     });
 
     it('legacy shells (BlockConnection[]) convert to live wires on load', () => {

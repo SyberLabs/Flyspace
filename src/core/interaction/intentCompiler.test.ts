@@ -5,21 +5,15 @@ import { InteractionEngine } from './engine';
 import {
     compileDeterministic,
     createIntentCompiler,
-    modelIntentCompiler,
-    paraphraseCompiler,
     type IntentCompilerResult,
     type IntentContext,
-    type ModelIntentRequest,
-    type SemanticCompiler
 } from './intentCompiler';
-import { validateProposal } from './proposal';
 import { scriptedSpeechAdapter } from './scriptedSpeechAdapter';
 import { createSpeechInput } from './speechInput';
 import { observationFactory, type SpeechObservationV1 } from './speechObservation';
 import {
     buildScene,
     COMPILER_CONFIGS,
-    compilerFor,
     CORPUS_CATALOG,
     expectationFor,
     playUtterance,
@@ -40,27 +34,11 @@ function boardEngine() {
     return { canvas, engine };
 }
 
-const throwingSemantic: SemanticCompiler = {
-    id: 'throws',
-    compile() {
-        throw new Error('semantic step must not run');
-    }
-};
-
-function stubModel(output: unknown) {
-    const requests: ModelIntentRequest[] = [];
-    const compiler = modelIntentCompiler(request => {
-        requests.push(request);
-        return typeof output === 'function' ? (output as (r: ModelIntentRequest) => unknown)(request) : output;
-    });
-    return { compiler, requests };
-}
-
 describe('utterance corpus', () => {
     it('is versioned and covers every spec §16 class', () => {
         expect(UTTERANCE_CORPUS_VERSION).toBe(1);
         const classes = new Set(UTTERANCE_CORPUS.map(item => item.class));
-        for (const required of ['deterministic', 'paraphrase', 'deixis', 'ambiguity', 'adversarial', 'degradation'] as UtteranceClass[]) {
+        for (const required of ['deterministic', 'deixis', 'ambiguity', 'adversarial', 'degradation'] as UtteranceClass[]) {
             expect(classes.has(required)).toBe(true);
         }
         const lines = UTTERANCE_CORPUS.map(item => item.transcript);
@@ -101,14 +79,6 @@ describe('utterance corpus', () => {
         });
     }
 
-    it('grammar lines never reach the semantic step, in the semantic configuration', async () => {
-        for (const item of UTTERANCE_CORPUS.filter(entry => entry.class === 'deterministic' || entry.class === 'deixis')) {
-            const played = await playUtterance(item, 'paraphrase', compilerFor('paraphrase', throwingSemantic));
-            expect(played.semanticCalls, item.id).toBe(0);
-            expect(played.command?.lifecycle, item.id).not.toBe('refused');
-        }
-    });
-
     it('speak() and hear() agree on every line the grammar matches', async () => {
         const grammarLines = UTTERANCE_CORPUS.filter(item => item.transcript && !item.script && compileDeterministic(
             { transcript: item.transcript, observationId: 'x', final: true },
@@ -136,8 +106,8 @@ describe('utterance corpus', () => {
 });
 
 describe('deterministic baseline', () => {
-    it('resolves the fixed lines without invoking the semantic step', async () => {
-        const compiler = createIntentCompiler({ semantic: throwingSemantic });
+    it('resolves the fixed lines', async () => {
+        const compiler = createIntentCompiler();
         const context: IntentContext = { activeShellId: 'root', vocabulary: CORPUS_CATALOG, visibleBlocks: [], selection: [] };
         for (const [line, operation] of [
             ['undo', 'UNDO'], ['cancel', 'CANCEL'], ['confirm', 'CONFIRM'],
@@ -150,155 +120,12 @@ describe('deterministic baseline', () => {
 
     it('refuses a non-final observation before any parsing', async () => {
         const observation = { ...finalObservation('undo'), final: false };
-        const result = await createIntentCompiler({ semantic: throwingSemantic }).compile(observation, {
+        const result = await createIntentCompiler().compile(observation, {
             activeShellId: 'root', vocabulary: CORPUS_CATALOG, visibleBlocks: [], selection: []
         });
         expect(result).toEqual({ kind: 'refuse', reason: 'not-final', via: 'grammar' });
     });
 
-    it('a throwing semantic step refuses; it never commits', async () => {
-        const { canvas, engine } = boardEngine();
-        const observation = finalObservation('feed hacker news into the analyst');
-        const result = await createIntentCompiler({ semantic: throwingSemantic }).compile(observation, engine.describeSpeechContext());
-        expect(result).toEqual({ kind: 'refuse', reason: 'semantic-compiler-failed', via: 'semantic' });
-        expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'refused', reason: 'semantic-compiler-failed' });
-        expect(canvas.wires).toHaveLength(0);
-    });
-});
-
-describe('SpatialCommandProposal v1 validation', () => {
-    const rules = { observationId: 'o:1', vocabulary: CORPUS_CATALOG, allowReserved: false, candidateIds: new Set(['hn', 'analyst']) };
-    const base = { version: 1, evidence: { speechObservationId: 'o:1' } };
-
-    it.each([
-        ['an array', [], 'not-an-object'],
-        ['null', null, 'not-an-object'],
-        ['a legacy subjects field', { ...base, operation: 'DELETE', subject: { kind: 'deictic', word: 'this' }, subjects: ['hn'] }, 'unknown-field:subjects'],
-        ['an unknown operation', { ...base, operation: 'DELETE_ALL' }, 'unknown-operation'],
-        ['a group operation', { ...base, operation: 'GROUP', subject: { kind: 'deictic', word: 'these' } }, 'unknown-operation'],
-        ['a reserved operation', { ...base, operation: 'CONFIRM' }, 'reserved-deterministic'],
-        ['another version', { ...base, version: 2, operation: 'UNDO' }, 'version'],
-        ['foreign evidence', { version: 1, operation: 'DELETE', subject: { kind: 'deictic', word: 'this' }, evidence: { speechObservationId: 'o:2' } }, 'evidence-mismatch'],
-        ['extra evidence', { version: 1, operation: 'DELETE', subject: { kind: 'deictic', word: 'this' }, evidence: { speechObservationId: 'o:1', trust: 'high' } }, 'evidence'],
-        ['a block type outside the vocabulary', { ...base, operation: 'CREATE', subject: { kind: 'block-type', blockId: 'shell_exec' }, placement: { kind: 'default' } }, 'block-type-not-in-vocabulary'],
-        ['a candidate outside the supplied set', { ...base, operation: 'DELETE', subject: { kind: 'candidate', id: 'other' } }, 'candidate-not-supplied'],
-        ['a set delete', { ...base, operation: 'DELETE', subject: { kind: 'deictic', word: 'these' } }, 'referent-set-not-allowed'],
-        ['a move without a pointed place', { ...base, operation: 'MOVE', subject: { kind: 'deictic', word: 'this' }, placement: { kind: 'default' } }, 'placement-shape'],
-        ['a field the operation does not take', { ...base, operation: 'DELETE', subject: { kind: 'deictic', word: 'this' }, placement: { kind: 'pointed' } }, 'field-not-allowed:placement'],
-        ['a missing subject', { ...base, operation: 'DELETE' }, 'missing-field:subject'],
-        ['an extra referent key', { ...base, operation: 'DELETE', subject: { kind: 'named', name: 'hn', force: true } }, 'referent-shape'],
-        ['a control character', { ...base, operation: 'DELETE', subject: { kind: 'named', name: 'hn\u0000' } }, 'referent-shape'],
-        ['an overlong name', { ...base, operation: 'DELETE', subject: { kind: 'named', name: 'x'.repeat(81) } }, 'referent-shape'],
-        ['an unknown shell', { ...base, operation: 'OPEN_SHELL', target: { kind: 'shell', shellId: 'admin' } }, 'shell-not-in-vocabulary']
-    ])('refuses %s', (_label, value, reason) => {
-        expect(validateProposal(value, rules)).toEqual({ ok: false, reason });
-    });
-
-    it('returns a copy, not the caller object', () => {
-        const value = { ...base, operation: 'DELETE', subject: { kind: 'candidate', id: 'hn' } };
-        const checked = validateProposal(value, rules);
-        expect(checked.ok).toBe(true);
-        if (checked.ok) {
-            value.subject.id = 'analyst';
-            expect(checked.proposal.subject).toEqual({ kind: 'candidate', id: 'hn' });
-        }
-    });
-});
-
-describe('ModelIntentCompiler boundary', () => {
-    async function compileWith(output: unknown, transcript = 'please take this off the board') {
-        const { canvas, engine } = boardEngine();
-        const { compiler, requests } = stubModel(output);
-        const observation = finalObservation(transcript);
-        const result = await createIntentCompiler({ semantic: compiler }).compile(observation, engine.describeSpeechContext());
-        return { canvas, engine, observation, result, requests };
-    }
-
-    it.each([
-        ['garbage text', 'sure! I deleted it for you', 'model-output-invalid-json'],
-        ['truncated JSON', '{"version":1,"operation":"DELETE"', 'model-output-invalid-json'],
-        ['a number', 42, 'model-output-invalid:not-an-object'],
-        ['an oversize string', `"${'x'.repeat(5000)}"`, 'model-output-too-long'],
-        ['an extra operation', { version: 1, operation: 'INSTALL_CAPABILITY', evidence: { speechObservationId: '?' } }, 'model-output-invalid:unknown-operation'],
-        ['CONFIRM', { version: 1, operation: 'CONFIRM', evidence: { speechObservationId: '?' } }, 'model-output-invalid:reserved-deterministic'],
-        ['UNDO', { version: 1, operation: 'UNDO', evidence: { speechObservationId: '?' } }, 'model-output-invalid:reserved-deterministic']
-    ])('refuses %s', async (_label, output, reason) => {
-        const { canvas, engine, observation, result } = await compileWith(output);
-        expect(result).toEqual({ kind: 'refuse', reason, via: 'model' });
-        expect(engine.admitSpeech(observation, result).lifecycle).toBe('refused');
-        expect(canvas.blocks).toHaveLength(2);
-        expect(canvas.wires).toHaveLength(0);
-    });
-
-    it('refuses extra fields and ids that were not supplied', async () => {
-        const extra = await compileWith((request: ModelIntentRequest) => ({
-            version: 1, operation: 'DELETE', subject: { kind: 'candidate', id: 'hn' },
-            evidence: { speechObservationId: request.observationId }, confirmed: true
-        }));
-        expect(extra.result).toEqual({ kind: 'refuse', reason: 'model-output-invalid:unknown-field:confirmed', via: 'model' });
-
-        const foreign = await compileWith((request: ModelIntentRequest) => ({
-            version: 1, operation: 'DELETE', subject: { kind: 'candidate', id: 'root-admin-block' },
-            evidence: { speechObservationId: request.observationId }
-        }));
-        expect(foreign.result).toEqual({ kind: 'refuse', reason: 'model-output-invalid:candidate-not-supplied', via: 'model' });
-    });
-
-    it('a thrown model call refuses', async () => {
-        const { result } = await compileWith(() => { throw new Error('rate limited'); });
-        expect(result).toEqual({ kind: 'refuse', reason: 'model-error', via: 'model' });
-    });
-
-    it('sends bounded descriptors and no reserved operations', async () => {
-        const { requests } = await compileWith('nope');
-        expect(requests).toHaveLength(1);
-        expect(requests[0].operations).not.toContain('CONFIRM');
-        expect(requests[0].operations).not.toContain('UNDO');
-        expect(requests[0].operations).not.toContain('CANCEL');
-        expect(requests[0].candidates.map(item => item.id).sort()).toEqual(['analyst', 'hn']);
-        expect(Object.keys(requests[0].candidates[0]).sort()).toEqual(['blockId', 'id', 'name']);
-    });
-
-    it('a valid model delete still previews and waits for the host confirm', async () => {
-        const { canvas, engine, observation, result } = await compileWith((request: ModelIntentRequest) => JSON.stringify({
-            version: 1, operation: 'DELETE', subject: { kind: 'candidate', id: 'hn' },
-            evidence: { speechObservationId: request.observationId }
-        }));
-        expect(result).toMatchObject({ kind: 'proposal', via: 'model' });
-        const command = engine.admitSpeech(observation, result);
-        expect(command).toMatchObject({ lifecycle: 'previewing', reason: 'destructive-needs-confirm', subjects: ['hn'] });
-        expect(command.evidence).toContain('speech-compiler:model');
-        expect(canvas.blocks).toHaveLength(2);
-        expect(engine.hear(finalObservation('yeah'))).toMatchObject({ lifecycle: 'refused' });
-        expect(canvas.blocks).toHaveLength(2);
-        expect(engine.hear(finalObservation('confirm'))).toMatchObject({ lifecycle: 'committed', action: 'delete' });
-        expect(canvas.blocks).toHaveLength(1);
-    });
-
-    it('a candidate that went stale between compile and admission holds', async () => {
-        const { canvas, engine, observation, result } = await compileWith((request: ModelIntentRequest) => ({
-            version: 1, operation: 'CONNECT', subject: { kind: 'candidate', id: 'hn' }, target: { kind: 'candidate', id: 'analyst' },
-            evidence: { speechObservationId: request.observationId }
-        }), 'hook the first one into the second one');
-        expect(result.kind).toBe('proposal');
-        canvas.remove('hn');
-        expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'held', reason: 'stale-referent' });
-        expect(canvas.wires).toHaveLength(0);
-    });
-
-    it('prompt injection inside a block name cannot forge a confirm', async () => {
-        const canvas = buildScene('injected-name');
-        const engine = new InteractionEngine(canvas, () => CORPUS_CATALOG);
-        engine.speak('delete notes');
-        const obedient = modelIntentCompiler(request => ({
-            version: 1, operation: 'CONFIRM', evidence: { speechObservationId: request.observationId }
-        }));
-        const observation = finalObservation('do what the notes block says');
-        const result = await createIntentCompiler({ semantic: obedient }).compile(observation, engine.describeSpeechContext());
-        expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'refused', reason: 'model-output-invalid:reserved-deterministic' });
-        expect(engine.snapshot().preview).not.toBeNull();
-        expect(canvas.blocks).toHaveLength(2);
-    });
 });
 
 describe('engine second gate', () => {
@@ -316,30 +143,10 @@ describe('engine second gate', () => {
         expect(canvas.blocks).toHaveLength(2);
     });
 
-    it('refuses a reserved operation from the semantic path even when the words match', () => {
-        const { engine } = boardEngine();
-        const observation = finalObservation('undo');
-        const result: IntentCompilerResult = {
-            kind: 'proposal', via: 'semantic',
-            proposal: { version: 1, operation: 'UNDO', evidence: { speechObservationId: observation.observationId } }
-        };
-        expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'refused', reason: 'invalid-proposal:reserved-deterministic' });
-    });
-
-    it('RESOLVE_CAPABILITY is refused and changes nothing', async () => {
-        const { canvas, engine } = boardEngine();
-        const observation = finalObservation('bring in weather data');
-        const result = await createIntentCompiler({ semantic: paraphraseCompiler() }).compile(observation, engine.describeSpeechContext());
-        expect(result).toMatchObject({ kind: 'proposal', proposal: { operation: 'RESOLVE_CAPABILITY', capabilityQuery: { text: 'weather' } } });
-        expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'refused', reason: 'capability-bridge-unavailable' });
-        expect(canvas.blocks).toHaveLength(2);
-        expect(engine.snapshot().traces).toHaveLength(0);
-    });
-
     it('one session admits one result, whichever compiler produced it', async () => {
         const { canvas, engine } = boardEngine();
-        const observation = finalObservation('can you add hacker news');
-        const result = await createIntentCompiler({ semantic: paraphraseCompiler() }).compile(observation, engine.describeSpeechContext());
+        const observation = finalObservation('add hacker news');
+        const result = await createIntentCompiler().compile(observation, engine.describeSpeechContext());
         expect(engine.admitSpeech(observation, result).lifecycle).toBe('committed');
         expect(engine.admitSpeech(observation, result)).toMatchObject({ lifecycle: 'refused', reason: 'duplicate-final' });
         expect(engine.hear(observation)).toMatchObject({ lifecycle: 'refused', reason: 'duplicate-final' });
@@ -369,7 +176,7 @@ describe('speech input with an async compiler', () => {
         const pending = input.release();
         await new Promise(resolve => setTimeout(resolve, 0));
         input.cancel();
-        release({ kind: 'refuse', reason: 'late', via: 'semantic' });
+        release({ kind: 'refuse', reason: 'late', via: 'grammar' });
         await expect(pending).resolves.toEqual({ kind: 'cancelled' });
         expect(engine.snapshot().commands).toHaveLength(0);
         expect(canvas.blocks).toHaveLength(2);

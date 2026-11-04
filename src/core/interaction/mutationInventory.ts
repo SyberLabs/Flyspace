@@ -29,14 +29,14 @@ export const TOPOLOGY_WRITES = [
 
 export type TopologyWrite = typeof TOPOLOGY_WRITES[number];
 
-export interface InventoryException {
+interface InventoryException {
     write: TopologyWrite;
     /** The concrete function that makes the write. */
     in: string;
     reason: string;
 }
 
-export interface InventoryEntry {
+interface InventoryEntry {
     file: string;
     /** User actions in this file that now enter the engine. */
     routed: Array<{ action: string; via: 'pointerCreate' | 'pointerDelete' | 'pointerConnect' | 'pointerMove' }>;
@@ -101,21 +101,6 @@ export const MUTATION_INVENTORY: InventoryEntry[] = [
         routed: [],
         exceptions: [
             { write: 'setActiveShell', in: 'useShellNavigation effect', reason: 'URL-driven navigation mirrors the route into the store; the user action is the browser navigation' }
-        ]
-    },
-    {
-        file: 'src/components/mind/ThinkResultModal.tsx',
-        routed: [],
-        exceptions: [
-            { write: 'addBlock', in: 'handleCrystallize', reason: 'places an insight note with a custom schema and a content payload; the engine add takes a vocabulary type and no data, and no speech verb makes this note' }
-        ]
-    },
-    {
-        file: 'src/core/services/crystallize.service.ts',
-        routed: [],
-        exceptions: [
-            { write: 'addBlock', in: 'crystallize', reason: 'writes the Mind pool and its memory block together; a separate authority from speech "remember this"' },
-            { write: 'addWire', in: 'crystallize', reason: 'wires the memory block it just created, through wireStore admission' }
         ]
     },
     {

@@ -86,7 +86,6 @@ export interface SpatialCommand {
 export interface InteractionTrace {
     command: string;
     subject?: string;
-    subjects?: string[];
     target?: string;
     from?: { x: number; y: number };
     to?: { x: number; y: number };

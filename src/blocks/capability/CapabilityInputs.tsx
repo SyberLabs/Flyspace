@@ -5,8 +5,6 @@ import { looksLikeKey } from '@/core/capabilities/credentialName';
 import type { ValueType } from '@/core/capabilities/valueType';
 import { isPlainList } from '@/core/capabilities/httpTarget';
 
-export { looksLikeKey };
-
 /** What one field holds while being edited: text, or a checkbox's boolean. */
 type FieldDraft = string | boolean;
 /** A body laid out as fields keeps one draft per property. */
@@ -85,8 +83,8 @@ export function coerceInput(input: CapabilityInput, draft: unknown): unknown {
 }
 
 /**
- * A required input with exactly one allowed value is not a choice: FRED's
- * `file_type` must be `json`. It is sent without a field.
+ * A required input with exactly one allowed value is not a choice. It is
+ * sent without a field.
  */
 export function constantOf(input: CapabilityInput): { value: unknown } | null {
     const options = input.schema.enum;
@@ -294,7 +292,7 @@ function Field({ input, idPrefix, value, wiredValue, onChange, disabled }: {
     );
 }
 
-export interface CapabilityInputsProps {
+interface CapabilityInputsProps {
     inputs: readonly CapabilityInput[];
     params: Record<string, unknown>;
     /** Values arriving on wires. A typed value overrides them. */

@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { AddApiDialog } from './AddApiDialog';
 import type { ApiIndex, ApiIndexEntry } from '@/core/capabilities/apiIndex';
 import { compileOpenApi } from '@/core/capabilities/openapi';
-import { clearCapabilities, installProposal, listCapabilities } from '@/core/capabilities/registry';
+import { clearCapabilities, installProposal } from '@/core/capabilities/registry';
+import { allCapabilities } from '@/core/capabilities/state';
 import { MAX_SECRET_BYTES, capabilitySecrets } from '@/core/capabilities/secrets';
 import { useCapabilityStore } from '@/core/capabilities/store';
 import { useBlockStore } from '@/core/stores/blockStore';
@@ -103,36 +104,33 @@ afterEach(() => {
 // Find → review → install & place
 // ============================================
 
-describe('AddApiDialog: a curated API (FRED)', () => {
-    it('finds FRED beside the directory, says its calls go through Flyspace, and installs it as broker reads', async () => {
+describe('AddApiDialog: a curated API (Alpha Vantage)', () => {
+    it('finds Alpha Vantage beside the directory, says its calls go to the provider, and installs it as a browser read', async () => {
         render(<Harness />);
-        fireEvent.change(await screen.findByLabelText('Search APIs'), { target: { value: 'unemployment inflation' } });
-        const fred = screen.getByRole('button', { name: 'Review FRED Economic Data' });
-        expect(fred.textContent).toContain('· curated by Flyspace');
-        fireEvent.click(fred);
+        fireEvent.change(await screen.findByLabelText('Search APIs'), { target: { value: 'stock quotes' } });
+        const alpha = screen.getByRole('button', { name: 'Review Alpha Vantage Stocks' });
+        expect(alpha.textContent).toContain('· curated by Flyspace');
+        fireEvent.click(alpha);
 
         expect(await screen.findByText(/Spec written by Flyspace from the provider/)).toBeTruthy();
-        expect(screen.getByText(/Sends requests to/).textContent).toContain('https://api.stlouisfed.org through Flyspace’s own server');
-        expect(screen.getByText(/refuses calls from a browser/)).toBeTruthy();
-        // FRED's terms: its notice and terms link, shown before installing.
-        expect(screen.getByTestId('provider-attribution').textContent).toContain('is not endorsed or certified by the Federal Reserve Bank of St. Louis');
-        // Where to get the key, from FRED's own pages, and the documented format checked on paste.
+        expect(screen.getByText(/Sends requests to/).textContent).toContain('https://www.alphavantage.co');
+        // Where to get the key, from Alpha Vantage's own pages.
         const guide = screen.getByTestId('key-guide');
-        expect(guide.textContent).toContain('Get a key at fredaccount.stlouisfed.org/apikeys');
-        expect(guide.textContent).toContain('A free FRED account');
+        expect(guide.textContent).toContain('Get a key at www.alphavantage.co/support');
+        expect(guide.textContent).toContain('what describes you, your organization, and your email');
         expect(guide.querySelector('a')!.getAttribute('rel')).toBe('noopener noreferrer');
 
-        fireEvent.change(screen.getByLabelText('Key for https://api.stlouisfed.org'), { target: { value: 'abc123' } });
-        expect(screen.getByText(/does not look like the documented key format \(32 lowercase letters and digits\)/)).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Key for https://www.alphavantage.co'), { target: { value: 'abc123' } });
         fireEvent.click(screen.getByRole('button', { name: 'Install & place' }));
 
-        const installed = listCapabilities().filter(m => m.source.locator === 'omni:curated/fred');
-        expect(installed).toHaveLength(3);
-        for (const manifest of installed) expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('server_broker');
-        expect(placedCapabilityBlocks()[0].schema.display_name).toBe('Values of an economic series over time');
-        expect(calls().some(url => url.includes('stlouisfed'))).toBe(false); // nothing fetched for the spec
+        const installed = allCapabilities().filter(m => m.source.locator === 'omni:curated/alpha-vantage');
+        expect(installed).toHaveLength(1);
+        for (const manifest of installed) expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('browser_direct');
+        expect(placedCapabilityBlocks()[0].schema.display_name).toBe('Stock quote or price history');
+        expect(calls().some(url => url.includes('alphavantage'))).toBe(false); // nothing fetched for the spec
     });
-});
+
+    });
 
 describe('AddApiDialog: from search to the canvas', () => {
     it('opens on search, and reviews nothing until an API is chosen', async () => {
@@ -161,7 +159,7 @@ describe('AddApiDialog: from search to the canvas', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Install & place' }));
 
-        expect(listCapabilities().filter(m => m.source.locator === INDEX.entries[0].specUrl)).toHaveLength(2);
+        expect(allCapabilities().filter(m => m.source.locator === INDEX.entries[0].specUrl)).toHaveLength(2);
         const placed = placedCapabilityBlocks();
         expect(placed).toHaveLength(1);
         expect(placed[0].schema.display_name).toBe('Forecast timeline');
@@ -184,7 +182,7 @@ describe('AddApiDialog: from search to the canvas', () => {
         fireEvent.click(await screen.findByLabelText('Install Forecast timeline'));
         expect(screen.getByText('Installs 1. Nothing is placed on the canvas.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Install' }));
-        expect(listCapabilities().map(m => m.title)).toEqual(['Weather history']);
+        expect(allCapabilities().map(m => m.title)).toEqual(['Weather history']);
         expect(placedCapabilityBlocks()).toHaveLength(0);
     });
 
@@ -216,7 +214,7 @@ describe('AddApiDialog: keys and approval', () => {
         fireEvent.change(screen.getByLabelText('OpenAPI document'), { target: { value: '{not json' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(screen.getByText('OpenAPI document must be JSON')).toBeTruthy();
-        expect(listCapabilities()).toHaveLength(0);
+        expect(allCapabilities()).toHaveLength(0);
     });
 
     it('installs without writing the key into the store; a write lands pending', () => {
@@ -225,8 +223,8 @@ describe('AddApiDialog: keys and approval', () => {
         fireEvent.change(screen.getByLabelText('Key for https://board.example.test'), { target: { value: 'super-secret-value' } });
         fireEvent.click(screen.getByRole('button', { name: 'Install & place' }));
 
-        const list = listCapabilities().find(m => m.source.operationId === 'listPosts');
-        const create = listCapabilities().find(m => m.source.operationId === 'createPost');
+        const list = allCapabilities().find(m => m.source.operationId === 'listPosts');
+        const create = allCapabilities().find(m => m.source.operationId === 'createPost');
         expect(list?.approval).toBe('auto');
         expect(create?.approval).toBe('pending');
         expect(capabilitySecrets.get(list!.auth.secretRef!)).toBe('super-secret-value');
@@ -239,7 +237,7 @@ describe('AddApiDialog: keys and approval', () => {
         paste(SPEC);
         fireEvent.click(screen.getByRole('button', { name: 'Install & place' }));
         expect(screen.getByRole('alert').textContent).toBe('Enter the key for https://board.example.test');
-        expect(listCapabilities()).toHaveLength(0);
+        expect(allCapabilities()).toHaveLength(0);
         expect(placedCapabilityBlocks()).toHaveLength(0);
     });
 
@@ -249,7 +247,7 @@ describe('AddApiDialog: keys and approval', () => {
         fireEvent.change(screen.getByLabelText('Key for https://board.example.test'), { target: { value: 'k'.repeat(MAX_SECRET_BYTES + 1) } });
         fireEvent.click(screen.getByRole('button', { name: 'Install & place' }));
         expect(screen.getByRole('alert').textContent).toBe(`A key is at most ${MAX_SECRET_BYTES} bytes`);
-        expect(listCapabilities()).toHaveLength(0);
+        expect(allCapabilities()).toHaveLength(0);
         const ref = compileOpenApi(SPEC).manifests[0].auth.secretRef!;
         expect(capabilitySecrets.get(ref)).toBeUndefined();
     });
@@ -310,8 +308,8 @@ describe('AddApiDialog: keys and approval', () => {
         fireEvent.click(screen.getByLabelText('Install List posts'));
         // Unselecting the operation marked for the canvas leaves nothing to place.
         fireEvent.click(screen.getByRole('button', { name: 'Install' }));
-        expect(listCapabilities().map(m => m.source.operationId)).toEqual(['createPost']);
-        expect(listCapabilities()[0].approval).toBe('pending');
+        expect(allCapabilities().map(m => m.source.operationId)).toEqual(['createPost']);
+        expect(allCapabilities()[0].approval).toBe('pending');
     });
 });
 
@@ -329,7 +327,7 @@ describe('AddApiDialog: Your APIs', () => {
         const list = screen.getByRole('list', { name: 'Installed APIs' });
         expect(within(list).getByText('Waiting for approval')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Approve Create post' }));
-        expect(listCapabilities().find(m => m.source.operationId === 'createPost')?.approval).toBe('approved');
+        expect(allCapabilities().find(m => m.source.operationId === 'createPost')?.approval).toBe('approved');
         expect(screen.queryByRole('button', { name: 'Approve Create post' })).toBeNull();
     });
 
@@ -338,7 +336,7 @@ describe('AddApiDialog: Your APIs', () => {
         act(() => installCreatePost());
         fireEvent.click(screen.getByRole('tab', { name: /Your APIs/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Remove Create post' }));
-        expect(listCapabilities()).toHaveLength(0);
+        expect(allCapabilities()).toHaveLength(0);
     });
 
     it('names a capability the current rules could not restore, and lets you forget it', () => {

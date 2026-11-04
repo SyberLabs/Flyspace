@@ -3,8 +3,6 @@ import {
     SHELL_TEMPLATES,
     getShellTemplate,
     validateTemplate,
-    validateAllTemplates,
-    keyedProvidersForTemplate,
     type ShellTemplate
 } from './templates';
 import { blockRegistry } from '@/core/registry/BlockRegistry';
@@ -24,7 +22,7 @@ describe('SHELL_TEMPLATES integrity (against the real registry)', () => {
     });
 
     it('every template references only registered block_ids and valid refs', () => {
-        const problems = validateAllTemplates(isRegistered);
+        const problems = SHELL_TEMPLATES.flatMap(t => validateTemplate(t, isRegistered));
         // If this fails, a template names a block that does not exist in the
         // registry, or a connection points at a missing block.
         expect(problems).toEqual([]);
@@ -33,12 +31,6 @@ describe('SHELL_TEMPLATES integrity (against the real registry)', () => {
     it('template ids are unique', () => {
         const ids = SHELL_TEMPLATES.map(t => t.id);
         expect(new Set(ids).size).toBe(ids.length);
-    });
-});
-
-describe('keyedProvidersForTemplate — what a shell needs before it spawns', () => {
-    it.each(SHELL_TEMPLATES.map(t => t.id))('%s needs zero keyed providers', (id) => {
-        expect(keyedProvidersForTemplate(getShellTemplate(id)!)).toEqual([]);
     });
 });
 

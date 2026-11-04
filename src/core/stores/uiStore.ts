@@ -34,50 +34,16 @@ interface UIState {
 
     /** Set selected block */
     setSelectedBlock: (instanceId: string | null) => void;
-
-    /**
-     * Blocks to highlight on the canvas. Set while hovering a provenance
-     * chip on a persona answer, so 'what fed this' is answerable by
-     * pointing rather than by reading ids.
-     */
-    highlightedBlockIds: string[];
-    setHighlightedBlocks: (ids: string[]) => void;
-
-    /**
-     * Wires currently feeding a persona turn. Ephemeral — must not survive
-     * a reload, and must clear even if the turn errors.
-     */
-    readingWireIds: string[];
-    setReadingWires: (ids: string[]) => void;
-
-    /**
-     * In-flight persona answers, by block id. A draft is view state: the
-     * persisted block receives the message when the turn ends, so a stream
-     * does not write the whole canvas to IndexedDB on every token.
-     */
-    drafts: Record<string, string>;
-    setDraft: (instanceId: string, content: string | null) => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
     commandPaletteOpen: false,
     draggingBlockId: null,
     selectedBlockId: null,
-    highlightedBlockIds: [],
-    readingWireIds: [],
-    drafts: {},
 
     openCommandPalette: () => set({ commandPaletteOpen: true }),
     closeCommandPalette: () => set({ commandPaletteOpen: false }),
     toggleCommandPalette: () => set(state => ({ commandPaletteOpen: !state.commandPaletteOpen })),
     setDraggingBlock: (blockId) => set({ draggingBlockId: blockId }),
-    setSelectedBlock: (instanceId) => set({ selectedBlockId: instanceId }),
-    setHighlightedBlocks: (ids) => set({ highlightedBlockIds: ids }),
-    setReadingWires: (ids) => set({ readingWireIds: ids }),
-    setDraft: (instanceId, content) => set(state => {
-        const drafts = { ...state.drafts };
-        if (content === null) delete drafts[instanceId];
-        else drafts[instanceId] = content;
-        return { drafts };
-    })
+    setSelectedBlock: (instanceId) => set({ selectedBlockId: instanceId })
 }));

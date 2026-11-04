@@ -5,14 +5,13 @@ import { useWireStore } from './wireStore';
 import { useShellStore } from './shellStore';
 import { useMindStore } from './mindStore';
 import { vaultStorage } from '../vault/vaultStorage';
-import { getHydrationRejections, __resetHydrationRejections } from '../vault/hydration';
 import { DEFAULT_WIRE_FILTERS, type DataWire } from '../schemas/wire.schema';
 import type { BlockInstance, OmniBlockSchema } from '../schemas/block.schema';
 import type { ShellConfig } from '../schemas/shell.schema';
 import { LLM_DEFAULTS, createInitialMindState } from '../schemas/mind.schema';
 
 // A record read back from the vault is checked against its schema before it
-// becomes state. A record that fails is dropped, recorded, and warned about;
+// becomes state. A record that fails is dropped and warned about;
 // the records next to it survive. Nothing is cast.
 
 const schema: OmniBlockSchema = {
@@ -77,9 +76,23 @@ async function readVault(key: string): Promise<{ state: Record<string, unknown>;
 
 let warn: MockInstance<typeof console.warn>;
 
+interface Rejection {
+    store: string;
+    id: string | null;
+    reason: string;
+}
+
+/** The records the hydrate refused, in order, read from its warnings. */
+function rejections(store?: string): Rejection[] {
+    return warn.mock.calls
+        .map(([message]) => /^\[vault\] ([^:\s]+): dropped persisted record(?: ([^:\s]+))?: ([\s\S]*)$/.exec(String(message)))
+        .filter((match): match is RegExpExecArray => match !== null)
+        .map(([, name, id, reason]) => ({ store: name, id: id ?? null, reason }))
+        .filter(rejection => store === undefined || rejection.store === store);
+}
+
 beforeEach(async () => {
     warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    __resetHydrationRejections();
     for (const key of ['omni-blocks', 'omni-wires', 'omni-shells', 'omni-mind']) {
         await vaultStorage.removeItem(key);
     }
@@ -110,7 +123,7 @@ describe('omni-blocks hydrate', () => {
         await useBlockStore.persist.rehydrate();
 
         expect(useBlockStore.getState().blocks.map(b => b.instance_id)).toEqual(['b_ok']);
-        const rejected = getHydrationRejections().filter(r => r.store === 'omni-blocks');
+        const rejected = rejections('omni-blocks');
         expect(rejected.map(r => r.id)).toEqual(['b_missing', 'b_wrong_type', 'b_no_type', null]);
         expect(rejected[0].reason).toContain('position');
         expect(rejected[1].reason).toContain('schema.block_id');
@@ -122,22 +135,22 @@ describe('omni-blocks hydrate', () => {
         await writeVault('omni-blocks', { blocks: [block('b_ok')], activeShellId: 7 }, 2);
         await useBlockStore.persist.rehydrate();
         expect(useBlockStore.getState().activeShellId).toBe('root');
-        expect(getHydrationRejections().map(r => r.reason).join()).toContain('activeShellId');
+        expect(rejections('omni-blocks').map(r => r.reason).join()).toContain('activeShellId');
     });
 
     it('rejects a blocks field that is not an array and keeps an empty canvas', async () => {
         await writeVault('omni-blocks', { blocks: { b_ok: block('b_ok') }, activeShellId: 'root' }, 2);
         await useBlockStore.persist.rehydrate();
         expect(useBlockStore.getState().blocks).toEqual([]);
-        expect(getHydrationRejections()).toHaveLength(1);
-        expect(getHydrationRejections()[0].reason).toContain('array');
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(rejections('omni-blocks')[0].reason).toContain('array');
     });
 
     it('hydrates nothing and records nothing when the vault is empty', async () => {
         await useBlockStore.persist.rehydrate();
         expect(useBlockStore.getState().blocks).toEqual([]);
         expect(useBlockStore.getState().activeShellId).toBe('root');
-        expect(getHydrationRejections()).toEqual([]);
+        expect(warn).not.toHaveBeenCalled();
     });
 });
 
@@ -157,7 +170,7 @@ describe('omni-wires hydrate', () => {
         await useWireStore.persist.rehydrate();
 
         expect(useWireStore.getState().wires.map(w => w.id)).toEqual(['w_ok']);
-        const rejected = getHydrationRejections().filter(r => r.store === 'omni-wires');
+        const rejected = rejections('omni-wires');
         expect(rejected.map(r => r.id)).toEqual(['w_missing', 'w_filters']);
         expect(rejected[0].reason).toContain('targetBlockId');
         expect(rejected[1].reason).toContain('filters');
@@ -188,7 +201,7 @@ describe('omni-shells hydrate', () => {
         expect(state.activeShellId).toBeNull();
         expect(state.hotkeySlots).toEqual({ 1: 's_ok' });
 
-        const rejected = getHydrationRejections().filter(r => r.store === 'omni-shells');
+        const rejected = rejections('omni-shells');
         expect(rejected.map(r => r.id)).toEqual(['s_missing', 's_partly_bad', 's_partly_w', null]);
         expect(rejected[0].reason).toContain('name');
         expect(rejected[1].reason).toContain('position');
@@ -220,13 +233,13 @@ describe('omni-mind hydrate', () => {
         await useMindStore.persist.rehydrate();
 
         const state = useMindStore.getState();
-        expect(state.getPoolEntries('memory')).toEqual([entry]);
+        expect(state.contextPools.find(p => p.id === 'memory')?.entries ?? []).toEqual([entry]);
         expect(state.activePersonaId).toBe('strategist');
         expect(state.llmConfig.provider).toBe('anthropic');
         expect(state.personas.map(p => p.id)).toEqual(fresh.personas.map(p => p.id));
         // Built-in pools the blob lacked are still added.
         expect(state.contextPools.map(p => p.id).sort()).toEqual(fresh.contextPools.map(p => p.id).sort());
-        expect(getHydrationRejections()).toEqual([]);
+        expect(warn).not.toHaveBeenCalled();
 
         // Written back at the new version, so the migration runs once.
         await new Promise(r => setTimeout(r, 30));
@@ -250,13 +263,13 @@ describe('omni-mind hydrate', () => {
         await useMindStore.persist.rehydrate();
 
         const state = useMindStore.getState();
-        expect(state.getPoolEntries('memory')).toEqual([good]);
+        expect(state.contextPools.find(p => p.id === 'memory')?.entries ?? []).toEqual([good]);
         expect(state.contextPools.some(p => p.id === 'custom_pool')).toBe(false);
         expect(state.personas.map(p => p.id)).toEqual([fresh.personas[0].id]);
         expect(state.llmConfig).toEqual(fresh.llmConfig);
         expect(state.graph).toEqual({ nodes: [], edges: [], lastUpdated: state.graph.lastUpdated });
 
-        const rejected = getHydrationRejections().filter(r => r.store === 'omni-mind');
+        const rejected = rejections('omni-mind');
         expect(rejected.map(r => r.id)).toEqual([null, null, 'p_bad', 'custom_pool', 'ctx_bad']);
         expect(rejected[0].reason).toContain('llmConfig');
         expect(rejected[1].reason).toContain('graph');

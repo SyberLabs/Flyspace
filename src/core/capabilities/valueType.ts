@@ -2,7 +2,7 @@
 // This is a closed JSON-Schema subset OMNI can validate without a parser
 // dependency. It is the native contract. OmniData is a separate projection.
 
-export const VALUE_KINDS = [
+const VALUE_KINDS = [
     'string',
     'number',
     'integer',
@@ -13,7 +13,7 @@ export const VALUE_KINDS = [
     'any'
 ] as const;
 
-export type ValueKind = (typeof VALUE_KINDS)[number];
+type ValueKind = (typeof VALUE_KINDS)[number];
 
 export type Primitive = string | number | boolean | null;
 

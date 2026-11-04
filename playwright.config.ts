@@ -1,12 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Golden-path e2e (apex A3). Runs against the production build (`next start`)
- * with OMNI_E2E=1 so /api/llm serves a deterministic mock — the full client
- * pipeline (spawn shell → wires → Think → streaming render) is exercised
- * without a real LLM provider or external keys.
+ * Golden-path e2e (apex A3). Runs against the Next build (`next start`).
  *
- * Local usage: `npm run build && npm run test:e2e`
+ * Local usage: `npm run build:next && npm run test:e2e`
  */
 export default defineConfig({
     testDir: './e2e',
@@ -21,10 +18,6 @@ export default defineConfig({
     webServer: {
         command: 'npm run start',
         port: 3000,
-        timeout: 120_000,
-        env: {
-            OMNI_E2E: '1',
-            OMNI_DEPLOYMENT_MODE: 'local'
-        }
+        timeout: 120_000
     }
 });

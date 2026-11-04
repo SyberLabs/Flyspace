@@ -93,8 +93,6 @@ interface MindStore extends MindState {
     // Context Pools
     // ==================
     pushContext: (poolId: string, entry: Omit<ContextEntry, 'id' | 'timestamp'>) => string;
-    addToPool: (poolId: string, entry: Omit<ContextEntry, 'id' | 'timestamp'>) => string; // Alias for pushContext
-    getPoolEntries: (poolId: string) => ContextEntry[];
     clearPool: (poolId: string) => void;
 
     // ==================
@@ -262,14 +260,6 @@ export const useMindStore = create<MindStore>()(
                 }));
 
                 return id;
-            },
-
-            // Alias for pushContext - used by MindEngine
-            addToPool: (poolId, entry) => get().pushContext(poolId, entry),
-
-            getPoolEntries: (poolId) => {
-                const pool = get().contextPools.find(p => p.id === poolId);
-                return pool?.entries || [];
             },
 
             clearEphemeralContext: () => {
@@ -460,48 +450,9 @@ export const useMindStore = create<MindStore>()(
  */
 function formatBlockDataForFocus(blockType: string, data: unknown): string {
     if (!data) return `[${blockType}] No data available`;
-
-    switch (blockType) {
-        case 'polymarket': {
-            const markets = data as Array<{
-                question: string;
-                outcomes: Array<{ name: string; probability: number }>;
-                volume?: number;
-                endDate?: string;
-            }>;
-            if (!markets.length) return '[Polymarket] No markets loaded';
-
-            const formatted = markets.slice(0, 10).map(m => {
-                const outcomes = m.outcomes?.map(o =>
-                    `  - ${o.name}: ${(o.probability * 100).toFixed(1)}%`
-                ).join('\n') || '  No outcomes';
-                return `📊 ${m.question}\n${outcomes}${m.volume ? `\n  Volume: $${m.volume.toLocaleString()}` : ''}`;
-            }).join('\n\n');
-
-            return `[POLYMARKET FOCUS - ${markets.length} markets]\n\n${formatted}`;
-        }
-
-        case 'newsapi': {
-            const articles = data as Array<{
-                title: string;
-                source: { name: string };
-                description?: string;
-                publishedAt?: string;
-            }>;
-            if (!articles.length) return '[News] No articles loaded';
-
-            const formatted = articles.slice(0, 10).map(a =>
-                `📰 ${a.title}\n  Source: ${a.source?.name || 'Unknown'}${a.description ? `\n  ${a.description.slice(0, 200)}...` : ''}`
-            ).join('\n\n');
-
-            return `[NEWS FOCUS - ${articles.length} articles]\n\n${formatted}`;
-        }
-
-        default:
-            try {
-                return `[${blockType.toUpperCase()} FOCUS]\n${JSON.stringify(data, null, 2).slice(0, 2000)}`;
-            } catch {
-                return `[${blockType}] Data format unknown`;
-            }
+    try {
+        return `[${blockType.toUpperCase()} FOCUS]\n${JSON.stringify(data, null, 2).slice(0, 2000)}`;
+    } catch {
+        return `[${blockType}] Data format unknown`;
     }
 }

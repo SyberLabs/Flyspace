@@ -17,9 +17,6 @@ export interface WireFilters {
 
     /** Auto-refresh when source updates */
     autoRefresh: boolean;
-
-    /** Specific fields to include (empty = all) */
-    fields?: string[];
 }
 
 /**
@@ -32,7 +29,7 @@ export interface WireFilters {
  * can still carry them; such a wire is drawn in its status colour and is
  * excluded from persona context.
  */
-export type WireStatus = 'active' | 'stale' | 'error' | 'disconnected';
+type WireStatus = 'active' | 'stale' | 'error' | 'disconnected';
 
 /**
  * Wire type - defines data flow semantics
@@ -95,7 +92,7 @@ export interface DataWire {
  *               compounds their errors, and the reader should see when an
  *               answer rests on another answer.
  */
-export type ContextSourceKind = 'wire' | 'memory' | 'inference';
+type ContextSourceKind = 'wire' | 'memory' | 'inference';
 
 export interface ContextSource {
     /** Block instance id for `wire`; pool id for `ambient`. */
@@ -103,14 +100,6 @@ export interface ContextSource {
     kind: ContextSourceKind;
     /** Short human label for the provenance chip. */
     label: string;
-    /**
-     * For `kind: 'inference'` — one persona feeding another — the inference
-     * ledger row id of the ANSWER that was consumed, not the block that holds
-     * it. This is what lets the server walk a cascade's full lineage instead
-     * of stopping at "some persona said something". Absent without Postgres,
-     * or when the upstream answer predates the ledger.
-     */
-    parentRunId?: string;
 }
 
 /**
@@ -169,8 +158,7 @@ export interface PersonaBlockData {
 export const DEFAULT_WIRE_FILTERS: WireFilters = {
     summaryOnly: false,
     timeWindow: 'all',
-    autoRefresh: true,
-    fields: []
+    autoRefresh: true
 };
 
 /**

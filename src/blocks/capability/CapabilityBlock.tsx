@@ -12,11 +12,10 @@ import { triggerIdempotencyKey } from '@/core/capabilities/triggers';
 import { resolveWiredInputs } from '@/core/capabilities/wireInputs';
 import type { OmniItem } from '@/core/gateway';
 import { EffectPill } from '@/components/apis/ApiReview';
-import { KeyField, keySlotOf, useHasKey, useHouseKeyCovers } from '@/components/apis/KeyField';
+import { KeyField, keySlotOf, useHasKey } from '@/components/apis/KeyField';
 import { useRememberingKeys } from '@/components/apis/RememberKeys';
-import { SignInPrompt, useSignIn } from '@/components/apis/SignIn';
-import { ProviderAttribution } from '@/components/apis/ProviderAttribution';
-import { attributionFor } from '@/core/capabilities/curatedApis';
+import { SignInPrompt } from '@/components/apis/SignIn';
+import { signInSlotOf } from '@/core/capabilities/connect';
 import { argumentsFrom, CapabilityInputs, constantOf, inputSummaryOf, missingInputs } from './CapabilityInputs';
 import { CapabilityResult } from './CapabilityResult';
 
@@ -41,20 +40,20 @@ function isPlainParams(value: unknown): value is Record<string, unknown> {
 }
 
 /** The executor's error for a keyed run whose slot is empty this session. */
-export function isUnboundKeyError(error: string): boolean {
+function isUnboundKeyError(error: string): boolean {
     return /^Secret slot \S+ is empty$/.test(error);
 }
 
 /**
  * An API that may be saying no to the credential: worth offering to change
- * the key. Some report a bad key as 400 (FRED does), not 401 or 403.
+ * the key. Some report a bad key as 400, not 401 or 403.
  */
 function isRefusal(error: string): boolean {
     return /\bHTTP (400|401|403)\b/.test(error);
 }
 
 /** What an HTTP status usually means for the person running the block. */
-export function errorHint(error: string): string | null {
+function errorHint(error: string): string | null {
     const status = /\bHTTP (\d{3})\b/.exec(error)?.[1];
     if (status === '401' || status === '403') return 'The API refused the request. Check the key, or whether your plan covers this call.';
     if (status === '400') return 'The API rejected the request. Check the inputs, and the key if it takes one.';
@@ -90,17 +89,12 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
     const keySlot = keySlotOf(manifest);
     const hasKey = useHasKey(keySlot);
     const remembering = useRememberingKeys();
-    // The server may hold its own key for this curated API (dataPlant.ts).
-    const houseKey = useHouseKeyCovers(manifest);
-    const onHouseKey = houseKey && keySlot !== null && !hasKey;
     // Keys live for the session, so after a reload a keyed block asks again.
-    const needsKey = keySlot !== null && !hasKey && !houseKey;
-    // An oauth API needs a sign-in instead (connect.ts), for this session.
-    const signIn = useSignIn(manifest);
-    const needsSignIn = signIn !== null && !signIn.signedIn;
+    const needsKey = keySlot !== null && !hasKey;
+    // An oauth API needs a sign-in instead, which the preview cannot give (connect.ts).
+    const signIn = signInSlotOf(manifest);
+    const needsSignIn = signIn !== null;
     const needsCredential = needsKey || needsSignIn;
-    // A provider whose terms require a notice on every app screen that uses it (FRED).
-    const attribution = attributionFor(manifest);
 
     const sideEffect = manifest?.effect === 'write' || manifest?.effect === 'destructive';
     const params = isPlainParams(block?.params) ? block.params : {};
@@ -187,9 +181,6 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
             <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
                 {manifest ? <EffectPill effect={manifest.effect} /> : <span>not installed</span>}
                 {destination ? <span className="min-w-0 truncate font-mono" title={destination}>{destination}</span> : null}
-                {manifest?.transport.kind === 'http' && manifest.transport.access === 'server_broker' ? (
-                    <span className="shrink-0" title="Sent from Flyspace's own server: this API refuses browser calls">via server</span>
-                ) : null}
                 {sideEffect ? (
                     <span className="ml-auto shrink-0">{manifest?.approval === 'approved' ? 'approved' : 'needs approval'}</span>
                 ) : null}
@@ -207,32 +198,19 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                 ) : null}
 
                 {/* What you look at after Run comes first: the error or the result. */}
-                {needsSignIn && manifest && signIn ? <SignInPrompt manifest={manifest} signIn={signIn} /> : null}
+                {signIn ? <SignInPrompt signIn={signIn} /> : null}
 
                 {block?.error && !(needsCredential && isUnboundKeyError(block.error)) ? (
                     <p role="alert" className="rounded-md border border-[var(--truth-red)]/40 px-2 py-1 text-xs text-[var(--truth-red)] [overflow-wrap:anywhere]">
                         {block.error}
                         {errorHint(block.error) ? <span className="block text-[var(--text-muted)]">{errorHint(block.error)}</span> : null}
-                        {signIn?.signedIn && isRefusal(block.error) && !changingKey ? (
-                            <button type="button" onClick={() => setChangingKey(true)}
-                                className="mt-1 block text-[11px] text-[var(--text-secondary)] underline">Sign in again</button>
-                        ) : null}
                         {keySlot && hasKey && isRefusal(block.error) && !changingKey ? (
                             <button type="button" onClick={() => setChangingKey(true)}
                                 className="mt-1 block text-[11px] text-[var(--text-secondary)] underline">Change key</button>
                         ) : null}
                     </p>
                 ) : null}
-                {onHouseKey && !changingKey ? (
-                    <p className="text-[10px] text-[var(--text-muted)]">
-                        Runs on this server&apos;s key. It is shared, so an answer can be up to 5 minutes old and there is a daily limit.{' '}
-                        <button type="button" onClick={() => setChangingKey(true)} className="underline">Use my own key</button>
-                    </p>
-                ) : null}
-                {changingKey && manifest && signIn?.signedIn ? (
-                    <SignInPrompt manifest={manifest} signIn={signIn} again onDone={() => setChangingKey(false)} />
-                ) : null}
-                {changingKey && manifest && (hasKey || onHouseKey) ? (
+                {changingKey && manifest && hasKey ? (
                     <KeyField manifest={manifest} compact autoFocus onSaved={() => setChangingKey(false)} onCancel={() => setChangingKey(false)} />
                 ) : null}
 
@@ -275,7 +253,6 @@ export function CapabilityBlockView({ instanceId }: { instanceId: string }) {
                     </p>
                 ) : null}
             </div>
-            {attribution ? <ProviderAttribution attribution={attribution} /> : null}
             {previewError ? (
                 <p className="text-xs text-[var(--truth-red)]">{previewError}</p>
             ) : null}

@@ -31,7 +31,7 @@ function idbAvailable(): boolean {
 }
 
 /** The last vault operation that failed, by DOMException name (or a vault code). */
-export interface VaultFailure {
+interface VaultFailure {
     code: string;
     at: number;
 }

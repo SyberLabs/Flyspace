@@ -6,7 +6,7 @@
 /**
  * OmniData gateway categories (used by the API gateway layer)
  */
-export type GatewayCategory =
+type GatewayCategory =
     | 'prediction_market'
     | 'news'
     | 'market_data'
@@ -69,7 +69,7 @@ export interface RestListAdapterConfig {
 /**
  * Gateway integration config
  */
-export type ApiGatewayAdapter =
+type ApiGatewayAdapter =
     | {
         type: 'normalizer';
         normalizerId: string;
@@ -83,7 +83,7 @@ export type ApiGatewayAdapter =
 /**
  * API integration metadata
  */
-export interface ApiIntegration {
+interface ApiIntegration {
     gateway?: ApiGatewayAdapter;
 }
 
@@ -102,12 +102,6 @@ export interface ApiProvider {
 
     /** Whether API key is required */
     requiresAuth: boolean;
-
-    /**
-     * process.env name of the server-side key (proxied via /api/data; the
-     * browser never holds it). Render the NAME, never the value.
-     */
-    envVar?: string;
 
     /** Corresponding block IDs that use this API */
     blockIds?: string[];

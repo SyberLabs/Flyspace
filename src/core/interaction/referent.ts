@@ -3,7 +3,7 @@
 
 import type { CanvasBlockView, FramedPoint } from './types';
 
-export interface ResolveInput {
+interface ResolveInput {
     shellId: string;
     blocks: CanvasBlockView[];
     point?: FramedPoint;

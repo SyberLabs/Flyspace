@@ -3,7 +3,6 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import allowlist from '../../../../telemetry/events.json';
 import { errorKind, logEvent, type TelemetryEvent, type TelemetryFields } from './telemetry';
-import { ProviderResponseError } from './llm.adapters';
 import { PUBLIC_PROXY_IDS } from './public.providers';
 
 const MARKER = 'MESSAGE-TEXT-MUST-NOT-BE-LOGGED';
@@ -135,7 +134,6 @@ describe('errorKind', () => {
         expect(errorKind(new SyntaxError(MARKER))).toBe('SyntaxError');
         expect(errorKind(new DOMException(MARKER, 'TimeoutError'))).toBe('TimeoutError');
         expect(errorKind(new DOMException(MARKER, 'AbortError'))).toBe('AbortError');
-        expect(errorKind(new ProviderResponseError(MARKER, 429))).toBe('ProviderResponseError');
     });
 
     it('is "other" for anything off the list', () => {
@@ -191,7 +189,7 @@ describe('telemetry/events.json', () => {
 // ============================================
 
 const ROOT = path.resolve(__dirname, '../../../..');
-const SERVER_DIRS = ['src/app/api', 'src/core/services/server', 'src/core/db'];
+const SERVER_DIRS = ['src/app/api', 'src/core/services/server'];
 const WRITER = 'src/core/services/server/telemetry.ts';
 const CONSOLE_CALL = /\bconsole\.(?:log|info|warn|error|debug|trace)\(/;
 

@@ -3,10 +3,10 @@ import { blockRegistry } from '../registry/BlockRegistry';
 import {
     clearCapabilities,
     ensureSpeechCapabilities,
-    getCapability,
     uninstallCapability
 } from './registry';
 import { executeCapability, unbindLocalHandler } from './execute';
+import { readCapability } from './state';
 import { setSpeechEngine, speechRecognitionMessage, type SpeechEngine } from './speech';
 
 function fakeEngine(transcript = 'hello there'): SpeechEngine & { spoken: string[]; langs: Array<string | undefined> } {
@@ -39,8 +39,8 @@ afterEach(() => {
 
 describe('speech capabilities', () => {
     it('installs manual local speak and listen without secrets', () => {
-        const speak = getCapability('cap_speech_speak');
-        const listen = getCapability('cap_speech_listen');
+        const speak = readCapability('cap_speech_speak');
+        const listen = readCapability('cap_speech_listen');
         expect(speak?.transport).toEqual({ kind: 'local', handler: 'speech.speak' });
         expect(speak?.invocation).toBe('manual');
         expect(speak?.effect).toBe('compute');
@@ -101,9 +101,9 @@ describe('speech capabilities', () => {
 
     it('brings builtins back after they are cleared', () => {
         expect(uninstallCapability('cap_speech_speak')).toBe(true);
-        expect(getCapability('cap_speech_speak')).toBeUndefined();
+        expect(readCapability('cap_speech_speak')).toBeUndefined();
         ensureSpeechCapabilities();
-        expect(getCapability('cap_speech_speak')?.id).toBe('cap_speech_speak');
+        expect(readCapability('cap_speech_speak')?.id).toBe('cap_speech_speak');
         expect(blockRegistry.has('polymarket_live_odds')).toBe(true);
     });
 });

@@ -109,7 +109,6 @@ export function usePolymarketBlock(instanceId: string) {
         markets: cachedData.length > 0 ? cachedData : markets,
         status: block?.status || (isLoading ? 'connecting' : 'connected'),
         lastUpdated: block?.last_updated,
-        fromCache,
         refresh,
         pause: () => { }, // Polling handled by useOmniData
         resume: refresh,

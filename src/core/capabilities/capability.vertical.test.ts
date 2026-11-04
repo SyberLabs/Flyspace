@@ -1,30 +1,34 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { sha256 } from './hash';
-import { credentialSlot } from './identity';
+import { canonicalCapabilityId, credentialSlot } from './identity';
 import { compileOpenApi } from './openapi';
-import { compileMcpTools } from './mcp';
-import { compileBring } from './bring';
-import { validateManifest } from './manifest';
+import {
+    approvalForEffect,
+    sealManifest,
+    validateManifest,
+    type CapabilityEffect,
+    type CapabilityInput,
+    type CapabilityManifest
+} from './manifest';
 import { dropImportedApprovals } from './importAdmission';
 import {
     type CapabilitySnapshot,
     approveCapability,
     clearCapabilities,
-    exportSnapshot,
-    getCapability,
     installProposal,
     restoreSnapshot,
     runInstalledCapability,
     uninstallCapability
 } from './registry';
-import { bindMcpTransport, unbindMcpTransport } from './execute';
+import { bindLocalHandler, unbindLocalHandler } from './execute';
+import { allCapabilities, readCapability } from './state';
 // Write runs need a confirmed preview; these tests exercise the engine after one.
 import { executeConfirmed as executeCapability } from '../../../test/confirmedExecute';
 import { capabilitySecrets } from './secrets';
 import { blockRegistry } from '../registry/BlockRegistry';
 import { useBlockStore } from '../stores/blockStore';
 import { useWireStore } from '../stores/wireStore';
-import { aggregateWireContext, wireService } from '../services/wire.service';
+import { wireService } from '../services/wire.service';
 
 const SPEC = {
     openapi: '3.0.3',
@@ -153,7 +157,7 @@ function manifests() {
 beforeEach(() => {
     clearCapabilities();
     capabilitySecrets.clear();
-    unbindMcpTransport('board');
+    unbindLocalHandler('board.list_board');
     useBlockStore.setState({ blocks: [], activeShellId: 'root' });
     useWireStore.setState({ wires: [] });
 });
@@ -164,6 +168,30 @@ afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
 });
+
+/** A manifest for one local handler, as the host would install it. */
+function localManifest(
+    toolName: string,
+    effect: CapabilityEffect,
+    inputs: CapabilityInput[],
+    output: CapabilityManifest['output']
+): CapabilityManifest {
+    const transport = { kind: 'local' as const, handler: `board.${toolName}` };
+    return sealManifest({
+        version: 1,
+        id: canonicalCapabilityId(transport),
+        title: toolName,
+        source: { kind: 'bring', locator: 'board', operationId: toolName },
+        effect,
+        effectSource: effect === 'write' ? 'declared' : 'annotation',
+        approval: approvalForEffect(effect),
+        invocation: 'manual',
+        auth: { kind: 'none' },
+        transport,
+        inputs,
+        output
+    });
+}
 
 describe('capability compiler', () => {
     it('hashes with sha256', () => {
@@ -222,6 +250,15 @@ describe('capability compiler', () => {
         expect(installProposal(blessed).manifest?.approval).toBe('pending');
     });
 
+    it('rejects a sealed manifest whose http transport is not browser_direct', () => {
+        const list = byOp('listPosts');
+        if (list.transport.kind !== 'http') throw new Error('expected http');
+        const brokered = sealManifest({ ...list, transport: { ...list.transport, access: 'server_broker' as never } });
+        const validation = validateManifest(brokered);
+        expect(validation.ok).toBe(false);
+        expect(validation.errors).toEqual(['http transport access must be browser_direct']);
+    });
+
     it('turns the sample API into a wired block, and removes it, without a catalog edit', async () => {
         expect(blockRegistry.has('polymarket_live_odds')).toBe(true);
 
@@ -260,29 +297,11 @@ describe('capability compiler', () => {
         await runInstalledCapability(instanceId);
         const wireId = wireService.createWire(instanceId, personaId);
         expect(wireId).not.toBe('');
-        expect(aggregateWireContext(personaId).context).toContain('Hello from the board');
+        expect(JSON.stringify(useBlockStore.getState().getBlock(instanceId)?.data)).toContain('Hello from the board');
+        expect(useWireStore.getState().getWiresToBlock(personaId).map(wire => wire.id)).toContain(wireId);
 
         const catalogSource = useBlockStore.getState().addBlock(blockRegistry.get('hackernews_feed')!, { x: 0, y: 200 });
         expect(wireService.createWire(catalogSource, personaId)).not.toBe('');
-
-        const count = compileBring({
-            title: 'Count posts',
-            baseUrl: 'https://board.example.test/v1',
-            method: 'POST',
-            path: '/count',
-            inputs: [{
-                name: 'count',
-                in: 'body',
-                required: true,
-                schema: { kind: 'integer' }
-            }],
-            output: { schema: { kind: 'integer' } }
-        });
-        expect(count.errors).toEqual([]);
-        expect(installProposal(count.manifests[0]).ok).toBe(true);
-        const countId = useBlockStore.getState().addBlock(blockRegistry.get(count.manifests[0].id)!, { x: 200, y: 200 });
-        expect(wireService.createWire(instanceId, countId)).toBe('');
-        expect(useWireStore.getState().wireExists(instanceId, countId)).toBe(false);
 
         const listId = byOp('listPosts').id;
         expect(uninstallCapability(listId)).toBe(true);
@@ -341,14 +360,14 @@ describe('capability compiler', () => {
         const create = byOp('createPost');
         installProposal(create);
         approveCapability(create.id);
-        const snapshot = exportSnapshot();
+        const snapshot: CapabilitySnapshot = { version: 1, manifests: allCapabilities() };
         expect(JSON.stringify(snapshot)).not.toContain('super-secret');
 
         clearCapabilities();
-        expect(getCapability(create.id)).toBeUndefined();
+        expect(readCapability(create.id)).toBeUndefined();
         const restored = restoreSnapshot(snapshot);
         expect(restored.installed).toContain(create.id);
-        expect(getCapability(create.id)?.approval).toBe('approved');
+        expect(readCapability(create.id)?.approval).toBe('approved');
 
         const forged = {
             version: 1 as const,
@@ -359,20 +378,16 @@ describe('capability compiler', () => {
         expect(rejected.rejected[0]?.errors.join(' ')).toMatch(/digest/);
     });
 
-    it('gives two MCP servers with the same label and tool at different origins distinct ids that coexist', () => {
-        const tool = {
-            serverId: 'board',
-            name: 'list_board',
-            inputSchema: { type: 'object', properties: {} },
-            outputSchema: { type: 'array', items: { type: 'string' } }
-        };
-        const [first] = compileMcpTools([{ ...tool, origin: 'https://board.example.test' }]).manifests;
-        const [second] = compileMcpTools([{ ...tool, origin: 'https://other.example.test' }]).manifests;
+    it('gives the same operation at two origins distinct ids and credential slots that coexist', () => {
+        const first = byOp('listPosts');
+        const second = compileOpenApi({ ...SPEC, servers: [{ url: 'https://other.example.test/v1' }] }).manifests
+            .find(entry => entry.source.operationId === 'listPosts')!;
         expect(first.id).not.toBe(second.id);
+        expect(first.auth.secretRef).not.toBe(second.auth.secretRef);
         expect(installProposal(first).ok).toBe(true);
         expect(installProposal(second).ok).toBe(true);
-        expect(getCapability(first.id)?.transport).toMatchObject({ origin: 'https://board.example.test' });
-        expect(getCapability(second.id)?.transport).toMatchObject({ origin: 'https://other.example.test' });
+        expect(readCapability(first.id)?.transport).toMatchObject({ baseUrl: 'https://board.example.test/v1' });
+        expect(readCapability(second.id)?.transport).toMatchObject({ baseUrl: 'https://other.example.test/v1' });
     });
 
     it('an imported capability blob lands writes pending; the same blob through rehydrate keeps approval', () => {
@@ -381,7 +396,7 @@ describe('capability compiler', () => {
         installProposal(create);
         installProposal(list);
         approveCapability(create.id);
-        const snapshot = exportSnapshot();
+        const snapshot: CapabilitySnapshot = { version: 1, manifests: allCapabilities() };
         // The persisted envelope the capability store writes to the vault.
         const persisted = JSON.stringify({ state: snapshot, version: 1 });
 
@@ -397,88 +412,48 @@ describe('capability compiler', () => {
         const fromImport = restoreSnapshot(admitted.state);
         expect(fromImport.installed).toEqual(expect.arrayContaining([create.id, list.id]));
         expect(fromImport.rejected).toEqual([]);
-        expect(getCapability(create.id)?.approval).toBe('pending');
-        expect(getCapability(create.id)?.digest).toBe(create.digest);
-        expect(getCapability(list.id)?.approval).toBe('auto');
+        expect(readCapability(create.id)?.approval).toBe('pending');
+        expect(readCapability(create.id)?.digest).toBe(create.digest);
+        expect(readCapability(list.id)?.approval).toBe('auto');
         // Pending is the same state installProposal leaves; approval is the only way out.
-        expect(getCapability(create.id)).toEqual(installProposal({ ...create, approval: 'approved' }).manifest);
+        expect(readCapability(create.id)).toEqual(installProposal({ ...create, approval: 'approved' }).manifest);
 
         // Rehydrate path (the browser's own blob): the granted approval survives.
         clearCapabilities();
         restoreSnapshot(snapshot);
-        expect(getCapability(create.id)?.approval).toBe('approved');
+        expect(readCapability(create.id)?.approval).toBe('approved');
     });
 
-    it('compiles MCP tools and Bring descriptions through the same gate', async () => {
-        const compiled = compileMcpTools([
-            {
-                serverId: 'board',
-                origin: 'https://board.example.test',
-                name: 'list_board',
-                description: 'Read the board',
-                annotations: { readOnlyHint: true },
-                inputSchema: {
-                    type: 'object',
-                    properties: { q: { type: 'string' } }
-                },
-                outputSchema: { type: 'array', items: { type: 'string' } }
-            },
-            {
-                serverId: 'board',
-                origin: 'https://board.example.test',
-                name: 'wipe_board',
-                annotations: { readOnlyHint: true, destructiveHint: true },
-                outputSchema: { type: 'boolean' }
-            }
-        ]);
-        expect(compiled.errors).toEqual([]);
-        const read = compiled.manifests.find(manifest => manifest.source.operationId === 'list_board');
-        const wipe = compiled.manifests.find(manifest => manifest.source.operationId === 'wipe_board');
-        expect(read).toMatchObject({ effect: 'write', approval: 'pending' });
-        const trusted = compileMcpTools([{
-            serverId: 'board',
-            origin: 'https://board.example.test',
-            name: 'list_board',
-            annotations: { readOnlyHint: true },
-            inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
-            outputSchema: { type: 'array', items: { type: 'string' } }
-        }], { trustedAnnotations: true });
-        expect(trusted.manifests[0]).toMatchObject({ effect: 'read', approval: 'auto' });
+    it('runs a local read only through its bound handler and holds a destructive one for approval', async () => {
+        const trustedRead = localManifest(
+            'list_board',
+            'read',
+            [{ name: 'q', in: 'argument', required: false, schema: { kind: 'string' } }],
+            { schema: { kind: 'array', items: { kind: 'string' } }, presentation: 'items' }
+        );
+        const wipe = localManifest('wipe_board', 'destructive', [], { schema: { kind: 'boolean' }, presentation: 'raw' });
+        expect(trustedRead).toMatchObject({ effect: 'read', approval: 'auto' });
         expect(wipe).toMatchObject({ effect: 'destructive', approval: 'pending' });
-        const trustedRead = trusted.manifests[0];
-        installProposal(trustedRead);
-        installProposal(wipe);
+        expect(installProposal(trustedRead).ok).toBe(true);
+        expect(installProposal(wipe).ok).toBe(true);
 
         const calls: unknown[] = [];
-        bindMcpTransport('board', {
-            origin: 'https://board.example.test',
-            call: async (_server, tool, args) => {
-                calls.push({ tool, args });
-                return ['alpha'];
-            }
+        bindLocalHandler('board.list_board', async (args) => {
+            calls.push({ args: { ...args } });
+            return ['alpha'];
         });
 
-        const wiped = await executeCapability(wipe!.id, {});
+        const wiped = await executeCapability(wipe.id, {});
         expect(wiped.error?.code).toBe('EFFECT_NOT_APPROVED');
         expect(calls).toHaveLength(0);
 
         const listed = await executeCapability(trustedRead.id, { q: 'alpha' });
         expect(listed.ok).toBe(true);
         expect(listed.typed?.value).toEqual(['alpha']);
-        expect(calls).toEqual([{ tool: 'list_board', args: { q: 'alpha' } }]);
+        expect(calls).toEqual([{ args: { q: 'alpha' } }]);
 
-        unbindMcpTransport('board');
+        unbindLocalHandler('board.list_board');
         const unbound = await executeCapability(trustedRead.id, {});
         expect(unbound.error?.code).toBe('TRANSPORT_NOT_BOUND');
-
-        const brought = compileBring({
-            title: 'Ping board',
-            baseUrl: 'https://board.example.test/v1',
-            method: 'GET',
-            path: '/health',
-            output: { schema: { kind: 'object', properties: { ok: { kind: 'boolean' } }, required: ['ok'] } }
-        });
-        expect(brought.manifests[0]).toMatchObject({ effect: 'read', approval: 'auto', source: { kind: 'bring' } });
-        expect(installProposal({ ...brought.manifests[0], token: 'raw-token' }).ok).toBe(false);
     });
 });

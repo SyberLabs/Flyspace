@@ -27,7 +27,7 @@ import type { ValueType } from './valueType';
 const METHODS: HttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const MAX_OPERATIONS = 100;
 
-export interface CompileIssue {
+interface CompileIssue {
     operation?: string;
     message: string;
 }
@@ -37,7 +37,7 @@ export interface CompileResult {
     errors: CompileIssue[];
 }
 
-export interface CompileOptions {
+interface CompileOptions {
     /**
      * Where the document came from, when the host knows better than the
      * document does: the catalog spec URL for a registry install. Recorded as
@@ -45,13 +45,6 @@ export interface CompileOptions {
      * its locator stays `title@version` from the document itself.
      */
     sourceLocator?: string;
-    /**
-     * Origins the host has chosen to reach through its server broker, for an
-     * API that refuses browser calls (FRED sends no CORS headers). Only reads
-     * go that way; a write stays browser-direct and approval-gated. A host
-     * decision, never read from the document: a pasted spec cannot pick it.
-     */
-    brokerOrigins?: readonly string[];
 }
 
 export function compileOpenApi(spec: unknown, options: CompileOptions = {}): CompileResult {
@@ -100,8 +93,7 @@ export function compileOpenApi(spec: unknown, options: CompileOptions = {}): Com
                 label,
                 title: titles.get(`${method} ${path}`) ?? label.slice(0, MAX_TITLE),
                 baseUrl: base.url,
-                locator,
-                brokered: options.brokerOrigins?.includes(new URL(base.url).origin) === true
+                locator
             });
             if ('error' in compiled) errors.push({ operation: label, message: compiled.error });
             else manifests.push(compiled.manifest);
@@ -174,7 +166,6 @@ function compileOperation(args: {
     baseUrl: string;
     locator: string;
     /** The host routes this origin's reads through its server broker. */
-    brokered: boolean;
 }): { manifest: CapabilityManifest } | { error: string } {
     const effectChoice = chooseEffect(args.method, args.operation);
     if ('error' in effectChoice) return effectChoice;
@@ -191,12 +182,9 @@ function compileOperation(args: {
     const output = collectOutput(args.spec, args.operation);
     if ('error' in output) return output;
 
-    const viaBroker = args.brokered
-        && (effectChoice.effect === 'read' || effectChoice.effect === 'compute')
-        && authBinding.kind !== 'oauth';
     const transport = {
         kind: 'http' as const,
-        access: viaBroker ? 'server_broker' as const : 'browser_direct' as const,
+        access: 'browser_direct' as const,
         baseUrl: args.baseUrl,
         method: args.method,
         path: args.path
@@ -423,7 +411,7 @@ function schemeToAuth(baseUrl: string, name: string, scheme: Record<string, unkn
         const auth = { kind: 'basic' as const };
         return { auth: { ...auth, secretRef: secretRef(auth), ...withHint } };
     }
-    // `Authorization: Token <key>` (Metaculus, Django REST APIs): a static key
+    // `Authorization: Token <key>` (Django REST APIs): a static key
     // under its own scheme name. Only names that mean a plain token; a
     // challenge scheme (Digest, Negotiate) cannot be answered with a pasted key.
     if (scheme.type === 'http' && typeof scheme.scheme === 'string' && STATIC_TOKEN_SCHEMES.has(scheme.scheme.toLowerCase())) {

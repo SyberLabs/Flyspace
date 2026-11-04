@@ -1,21 +1,14 @@
 // ============================================
-// CASCADE + CRYSTALLIZE — the loop closing.
-//
-// Cascade resolves which minds run and in what order. Crystallize turns an
-// answer back into wired memory. Between them they close the product's loop:
-// data → insight → memory → context for the next question.
+// CASCADE — cascade resolves which minds run and in what order.
 // ============================================
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { planCascade, hasUpstreamPersonas } from './cascade.service';
-import { crystallize, CRYSTAL_POOL } from './crystallize.service';
 import { useBlockStore } from '@/core/stores/blockStore';
 import { useWireStore } from '@/core/stores/wireStore';
-import { useMindStore } from '@/core/stores/mindStore';
 import { DEFAULT_WIRE_FILTERS } from '@/core/schemas/wire.schema';
 import type { BlockInstance } from '@/core/schemas/block.schema';
 import type { DataWire } from '@/core/schemas/wire.schema';
-import type { MemoryBlockData } from '@/core/schemas/mind.schema';
 
 function persona(id: string, name = 'Analyst'): BlockInstance {
     return {
@@ -121,63 +114,5 @@ describe('planCascade', () => {
         expect(plan.hadCycle).toBe(true);
         expect(plan.order).toHaveLength(2);
         expect(plan.order[plan.order.length - 1]).toBe('b');
-    });
-});
-
-describe('crystallize', () => {
-    it('creates a Memory block when there is none, so the insight is visible', () => {
-        useBlockStore.setState({ blocks: [persona('p1')], activeShellId: 'root' });
-
-        const result = crystallize('Rates are steady near 4.2%.', 'p1');
-
-        expect(result.ok).toBe(true);
-        expect(result.createdBlock).toBe(true);
-
-        const created = useBlockStore.getState().getBlock(result.memoryBlockId!);
-        expect(created?.schema.block_id).toBe('memory_pool');
-        expect((created?.data as MemoryBlockData).poolId).toBe(CRYSTAL_POOL);
-
-        const entries = useMindStore.getState().getPoolEntries(CRYSTAL_POOL);
-        expect(entries.some(e => e.content === 'Rates are steady near 4.2%.')).toBe(true);
-    });
-
-    it('wires the new memory back into the persona that produced it', () => {
-        useBlockStore.setState({ blocks: [persona('p1')], activeShellId: 'root' });
-
-        const result = crystallize('Worth remembering.', 'p1');
-
-        expect(result.wiredBack).toBe(true);
-        const wires = useWireStore.getState().getWiresToBlock('p1');
-        expect(wires.some(w => w.sourceBlockId === result.memoryBlockId)).toBe(true);
-    });
-
-    it('reuses an existing Memory block rather than stacking duplicates', () => {
-        useBlockStore.setState({ blocks: [persona('p1')], activeShellId: 'root' });
-
-        const first = crystallize('One.', 'p1');
-        const second = crystallize('Two.', 'p1');
-
-        expect(second.createdBlock).toBe(false);
-        expect(second.memoryBlockId).toBe(first.memoryBlockId);
-        expect(
-            useBlockStore.getState().blocks.filter(b => b.schema.block_id === 'memory_pool')
-        ).toHaveLength(1);
-    });
-
-    it('places the new block beside the persona, not at the origin', () => {
-        const p = persona('p1');
-        p.position = { x: 500, y: 300 };
-        useBlockStore.setState({ blocks: [p], activeShellId: 'root' });
-
-        const result = crystallize('Somewhere visible.', 'p1');
-        const created = useBlockStore.getState().getBlock(result.memoryBlockId!);
-
-        expect(created!.position.x).toBeGreaterThan(500);
-        expect(created!.position.y).toBe(300);
-    });
-
-    it('refuses empty content', () => {
-        useBlockStore.setState({ blocks: [persona('p1')], activeShellId: 'root' });
-        expect(crystallize('   ', 'p1').ok).toBe(false);
     });
 });

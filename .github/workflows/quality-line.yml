@@ -5,8 +5,7 @@ name: Quality line
 # its answer no longer matches the spec Flyspace ships. A red run is the
 # signal to fix the spec before a person's block breaks.
 #
-# Keys are optional repository secrets (FRED_API_KEY, ALPHA_VANTAGE_API_KEY,
-# NEWSAPI_KEY, METACULUS_API_KEY). Without one, that API's keyed operations
+# ALPHA_VANTAGE_API_KEY is an optional repository secret. Without it, that API's keyed operations
 # are reported as skipped, not failed. The report is kept as an artifact;
 # committing public/curated-quality.json stays a person's step.
 
@@ -28,10 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
-      NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
-      METACULUS_API_KEY: ${{ secrets.METACULUS_API_KEY }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0

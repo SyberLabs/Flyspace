@@ -9,7 +9,7 @@ import { useBlockStore, useSettingsStore } from '@/core/stores';
 import { useOmniData } from '@/core/hooks';
 import type { OmniItem } from '@/core/gateway';
 
-export interface OmniFeedBlockData {
+interface OmniFeedBlockData {
     items: OmniItem[];
 }
 
@@ -26,8 +26,7 @@ export function useOmniFeedBlock(
         items,
         isLoading,
         error,
-        refresh,
-        fromCache
+        refresh
     } = useOmniData(apiId, instanceId, {
         immediate: Boolean(apiId),
         params,
@@ -59,7 +58,6 @@ export function useOmniFeedBlock(
         items: cached?.length ? cached : items,
         status: block?.status || (isLoading ? 'connecting' : 'connected'),
         lastUpdated: block?.last_updated,
-        fromCache,
         refresh,
         error
     };

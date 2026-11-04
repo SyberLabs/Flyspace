@@ -4,7 +4,7 @@
 
 import { point } from './coordinates';
 import { InteractionEngine } from './engine';
-import { createIntentCompiler, paraphraseCompiler, type IntentCompiler, type SemanticCompiler } from './intentCompiler';
+import { createIntentCompiler, type IntentCompiler } from './intentCompiler';
 import { MemoryCanvas, memoryBlock } from './memoryCanvas';
 import { scriptedSpeechAdapter, type SpeechScript } from './scriptedSpeechAdapter';
 import { defaultSpeechCatalog, type SpeechCatalog } from './speech';
@@ -16,17 +16,16 @@ export const UTTERANCE_CORPUS_VERSION = 1;
 
 export type UtteranceClass =
     | 'deterministic'
-    | 'paraphrase'
     | 'deixis'
     | 'ambiguity'
     | 'adversarial'
     | 'out-of-vocabulary'
     | 'degradation';
 
-export type CompilerConfig = 'deterministic-only' | 'paraphrase';
-export const COMPILER_CONFIGS: CompilerConfig[] = ['deterministic-only', 'paraphrase'];
+export type CompilerConfig = 'deterministic-only';
+export const COMPILER_CONFIGS: CompilerConfig[] = ['deterministic-only'];
 
-export interface UtteranceExpectation {
+interface UtteranceExpectation {
     outcome: 'command' | 'error' | 'silence' | 'none';
     lifecycle?: CommandLifecycle;
     action?: SpatialAction | 'open-shell';
@@ -42,7 +41,7 @@ export interface UtteranceExpectation {
 
 export type SceneId = 'board' | 'two-news' | 'similar-personas' | 'injected-name';
 
-export interface UtteranceCase {
+interface UtteranceCase {
     id: string;
     class: UtteranceClass;
     note: string;
@@ -153,35 +152,6 @@ export const UTTERANCE_CORPUS: UtteranceCase[] = [
         expect: { 'deterministic-only': committed('open-shell') }
     },
 
-    // Natural paraphrase: refused by the grammar, compiled by the strict paraphrase parser
-    {
-        id: 'para-can-you-add', class: 'paraphrase', scene: 'board', note: 'politeness around an exact line',
-        transcript: 'Can you add Hacker News?',
-        expect: { 'deterministic-only': refused('unrecognized-speech'), paraphrase: committed('create', { blocksAfter: 3 }) }
-    },
-    {
-        id: 'para-feed-into', class: 'paraphrase', scene: 'board', note: 'feed X into Y',
-        transcript: 'Feed Hacker News into the analyst.',
-        expect: { 'deterministic-only': refused('unrecognized-speech'), paraphrase: committed('connect') }
-    },
-    {
-        id: 'para-give-the', class: 'paraphrase', scene: 'board', note: 'give Y the X block',
-        transcript: 'Give the analyst the Hacker News block.',
-        expect: { 'deterministic-only': refused('unrecognized-speech'), paraphrase: committed('connect') }
-    },
-    {
-        id: 'para-put-over-here', class: 'paraphrase', scene: 'board', note: 'placement needs a pointed location',
-        pointAt: { x: 640, y: 360 }, transcript: 'Put an analyst over here.',
-        expect: { 'deterministic-only': refused('unrecognized-speech'), paraphrase: committed('create', { blocksAfter: 3 }) }
-    },
-    {
-        id: 'para-please-confirm', class: 'paraphrase', scene: 'board', note: 'reserved words are grammar-only; politeness does not unlock them',
-        selection: ['hn'], before: ['delete this'], transcript: 'please confirm',
-        expect: {
-            'deterministic-only': refused('unrecognized-speech'),
-            paraphrase: { ...refused('unrecognized-speech'), pendingAfter: true, blocksAfter: 2 }
-        }
-    },
 
     // Deixis
     {
@@ -268,12 +238,12 @@ export const UTTERANCE_CORPUS: UtteranceCase[] = [
     {
         id: 'oov-bring-in-data', class: 'out-of-vocabulary', scene: 'board', note: 'RESOLVE_CAPABILITY is refused; nothing installs',
         transcript: 'bring in weather data',
-        expect: { 'deterministic-only': refused('unrecognized-speech'), paraphrase: { ...refused('capability-bridge-unavailable'), blocksAfter: 2 } }
+        expect: { 'deterministic-only': refused('unrecognized-speech') }
     },
     {
         id: 'oov-bring-in-known', class: 'out-of-vocabulary', scene: 'board', note: 'known data sources become a plain add',
         transcript: 'bring in hacker news data',
-        expect: { 'deterministic-only': refused('unrecognized-speech'), paraphrase: committed('create', { blocksAfter: 3 }) }
+        expect: { 'deterministic-only': refused('unrecognized-speech') }
     },
 
     // Recognition degradation
@@ -323,30 +293,16 @@ export function expectationFor(item: UtteranceCase, config: CompilerConfig): Utt
     return item.expect[config] ?? item.expect['deterministic-only'];
 }
 
-export interface CountingCompiler extends IntentCompiler {
+interface CountingCompiler extends IntentCompiler {
     semanticCalls: number;
 }
 
-export function compilerFor(config: CompilerConfig, semantic: SemanticCompiler = paraphraseCompiler()): CountingCompiler {
-    const counted: CountingCompiler = {
-        semanticCalls: 0,
-        compile: (observation, context) => inner.compile(observation, context)
-    };
-    const inner = createIntentCompiler({
-        semantic: config === 'paraphrase'
-            ? {
-                id: semantic.id,
-                compile(input) {
-                    counted.semanticCalls += 1;
-                    return semantic.compile(input);
-                }
-            }
-            : null
-    });
-    return counted;
+export function compilerFor(_config: CompilerConfig): CountingCompiler {
+    const inner = createIntentCompiler();
+    return { semanticCalls: 0, compile: (observation, context) => inner.compile(observation, context) };
 }
 
-export interface PlayedUtterance {
+interface PlayedUtterance {
     canvas: MemoryCanvas;
     engine: InteractionEngine;
     outcome: SpeechOutcome | undefined;

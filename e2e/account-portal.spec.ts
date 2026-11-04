@@ -66,7 +66,6 @@ test('mobile account list recovers from failure and previews a named restore wit
         expect(box!.x).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width).toBeLessThanOrEqual(375);
     }
-    await page.screenshot({ path: '/tmp/omni-account-ux-mobile.png' });
     await page.keyboard.press('Escape');
     await expect(preview).toHaveCount(0);
     await expect(account).toBeFocused();

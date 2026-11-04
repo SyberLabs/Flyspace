@@ -2,7 +2,7 @@
 // PROJECT OMNI: BLOCK REGISTRY
 // ============================================
 
-import { OmniBlockSchema, BlockCategory } from '../schemas/block.schema';
+import { OmniBlockSchema } from '../schemas/block.schema';
 import { createJsonOutputPort, createAnyInputPort, createTextOutputPort } from '../services/port.service';
 
 /**
@@ -34,13 +34,6 @@ class BlockRegistry {
      */
     getAll(): OmniBlockSchema[] {
         return Array.from(this.blocks.values());
-    }
-
-    /**
-     * Get blocks by category
-     */
-    getByCategory(category: BlockCategory): OmniBlockSchema[] {
-        return this.getAll().filter(block => block.category === category);
     }
 
     /**

@@ -25,10 +25,3 @@ export async function spawnInvestor(page: Page): Promise<void> {
     await expect(page.getByText('Shell Store')).toBeHidden();
     await expect(page.getByText('Analyst').first()).toBeVisible();
 }
-
-/** Wait until the OMNI_E2E mock has finished streaming into a persona. */
-export async function waitForMockAnswer(page: Page, timeout = 20_000): Promise<void> {
-    await expect(page.getByText('E2E MOCK RESPONSE')).toBeVisible({ timeout });
-    await expect(page.getByText(/grounded analysis of the wired data\./)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTitle('Think').first()).toBeEnabled();
-}

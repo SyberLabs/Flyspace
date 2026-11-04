@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { accountRequest, prepareAccountSnapshot, validateAccountSnapshot, SIGN_IN_URL } from './account';
 import { captureLiveStores } from './snapshot';
 import type { OmniVaultExport } from '../vault/vaultExport';
+import { BLS_SPEC } from '../capabilities/curated/bls';
+import { compileOpenApi } from '../capabilities/openapi';
+import { clearCapabilities, restoreSnapshot } from '../capabilities/registry';
+import { sealManifest } from '../capabilities/manifest';
 const snapshot: OmniVaultExport = { format: 'omni-vault-export', version: 1, exportedAt: 1, data: {
     'omni-blocks': '{"state":{"blocks":[]}}',
     'omni-api-vault': '{"key":"secret"}',
@@ -25,6 +29,30 @@ describe('private account snapshots', () => {
         expect(() => validateAccountSnapshot(snapshot)).toThrow();
         expect(() => validateAccountSnapshot({ ...snapshot, data: [] })).toThrow();
         expect(validateAccountSnapshot(captureLiveStores()).format).toBe('omni-vault-export');
+    });
+    it('restores a canvas whose backup holds a retired capability, and drops only that capability', () => {
+        const [kept] = compileOpenApi(BLS_SPEC, { sourceLocator: 'test:bls' }).manifests;
+        const { digest: _digest, ...body } = kept;
+        const retired = sealManifest({ ...body, transport: { ...kept.transport, access: 'server_broker' } } as unknown as Parameters<typeof sealManifest>[0]);
+        const backup = captureLiveStores();
+        const store = JSON.parse(backup.data['omni-capabilities']);
+        store.state.manifests = [retired, kept];
+        backup.data['omni-capabilities'] = JSON.stringify(store);
+
+        expect(validateAccountSnapshot(backup).format).toBe('omni-vault-export');
+
+        clearCapabilities();
+        const report = restoreSnapshot({ version: 1, manifests: [retired, kept] });
+        expect(report.installed).toContain(kept.id);
+        expect(report.rejected).toEqual([{ id: retired.id, errors: ['http transport access must be browser_direct'] }]);
+        clearCapabilities();
+    });
+    it('still refuses a backup whose capability is not an object', () => {
+        const backup = captureLiveStores();
+        const store = JSON.parse(backup.data['omni-capabilities']);
+        store.state.manifests = ['not a manifest'];
+        backup.data['omni-capabilities'] = JSON.stringify(store);
+        expect(() => validateAccountSnapshot(backup)).toThrow('A capability in this backup is invalid.');
     });
     it('rejects malformed and partial stores before local changes', () => {
         const full = captureLiveStores();

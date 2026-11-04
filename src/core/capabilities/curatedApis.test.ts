@@ -1,67 +1,50 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildApiIndexEntries, credentialNeedOf, parseApiIndex } from './apiIndex';
 import { CURATED_APIS, curatedApi } from './curatedApis';
-import { FRED_SPEC } from './curated/fred';
+import { ALPHA_VANTAGE_SPEC } from './curated/alphaVantage';
 import { compileOpenApi } from './openapi';
 import { fetchCatalogSpec, RegistryFetchError } from './registrySearch';
 
-const FRED = curatedApi('omni:fred')!;
+const ALPHA = curatedApi('omni:alpha-vantage')!;
 
-describe('FRED, as Flyspace ships it', () => {
-    const { manifests, errors } = compileOpenApi(FRED.spec, { sourceLocator: FRED.entry.specUrl, brokerOrigins: FRED.brokerOrigins });
+describe('Alpha Vantage, as Flyspace ships it', () => {
+    const { manifests, errors } = compileOpenApi(ALPHA.spec, { sourceLocator: ALPHA.entry.specUrl });
 
-    it('compiles to the three reads its entry claims, all through the server broker', () => {
+    it('compiles to the one read its entry claims, called from the browser', () => {
         expect(errors).toEqual([]);
-        expect(manifests).toHaveLength(FRED.entry.operations!);
+        expect(manifests).toHaveLength(ALPHA.entry.operations!);
         for (const manifest of manifests) {
             expect(manifest.effect).toBe('read');
-            expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('server_broker');
-            expect(manifest.transport.kind === 'http' && manifest.transport.baseUrl).toBe('https://api.stlouisfed.org/fred');
+            expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('browser_direct');
+            expect(manifest.transport.kind === 'http' && manifest.transport.baseUrl).toBe('https://www.alphavantage.co');
         }
     });
 
-    it('asks for the key once, in the query where FRED reads it, with where to get one', () => {
+    it('asks for the key once, in the query where Alpha Vantage reads it, with where to get one', () => {
         const slots = new Set(manifests.map(m => m.auth.secretRef));
         expect(slots.size).toBe(1);
-        expect(manifests[0].auth).toMatchObject({ kind: 'apiKey', in: 'query', name: 'api_key' });
-        expect(manifests[0].auth.hint).toContain('https://fredaccount.stlouisfed.org/apikeys');
+        expect(manifests[0].auth).toMatchObject({ kind: 'apiKey', in: 'query', name: 'apikey' });
+        expect(manifests[0].auth.hint).toContain('https://www.alphavantage.co/support/#api-key');
     });
 
-    it('pins the JSON format FRED would otherwise not send', () => {
-        const observations = manifests.find(m => m.source.operationId === 'getSeriesObservations')!;
-        expect(observations.inputs.find(i => i.name === 'file_type')).toMatchObject({ required: true, schema: { enum: ['json'] } });
-        expect(observations.inputs.find(i => i.name === 'series_id')).toMatchObject({ required: true, example: 'UNRATE' });
-    });
-});
-
-describe('who can choose the server broker', () => {
-    it('is the host: the same spec without its curated entry compiles browser-direct', () => {
-        for (const manifest of compileOpenApi(FRED_SPEC).manifests) {
-            expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('browser_direct');
-        }
-    });
-
-    it('never a write, even on a broker origin', () => {
-        const spec = structuredClone(FRED_SPEC) as typeof FRED_SPEC & { paths: Record<string, unknown> };
-        spec.paths['/notes'] = {
-            post: { summary: 'Add a note', responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object' } } } } } }
-        };
-        const write = compileOpenApi(spec, { brokerOrigins: FRED.brokerOrigins }).manifests.find(m => m.effect === 'write')!;
-        expect(write.transport.kind === 'http' && write.transport.access).toBe('browser_direct');
+    it('requires the function and the symbol every query needs', () => {
+        const query = manifests.find(m => m.source.operationId === 'query')!;
+        expect(query.inputs.find(i => i.name === 'function')).toMatchObject({ required: true, schema: { enum: ['GLOBAL_QUOTE', 'TIME_SERIES_DAILY', 'TIME_SERIES_MONTHLY'] } });
+        expect(query.inputs.find(i => i.name === 'symbol')).toMatchObject({ required: true, example: 'MSFT' });
     });
 });
 
 describe('a curated entry', () => {
     it('serves its spec from the bundle, without a fetch', async () => {
         const fetchImpl = vi.fn();
-        const document = await fetchCatalogSpec(FRED.entry, { fetchImpl });
+        const document = await fetchCatalogSpec(ALPHA.entry, { fetchImpl });
         expect(fetchImpl).not.toHaveBeenCalled();
-        expect(document).toEqual(FRED_SPEC);
-        expect(document).not.toBe(FRED_SPEC); // a copy: nothing downstream can change the shipped spec
+        expect(document).toEqual(ALPHA_VANTAGE_SPEC);
+        expect(document).not.toBe(ALPHA_VANTAGE_SPEC); // a copy: nothing downstream can change the shipped spec
     });
 
     it('cannot be claimed by an entry the repo does not list', async () => {
-        const forged = { ...FRED.entry, id: 'omni:not-shipped' };
+        const forged = { ...ALPHA.entry, id: 'omni:not-shipped' };
         await expect(fetchCatalogSpec(forged, { fetchImpl: vi.fn() })).rejects.toBeInstanceOf(RegistryFetchError);
     });
 
@@ -87,25 +70,20 @@ describe('a curated entry', () => {
 });
 
 describe('every curated API', () => {
-    it.each(CURATED_APIS.map(api => [api.entry.id, api] as const))('%s compiles to what its entry claims, routed as declared', (_id, api) => {
-        const { manifests, errors } = compileOpenApi(api.spec, { sourceLocator: api.entry.specUrl, brokerOrigins: api.brokerOrigins });
+    it.each(CURATED_APIS.map(api => [api.entry.id, api] as const))('%s compiles to what its entry claims, called from the browser', (_id, api) => {
+        const { manifests, errors } = compileOpenApi(api.spec, { sourceLocator: api.entry.specUrl });
         expect(errors).toEqual([]);
         expect(manifests).toHaveLength(api.entry.operations!);
         for (const manifest of manifests) {
             expect(manifest.effect).toBe('read');
-            const access = manifest.transport.kind === 'http' ? manifest.transport.access : null;
-            expect(access).toBe(api.brokerOrigins.length > 0 ? 'server_broker' : 'browser_direct');
+            expect(manifest.transport.kind === 'http' && manifest.transport.access).toBe('browser_direct');
             if (manifest.auth.kind !== 'none') expect(manifest.auth.hint?.length ?? 0, api.entry.id).toBeGreaterThan(20); // says where to get the key
         }
     });
 
-    it('needs no key for BLS, and sends Metaculus its token the way it asks', () => {
+    it('needs no key for BLS', () => {
         const bls = compileOpenApi(curatedApi('omni:bls')!.spec).manifests[0];
         expect(bls.auth.kind).toBe('none');
-        const metaculus = compileOpenApi(curatedApi('omni:metaculus')!.spec).manifests[0];
-        expect(metaculus.auth).toMatchObject({ kind: 'apiKey', in: 'header', name: 'Authorization', prefix: 'Token ' });
-        const news = compileOpenApi(curatedApi('omni:newsapi')!.spec).manifests[0];
-        expect(news.auth).toMatchObject({ kind: 'apiKey', in: 'header', name: 'X-Api-Key' }); // kept out of the URL
     });
 });
 
@@ -129,7 +107,7 @@ describe('an http auth scheme that names a static token', () => {
 
 describe('a curated entry says what it needs to run', () => {
     it.each(CURATED_APIS.map(api => [api.entry.id, api] as const))('%s records the credential need its spec compiles to', (_id, api) => {
-        const kinds = compileOpenApi(api.spec, { brokerOrigins: api.brokerOrigins }).manifests.map(m => m.auth.kind);
+        const kinds = compileOpenApi(api.spec).manifests.map(m => m.auth.kind);
         expect(api.entry.credential).toBe(credentialNeedOf(kinds));
     });
 });

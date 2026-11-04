@@ -13,7 +13,7 @@ import { useWorldBankBlock } from '@/blocks/truth/WorldBankBlock';
 import { useOmniFeedBlock } from '@/blocks/truth/OmniFeedBlock';
 import { API_CATALOG } from '@/core/schemas/api.schema';
 import { TextBlockView } from '@/blocks/workspace/TextBlock';
-import { PersonaBlockView } from '@/blocks/persona';
+import { PersonaBlockView } from '@/blocks/persona/PersonaBlock';
 import { MemoryBlockView } from '@/components/blocks/MemoryBlock';
 import { CapabilityBlockView } from '@/blocks/capability/CapabilityBlock';
 import { SpeechBlockView } from '@/blocks/capability/SpeechBlock';
@@ -57,13 +57,12 @@ function PolymarketBlockContent({ instanceId }: { instanceId: string }) {
 }
 
 function CryptoBlockContent({ instanceId }: { instanceId: string }) {
-    const { assets, status, lastUpdated, refresh, error } = useCoinGeckoBlock(instanceId);
+    const { assets, status, refresh, error } = useCoinGeckoBlock(instanceId);
 
     return (
         <CryptoView
             assets={assets}
             status={status}
-            lastUpdated={lastUpdated ?? null}
             onRefresh={refresh}
             error={error}
         />
@@ -71,13 +70,12 @@ function CryptoBlockContent({ instanceId }: { instanceId: string }) {
 }
 
 function HNBlockContent({ instanceId }: { instanceId: string }) {
-    const { stories, status, lastUpdated, refresh, error } = useHackerNewsBlock(instanceId);
+    const { stories, status, refresh, error } = useHackerNewsBlock(instanceId);
 
     return (
         <HNView
             stories={stories}
             status={status}
-            lastUpdated={lastUpdated ?? null}
             onRefresh={refresh}
             error={error}
         />

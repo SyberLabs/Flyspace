@@ -6,7 +6,7 @@
 /**
  * API categories for type discrimination
  */
-export type ApiCategory =
+type ApiCategory =
     | 'prediction_market'
     | 'news'
     | 'market_data'
@@ -21,8 +21,8 @@ export type ApiCategory =
 /**
  * Source metadata for any OmniData
  */
-export interface OmniSource {
-    /** API provider ID (e.g., 'polymarket', 'newsapi') */
+interface OmniSource {
+    /** API provider ID (e.g., 'polymarket', 'coingecko') */
     apiId: string;
 
     /** Category of the API */
@@ -88,7 +88,7 @@ export interface OmniMetrics {
 /**
  * Text/media content (LLM responses, documents)
  */
-export interface OmniContent {
+interface OmniContent {
     /** Text content */
     text: string;
 
@@ -131,9 +131,6 @@ export interface OmniData {
         message: string;
         retryable: boolean;
     };
-
-    /** Raw response for debugging */
-    _raw?: unknown;
 }
 
 /**

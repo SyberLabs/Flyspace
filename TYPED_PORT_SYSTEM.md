@@ -55,9 +55,7 @@ If both ends declare a `schema` and they are not assignable, the wire is refused
 even for a string sink, unless the source is an array (`join_titles`). `text` and
 `join_titles` are explicit conversions, not type equality. They are applied only
 by capability execution (`resolveWiredInputs` in
-`src/core/capabilities/wireInputs.ts`). Persona context
-(`aggregateWireContext`) formats each source block's data as text and does not
-read ports or projections.
+`src/core/capabilities/wireInputs.ts`).
 
 ## What a refusal looks like
 

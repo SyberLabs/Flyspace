@@ -7,10 +7,9 @@
 // ============================================
 
 import type { PersonaType, AestheticTheme } from '@/core/schemas/shell.schema';
-import { API_CATALOG, type ApiProvider } from '@/core/schemas/api.schema';
 
 /** A block placement inside a template (placeholder instanceId, remapped on use). */
-export interface TemplateBlock {
+interface TemplateBlock {
     /** Local placeholder id, unique within the template; remapped on instantiate. */
     ref: string;
     /** Registry block_id this placement instantiates. */
@@ -22,7 +21,7 @@ export interface TemplateBlock {
 }
 
 /** A wire between two template blocks, by their local `ref`s. */
-export interface TemplateConnection {
+interface TemplateConnection {
     sourceRef: string;
     targetRef: string;
 }
@@ -153,17 +152,6 @@ export function getShellTemplate(id: string): ShellTemplate | undefined {
 }
 
 /**
- * Providers a template will ask for a key. Derived from catalog blockIds so
- * a shell can say, before spawning, whether it works on a fresh clone.
- */
-export function keyedProvidersForTemplate(template: ShellTemplate): ApiProvider[] {
-    const blockIds = new Set(template.blocks.map(b => b.blockId));
-    return API_CATALOG.filter(
-        p => p.requiresAuth && p.blockIds?.some(id => blockIds.has(id))
-    );
-}
-
-/**
  * Validate a template's internal integrity against a registry-membership check.
  * Returns the list of problems (empty = valid). Decoupled from the registry import
  * so it's trivially testable.
@@ -200,9 +188,4 @@ export function validateTemplate(
     }
 
     return problems;
-}
-
-/** Validate every built-in template. Returns all problems across templates. */
-export function validateAllTemplates(isRegistered: (blockId: string) => boolean): string[] {
-    return SHELL_TEMPLATES.flatMap(t => validateTemplate(t, isRegistered));
 }

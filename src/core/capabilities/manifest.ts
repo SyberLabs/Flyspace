@@ -4,26 +4,26 @@
 // pair is rejected before anything is registered.
 
 import { canonicalize, sha256 } from './hash';
-import { canonicalCapabilityId, credentialSlot, transportCredentialSlot } from './identity';
+import { canonicalCapabilityId, credentialSlot } from './identity';
 import { destinationUrlErrors } from './egress';
 import { validateValueType, type Primitive, type ValueType } from './valueType';
 
-export const CAPABILITY_MANIFEST_VERSION = 1 as const;
+const CAPABILITY_MANIFEST_VERSION = 1 as const;
 
 export type CapabilityEffect = 'read' | 'compute' | 'write' | 'destructive';
-export type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
-export type CapabilitySourceKind = 'openapi' | 'mcp' | 'bring' | 'web_data' | 'managed_integration';
-export type CapabilityInvocation = 'auto' | 'manual';
+type CapabilityApproval = 'auto' | 'pending' | 'approved' | 'denied';
+type CapabilitySourceKind = 'openapi' | 'bring';
+type CapabilityInvocation = 'auto' | 'manual';
 export type CapabilityTrigger =
     | { kind: 'manual' }
     | { kind: 'on_create' }
     | { kind: 'on_input_change' }
     | { kind: 'interval'; everyMs: number };
 export type HttpMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-export type InputLocation = 'path' | 'query' | 'header' | 'body' | 'argument';
-export type EffectSource = 'method' | 'extension' | 'annotation' | 'declared';
+type InputLocation = 'path' | 'query' | 'header' | 'body' | 'argument';
+type EffectSource = 'method' | 'extension' | 'annotation' | 'declared';
 
-export interface CapabilitySource {
+interface CapabilitySource {
     kind: CapabilitySourceKind;
     locator: string;
     operationId?: string;
@@ -59,7 +59,7 @@ export interface CapabilityInput {
     default?: Primitive;
 }
 
-export interface CapabilityOutput {
+interface CapabilityOutput {
     schema: ValueType;
     /** Dot path used only when projecting to the OmniData envelope. */
     itemsPath?: string;
@@ -67,43 +67,11 @@ export interface CapabilityOutput {
     presentation: 'items' | 'content' | 'raw';
 }
 
-export type HttpAccess = 'browser_direct' | 'server_broker';
+type HttpAccess = 'browser_direct';
 
 export type CapabilityTransport =
     | { kind: 'http'; access: HttpAccess; baseUrl: string; method: HttpMethod; path: string }
-    /** `origin` is the server's URL origin: the credential slot and the bound transport are matched to it. */
-    | { kind: 'mcp'; serverId: string; origin: string; toolName: string }
-    | { kind: 'local'; handler: string }
-    /** A host-bound job runtime: start returns an external run id, poll observes it. */
-    | { kind: 'async'; runtimeId: string; operation: string };
-
-export const MIN_POLL_INTERVAL_MS = 1_000;
-export const MAX_POLL_INTERVAL_MS = 300_000;
-export const MAX_ASYNC_DURATION_MS = 3_600_000;
-
-/** How an admitted capability completes. Absent means synchronous. */
-export type CapabilityExecutionProfile =
-    | { kind: 'sync' }
-    | { kind: 'async_poll'; pollIntervalMs: number; maxDurationMs: number };
-
-export type CapabilityProviderKind = 'openapi' | 'mcp' | 'managed_integration' | 'web_data' | 'manual';
-
-/**
- * Where an admitted capability came from. Written by admission, never by a
- * provider. Part of the digest, so a stored manifest cannot swap its origin
- * story without failing validation.
- */
-export interface CapabilityProvenance {
-    providerId: string;
-    providerKind: CapabilityProviderKind;
-    externalId: string;
-    sourceLocator: string;
-    sourceRevision?: string;
-    discoveredAtMs: number;
-    admittedAtMs: number;
-    /** SHA-256 of the canonical inputs and output schema. */
-    schemaDigest: string;
-}
+    | { kind: 'local'; handler: string };
 
 export interface CapabilityManifest {
     version: typeof CAPABILITY_MANIFEST_VERSION;
@@ -111,7 +79,6 @@ export interface CapabilityManifest {
     title: string;
     description?: string;
     source: CapabilitySource;
-    provenance?: CapabilityProvenance;
     effect: CapabilityEffect;
     effectSource: EffectSource;
     approval: CapabilityApproval;
@@ -124,42 +91,32 @@ export interface CapabilityManifest {
     trigger?: CapabilityTrigger;
     auth: AuthBinding;
     transport: CapabilityTransport;
-    execution?: CapabilityExecutionProfile;
     inputs: CapabilityInput[];
     output: CapabilityOutput;
     /** SHA-256 of the canonical execution identity. Approval is excluded. */
     digest: string;
 }
 
-export type ManifestDraft = Omit<CapabilityManifest, 'digest'>;
+type ManifestDraft = Omit<CapabilityManifest, 'digest'>;
 
 const EFFECTS: CapabilityEffect[] = ['read', 'compute', 'write', 'destructive'];
 const APPROVALS: CapabilityApproval[] = ['auto', 'pending', 'approved', 'denied'];
 const METHODS: HttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const LOCATIONS: InputLocation[] = ['path', 'query', 'header', 'body', 'argument'];
 const EFFECT_SOURCES: EffectSource[] = ['method', 'extension', 'annotation', 'declared'];
-const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'mcp', 'bring', 'web_data', 'managed_integration'];
-
-const PROVIDER_KINDS: CapabilityProviderKind[] = ['openapi', 'mcp', 'managed_integration', 'web_data', 'manual'];
+const SOURCE_KINDS: CapabilitySourceKind[] = ['openapi', 'bring'];
 
 const MANIFEST_KEYS = new Set([
-    'version', 'id', 'title', 'description', 'source', 'provenance', 'effect', 'effectSource',
-    'approval', 'invocation', 'trigger', 'auth', 'transport', 'execution', 'inputs', 'output', 'digest'
+    'version', 'id', 'title', 'description', 'source', 'effect', 'effectSource',
+    'approval', 'invocation', 'trigger', 'auth', 'transport', 'inputs', 'output', 'digest'
 ]);
 
-const RUNTIME_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/;
 const MAX_OAUTH_SCOPES = 20;
 /** Each input schema is already depth-bounded by validateValueType. */
-export const MAX_MANIFEST_INPUTS = 64;
+const MAX_MANIFEST_INPUTS = 64;
 const OAUTH_SCOPE_PATTERN = /^[\x21\x23-\x5B\x5D-\x7E]{1,200}$/;
-const OPERATION_PATTERN = /^[A-Za-z0-9_.:-]{1,120}$/;
 
-const PROVENANCE_KEYS = new Set([
-    'providerId', 'providerKind', 'externalId', 'sourceLocator', 'sourceRevision',
-    'discoveredAtMs', 'admittedAtMs', 'schemaDigest'
-]);
 
-export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_.:-]{0,63}$/;
 
 const ID_PATTERN = /^cap_[a-z0-9_]{1,80}$/;
 const SECRET_REF_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
@@ -177,7 +134,7 @@ export function isInputName(name: string): boolean {
  * (constructor, toString, ...), which a lookup would find by inheritance.
  * An input or credential placement may not use one.
  */
-export function isReservedName(name: string): boolean {
+function isReservedName(name: string): boolean {
     return name === '__proto__' || name === 'prototype' || Object.prototype.hasOwnProperty.call(Object.prototype, name);
 }
 
@@ -214,7 +171,7 @@ export const DENIED_HEADER_NAMES: ReadonlySet<string> = new Set([
  * already outside the token grammar; they are refused here as well so the
  * rule holds without the grammar.
  */
-export function isDeniedHeaderName(name: string): boolean {
+function isDeniedHeaderName(name: string): boolean {
     return name.startsWith(':') || DENIED_HEADER_NAMES.has(name.toLowerCase());
 }
 
@@ -255,16 +212,16 @@ export function effectAllowedForMethod(method: HttpMethod, effect: CapabilityEff
     return effect === 'write' || effect === 'destructive';
 }
 
-export const MIN_TRIGGER_INTERVAL_MS = 5_000;
-export const MAX_TRIGGER_INTERVAL_MS = 86_400_000;
+const MIN_TRIGGER_INTERVAL_MS = 5_000;
+const MAX_TRIGGER_INTERVAL_MS = 86_400_000;
 
-export function normalizeTrigger(trigger: CapabilityTrigger | undefined, invocation?: CapabilityInvocation): CapabilityTrigger {
+function normalizeTrigger(trigger: CapabilityTrigger | undefined, invocation?: CapabilityInvocation): CapabilityTrigger {
     if (trigger && validTriggerShape(trigger)) return trigger;
     if (invocation === 'auto') return { kind: 'on_create' };
     return { kind: 'manual' };
 }
 
-export function triggerInvocation(trigger: CapabilityTrigger): CapabilityInvocation {
+function triggerInvocation(trigger: CapabilityTrigger): CapabilityInvocation {
     return trigger.kind === 'manual' ? 'manual' : 'auto';
 }
 
@@ -274,7 +231,7 @@ function validTriggerShape(trigger: CapabilityTrigger): boolean {
     return false;
 }
 
-export function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrigger): string | null {
+function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrigger): string | null {
     if ((effect === 'write' || effect === 'destructive') && trigger.kind !== 'manual') {
         return 'write and destructive capabilities only run manually';
     }
@@ -288,34 +245,22 @@ export function triggerProblem(effect: CapabilityEffect, trigger: CapabilityTrig
     return null;
 }
 
-/** Digest of the typed contract alone: inputs and output schema. */
-export function schemaDigestFor(draft: Pick<ManifestDraft, 'inputs' | 'output'>): string {
-    return sha256(canonicalize({ inputs: draft.inputs, output: draft.output }));
-}
-
-export function digestPayload(draft: ManifestDraft): unknown {
+function digestPayload(draft: ManifestDraft): unknown {
     return {
         version: draft.version,
         id: draft.id,
         title: draft.title,
         description: draft.description ?? null,
         source: draft.source,
-        // Absent on manifests that predate providers, so their digests do not move.
-        ...(draft.provenance ? { provenance: draft.provenance } : {}),
         effect: draft.effect,
         effectSource: draft.effectSource,
         invocation: triggerInvocation(normalizeTrigger(draft.trigger, draft.invocation)),
         trigger: normalizeTrigger(draft.trigger, draft.invocation),
         auth: draft.auth,
         transport: draft.transport,
-        ...(isAsyncProfile(draft.execution) ? { execution: draft.execution } : {}),
         inputs: draft.inputs,
         output: draft.output
     };
-}
-
-function isAsyncProfile(profile: CapabilityExecutionProfile | undefined): profile is Extract<CapabilityExecutionProfile, { kind: 'async_poll' }> {
-    return profile?.kind === 'async_poll';
 }
 
 export function sealManifest(draft: ManifestDraft): CapabilityManifest {
@@ -382,102 +327,31 @@ function validateAuth(auth: unknown, errors: string[]): void {
     }
 }
 
-function validateExecution(execution: unknown, transportKind: unknown, errors: string[]): void {
-    const async = transportKind === 'async';
-    if (execution === undefined || (isRecord(execution) && execution.kind === 'sync' && Object.keys(execution).length === 1)) {
-        if (async) errors.push('async transports need an async_poll execution profile');
-        return;
-    }
-    if (!isRecord(execution) || execution.kind !== 'async_poll') {
-        errors.push('execution must be sync or async_poll');
-        return;
-    }
-    for (const key of Object.keys(execution)) {
-        if (key !== 'kind' && key !== 'pollIntervalMs' && key !== 'maxDurationMs') errors.push(`execution.${key} is not a manifest field`);
-    }
-    if (!async) errors.push('async_poll needs an async transport');
-    const interval = execution.pollIntervalMs;
-    const duration = execution.maxDurationMs;
-    if (typeof interval !== 'number' || !Number.isInteger(interval) || interval < MIN_POLL_INTERVAL_MS || interval > MAX_POLL_INTERVAL_MS) {
-        errors.push(`execution.pollIntervalMs must be between ${MIN_POLL_INTERVAL_MS} and ${MAX_POLL_INTERVAL_MS} ms`);
-    }
-    if (
-        typeof duration !== 'number' || !Number.isInteger(duration)
-        || duration > MAX_ASYNC_DURATION_MS
-        || (typeof interval === 'number' && duration < interval)
-    ) {
-        errors.push(`execution.maxDurationMs must be at least one poll interval and at most ${MAX_ASYNC_DURATION_MS} ms`);
-    }
-}
-
-function validateProvenance(provenance: unknown, errors: string[]): void {
-    if (!isRecord(provenance)) {
-        errors.push('provenance must be an object');
-        return;
-    }
-    for (const key of Object.keys(provenance)) {
-        if (!PROVENANCE_KEYS.has(key)) errors.push(`provenance.${key} is not a provenance field`);
-    }
-    if (typeof provenance.providerId !== 'string' || !PROVIDER_ID_PATTERN.test(provenance.providerId)) {
-        errors.push('provenance.providerId is invalid');
-    }
-    if (typeof provenance.providerKind !== 'string' || !PROVIDER_KINDS.includes(provenance.providerKind as CapabilityProviderKind)) {
-        errors.push('provenance.providerKind is invalid');
-    }
-    for (const key of ['externalId', 'sourceLocator'] as const) {
-        const value = provenance[key];
-        if (typeof value !== 'string' || value.length === 0 || value.length > 200) {
-            errors.push(`provenance.${key} must be a short non-empty string`);
-        }
-    }
-    if (provenance.sourceRevision !== undefined && (typeof provenance.sourceRevision !== 'string' || provenance.sourceRevision.length > 120)) {
-        errors.push('provenance.sourceRevision must be a short string');
-    }
-    for (const key of ['discoveredAtMs', 'admittedAtMs'] as const) {
-        const value = provenance[key];
-        if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-            errors.push(`provenance.${key} must be a timestamp`);
-        }
-    }
-    if (typeof provenance.schemaDigest !== 'string' || !/^[a-f0-9]{64}$/.test(provenance.schemaDigest)) {
-        errors.push('provenance.schemaDigest must be a sha256 hex string');
-    }
-}
-
-/** The destination rule in `egress.ts`; the MCP client applies the same one to its server URL. */
-function validateHttpUrl(baseUrl: string, errors: string[], hostCreated: boolean): void {
-    for (const reason of destinationUrlErrors(baseUrl, { hostCreated, subject: 'manifest' })) {
-        errors.push(`transport.baseUrl ${reason}`);
-    }
-}
-
-/** A bare http(s) origin, as `new URL(value).origin` would print it. */
-function isHttpOrigin(value: string): boolean {
-    try {
-        const url = new URL(value);
-        return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin === value;
-    } catch {
-        return false;
-    }
-}
-
 function pathParamNames(path: string): string[] {
     return [...path.matchAll(/\{([^}]+)\}/g)].map(match => match[1]);
 }
 
-export interface ManifestValidation {
+interface ManifestValidation {
     ok: boolean;
     manifest?: CapabilityManifest;
     errors: string[];
 }
 
-export interface ManifestValidationOptions {
+interface ManifestValidationOptions {
     /**
      * The host itself built this manifest (not a compiler, provider, model or
      * stored snapshot). Only then may an http transport target loopback.
      */
     hostCreated?: boolean;
 }
+
+/** The destination rule in `egress.ts`. */
+function validateHttpUrl(baseUrl: string, errors: string[], hostCreated: boolean): void {
+    for (const reason of destinationUrlErrors(baseUrl, { hostCreated, subject: 'manifest' })) {
+        errors.push(`transport.baseUrl ${reason}`);
+    }
+}
+
 
 export function validateManifest(input: unknown, options: ManifestValidationOptions = {}): ManifestValidation {
     const errors: string[] = [];
@@ -532,7 +406,6 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
         }
     }
 
-    if (input.provenance !== undefined) validateProvenance(input.provenance, errors);
 
     validateAuth(input.auth, errors);
 
@@ -549,38 +422,24 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
     if (EFFECTS.includes(effect)) {
         const triggerError = triggerProblem(effect, trigger);
         if (triggerError) errors.push(triggerError);
-        if (isRecord(input.transport) && input.transport.kind === 'async' && trigger.kind !== 'manual') {
-            errors.push('async capabilities only run manually; each run starts an external job');
-        }
-        if ((effect === 'write' || effect === 'destructive') && isRecord(input.transport) && input.transport.access === 'server_broker') {
-            errors.push('server_broker cannot carry a write or destructive effect');
-        }
     }
     if (isRecord(input.auth) && input.auth.kind === 'oauth' && isRecord(input.transport)) {
         if (input.transport.kind !== 'http') errors.push('oauth auth is only defined for http transports');
-        else if (input.transport.access === 'server_broker') errors.push('server_broker cannot carry an oauth token');
     }
 
     if (
         !isRecord(input.transport)
-        || (input.transport.kind !== 'http' && input.transport.kind !== 'mcp' && input.transport.kind !== 'local' && input.transport.kind !== 'async')
+        || (input.transport.kind !== 'http' && input.transport.kind !== 'local')
     ) {
-        errors.push('transport.kind must be http, mcp, local, or async');
-    } else if (input.transport.kind === 'async') {
-        if (typeof input.transport.runtimeId !== 'string' || !RUNTIME_ID_PATTERN.test(input.transport.runtimeId)) {
-            errors.push('transport.runtimeId is invalid');
-        }
-        if (typeof input.transport.operation !== 'string' || !OPERATION_PATTERN.test(input.transport.operation)) {
-            errors.push('transport.operation is invalid');
-        }
+        errors.push('transport.kind must be http or local');
     } else if (input.transport.kind === 'http') {
         if (typeof input.transport.baseUrl !== 'string') errors.push('transport.baseUrl is required');
         else validateHttpUrl(input.transport.baseUrl, errors, options.hostCreated === true);
         if (typeof input.transport.method !== 'string' || !METHODS.includes(input.transport.method as HttpMethod)) {
             errors.push('transport.method is invalid');
         }
-        if (input.transport.access !== 'browser_direct' && input.transport.access !== 'server_broker') {
-            errors.push('http transport access must be browser_direct or server_broker');
+        if (input.transport.access !== 'browser_direct') {
+            errors.push('http transport access must be browser_direct');
         }
         if (typeof input.transport.path !== 'string' || !input.transport.path.startsWith('/') || input.transport.path.includes('..')) {
             errors.push('transport.path must be an absolute path without ..');
@@ -593,21 +452,9 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
         ) {
             errors.push(`effect ${effect} is not allowed for ${input.transport.method}`);
         }
-    } else if (input.transport.kind === 'mcp') {
-        if (typeof input.transport.serverId !== 'string' || !/^[A-Za-z0-9_.:-]{1,80}$/.test(input.transport.serverId)) {
-            errors.push('transport.serverId is invalid');
-        }
-        if (typeof input.transport.origin !== 'string' || !isHttpOrigin(input.transport.origin)) {
-            errors.push('transport.origin must be an http or https origin');
-        }
-        if (typeof input.transport.toolName !== 'string' || !NAME_PATTERN.test(input.transport.toolName)) {
-            errors.push('transport.toolName is invalid');
-        }
     } else if (typeof input.transport.handler !== 'string' || !/^[a-z][a-z0-9_.]{0,63}$/.test(input.transport.handler)) {
         errors.push('transport.handler is invalid');
     }
-
-    validateExecution(input.execution, isRecord(input.transport) ? input.transport.kind : undefined, errors);
 
     if (!Array.isArray(input.inputs)) {
         errors.push('inputs must be a list');
@@ -648,7 +495,7 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
             if (transportKind === 'http' && entry.in === 'argument') {
                 errors.push('http transports cannot take argument inputs');
             }
-            if ((transportKind === 'mcp' || transportKind === 'local' || transportKind === 'async') && entry.in !== 'argument') {
+            if (transportKind === 'local' && entry.in !== 'argument') {
                 errors.push(`${String(transportKind)} transports only take argument inputs`);
             }
             if ((method === 'GET' || method === 'HEAD') && entry.in === 'body') {
@@ -699,15 +546,6 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
         errors.push('digest must be a sha256 hex string');
     }
 
-    if (errors.length === 0 && isRecord(input.provenance)) {
-        const expected = schemaDigestFor({
-            inputs: (input.inputs as CapabilityInput[]).map(canonicalInput),
-            output: canonicalOutput(input.output as CapabilityOutput)
-        });
-        if (input.provenance.schemaDigest !== expected) {
-            errors.push('provenance.schemaDigest does not match inputs and output');
-        }
-    }
 
     if (errors.length === 0 && isRecord(input.transport)) {
         const transport = input.transport as CapabilityTransport;
@@ -717,12 +555,6 @@ export function validateManifest(input: unknown, options: ManifestValidationOpti
         if (transport.kind === 'http' && isRecord(input.auth) && input.auth.kind !== 'none') {
             const auth = input.auth as unknown as AuthBinding;
             const slot = credentialSlot(transport.baseUrl, auth);
-            if (auth.secretRef !== slot) errors.push(`auth.secretRef must be ${slot}`);
-        }
-        if ((transport.kind === 'mcp' || transport.kind === 'async') && isRecord(input.auth) && input.auth.kind !== 'none') {
-            const auth = input.auth as unknown as AuthBinding;
-            if (auth.kind === 'apiKey' && auth.in !== 'header') errors.push(`${transport.kind} credentials travel in a header`);
-            const slot = transportCredentialSlot(transport, auth);
             if (auth.secretRef !== slot) errors.push(`auth.secretRef must be ${slot}`);
         }
     }
@@ -751,7 +583,6 @@ function canonicalDraft(input: Record<string, unknown>): ManifestDraft {
             locator: source.locator,
             ...(source.operationId ? { operationId: source.operationId } : {})
         },
-        ...(isRecord(input.provenance) ? { provenance: canonicalProvenance(input.provenance as unknown as CapabilityProvenance) } : {}),
         effect: input.effect as CapabilityEffect,
         effectSource: input.effectSource as EffectSource,
         approval: input.approval as CapabilityApproval,
@@ -759,21 +590,12 @@ function canonicalDraft(input: Record<string, unknown>): ManifestDraft {
         trigger: normalizeTrigger(input.trigger as CapabilityTrigger | undefined, input.invocation === 'manual' ? 'manual' : 'auto'),
         auth: canonicalAuth(input.auth as AuthBinding),
         transport: canonicalTransport(input.transport as CapabilityTransport),
-        ...(isRecord(input.execution) && input.execution.kind === 'async_poll'
-            ? {
-                execution: {
-                    kind: 'async_poll' as const,
-                    pollIntervalMs: input.execution.pollIntervalMs as number,
-                    maxDurationMs: input.execution.maxDurationMs as number
-                }
-            }
-            : {}),
         inputs: (input.inputs as CapabilityInput[]).map(canonicalInput),
         output: canonicalOutput(input.output as CapabilityOutput)
     };
 }
 
-export function canonicalInput(entry: CapabilityInput): CapabilityInput {
+function canonicalInput(entry: CapabilityInput): CapabilityInput {
     return {
         name: entry.name,
         in: entry.in,
@@ -785,26 +607,13 @@ export function canonicalInput(entry: CapabilityInput): CapabilityInput {
 }
 
 /** The longest example or default kept from a spec. Longer ones are dropped, not cut. */
-export const MAX_INPUT_HINT = 200;
+const MAX_INPUT_HINT = 200;
 
 /** An example or default a field can show: a short string, a finite number, or a boolean. */
 export function isInputHint(value: unknown): value is Primitive {
     if (typeof value === 'string') return value.length <= MAX_INPUT_HINT;
     if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0);
     return typeof value === 'boolean';
-}
-
-function canonicalProvenance(provenance: CapabilityProvenance): CapabilityProvenance {
-    return {
-        providerId: provenance.providerId,
-        providerKind: provenance.providerKind,
-        externalId: provenance.externalId,
-        sourceLocator: provenance.sourceLocator,
-        ...(provenance.sourceRevision ? { sourceRevision: provenance.sourceRevision } : {}),
-        discoveredAtMs: provenance.discoveredAtMs,
-        admittedAtMs: provenance.admittedAtMs,
-        schemaDigest: provenance.schemaDigest
-    };
 }
 
 function canonicalAuth(auth: AuthBinding): AuthBinding {
@@ -820,30 +629,24 @@ function canonicalAuth(auth: AuthBinding): AuthBinding {
     };
 }
 
-export function canonicalScopes(scopes: readonly string[]): string[] {
+function canonicalScopes(scopes: readonly string[]): string[] {
     return [...new Set(scopes)].sort();
 }
 
 function canonicalTransport(transport: CapabilityTransport): CapabilityTransport {
-    if (transport.kind === 'mcp') {
-        return { kind: 'mcp', serverId: transport.serverId, origin: transport.origin, toolName: transport.toolName };
-    }
     if (transport.kind === 'local') {
         return { kind: 'local', handler: transport.handler };
     }
-    if (transport.kind === 'async') {
-        return { kind: 'async', runtimeId: transport.runtimeId, operation: transport.operation };
-    }
     return {
         kind: 'http',
-        access: transport.access === 'server_broker' ? 'server_broker' : 'browser_direct',
+        access: 'browser_direct',
         baseUrl: transport.baseUrl,
         method: transport.method,
         path: transport.path
     };
 }
 
-export function canonicalOutput(output: CapabilityOutput): CapabilityOutput {
+function canonicalOutput(output: CapabilityOutput): CapabilityOutput {
     return {
         schema: output.schema,
         presentation: output.presentation,

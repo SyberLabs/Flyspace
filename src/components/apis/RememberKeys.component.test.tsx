@@ -15,8 +15,8 @@ beforeEach(async () => {
     capabilitySecrets.clear();
     indexedDB.deleteDatabase(KEY_VAULT_DB);
     await startKeyVault();
-    const fred = curatedApi('omni:fred')!;
-    for (const manifest of compileOpenApi(fred.spec, { sourceLocator: fred.entry.specUrl, brokerOrigins: fred.brokerOrigins }).manifests) {
+    const alpha = curatedApi('omni:alpha-vantage')!;
+    for (const manifest of compileOpenApi(alpha.spec, { sourceLocator: alpha.entry.specUrl }).manifests) {
         installProposal(manifest);
     }
 });
@@ -39,7 +39,7 @@ describe('Remember keys on this device', () => {
         await waitFor(() => expect(toggle.checked).toBe(true));
         expect(screen.getByText(/stored encrypted in this browser, with a key it cannot export/)).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: /Enter key for https:\/\/api.stlouisfed.org/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Enter key for https:\/\/www.alphavantage.co/ }));
         expect(screen.getByText('Remembered on this device, encrypted. Never saved with your canvas.')).toBeTruthy();
     });
 

@@ -21,54 +21,21 @@ a secret), a transport, input schemas, and an output schema. The digest is
 SHA-256 over the canonical body. Approval is not part of the digest, so
 granting approval does not create a new capability.
 
-Three compilers propose manifests:
+`compileOpenApi` reads an OpenAPI 3.x document and proposes manifests. The only
+other transport is `local`, for the built-in speech handlers.
 
-- `compileOpenApi` reads an OpenAPI 3.x document.
-- `compileMcpTools` reads MCP tool schemas. Calling them requires a bound
-  `McpTransport`; the compiler itself does not open a connection.
-- `compileBring` reads a structured description. Free text is not a proposal.
+## OAuth
 
-## Providers and admission
+An `oauth` binding carries scopes and a slot (one slot per origin and scope
+set). The public preview has no sign-in, so nothing fills that slot: the block
+says sign-in is not set up (`connect.ts`) and execution is `AUTH_UNBOUND`.
+`oauth` is http-only. `compileOpenApi` binds
+an OpenAPI oauth2 scheme only for a provider in `connectProviders.ts`
+(Google), only when the API is on that provider's own hosts, and only for a
+read operation with a read-only scope; a write that needs a sign-in is
+refused.
 
-A `CapabilityProvider` (`provider.ts`) discovers candidates in one external
-ecosystem and materializes a `CapabilityProposalV1`. `providers/openapiProvider.ts`,
-`providers/mcpProvider.ts`, and `providers/bringProvider.ts` wrap the three
-compilers above; they do not parse a second way. A proposal carries an effect
-*hint*, an auth *placement*, a transport, schemas, and provenance. It has no
-id, approval, digest, credential slot, or trust flag, and `admission.ts`
-refuses a proposal that includes one.
-
-`admitProposal` derives what a provider may not claim: the id from the
-transport, the effect from the method floor (an MCP read hint counts only for
-a server on the host's `trustedEffectHints` list, and the same holds for an
-async runtime), the approval from the
-effect, and the credential slot from the destination. It seals provenance
-(provider, external id, source locator and revision, discovery and admission
-time, schema digest) into the digest, then calls `installProposal`.
-`providers/maxunProvider.ts` is a `web_data` provider: a scrape robot becomes
-`{ markdown: string }`, an extract robot becomes an object of its declared
-text fields, and a robot with no declared fields is reported, not admitted as
-`any`. Its proposals use the async `maxun` runtime (`providers/maxunRuntime.ts`)
-with the API key in the `x-api-key` slot. That runtime's start is fenced: Maxun's
-open-source server answers `POST /api/robots/:id/runs` only after the run
-finishes, so no run id could be recorded for a run longer than one request.
-Until an early-acknowledgement start is verified, start sends nothing and
-execution fails `ASYNC_START_REJECTED`. Only the run lookup by id is implemented.
-`providers/maxun.evaluation.ts` records that no live Maxun run was performed.
-`providers/managedProvider.ts` is a `managed_integration` provider: a
-Pipedream- or Composio-style catalog entry becomes an http proposal against the
-SaaS API itself, with `oauth` auth. An `oauth` binding carries scopes and a
-slot (one slot per origin and scope set); the token enters the slot through the
-host connect flow (`connect.ts`, `server/oauthConnect.ts`), and until then
-execution is `AUTH_UNBOUND`. `oauth` is http-only and never rides
-`server_broker`. `compileOpenApi` binds an OpenAPI oauth2 scheme only for a
-provider in `connectProviders.ts` (Google), only when the API is on that
-provider's own hosts, and only for a read operation with a read-only scope;
-a write that needs a sign-in is refused.
-`providers/managed.decision.ts` rejects both vendors as dependencies.
-Admission
-does not place blocks or wires. The OpenAPI install panel still calls
-`compileOpenApi` directly.
+## Installing
 
 `validateManifest` rebuilds the canonical object and checks the digest.
 `installProposal` is the gate that registers anything. A write or destructive
@@ -86,16 +53,14 @@ and read and compute entries pass unchanged.
 
 A manifest describes a capability. It does not grant itself authority.
 
-- Credential slots are `origin + scheme + placement`. Two APIs that both name a scheme `ApiKey` do not share a secret, and a proposal cannot point its `secretRef` at another origin's slot. A run cannot supply a header input in the header the credential travels in (`Authorization`, or the apiKey header name, in any case); that is `INPUT_INVALID`. Neither the credential nor a header input may be placed in a hop-by-hop, framing or transport header (`Connection`, `Content-Length`, `Host`, `Transfer-Encoding`, `Cookie`, ...: `DENIED_HEADER_NAMES` in `manifest.ts`, matched in any case); that fails validation at compile and install, not at execute. A secret value is at most 4096 bytes (`MAX_SECRET_BYTES`), both where it enters the session slot and where the broker reads it from a request body.
-- HTTP method is an effect floor. `x-omni-effect` and MCP annotations may raise that floor. They cannot turn POST into auto-running compute. Untrusted MCP `readOnlyHint` is not approval.
+- Credential slots are `origin + scheme + placement`. Two APIs that both name a scheme `ApiKey` do not share a secret, and a proposal cannot point its `secretRef` at another origin's slot. A run cannot supply a header input in the header the credential travels in (`Authorization`, or the apiKey header name, in any case); that is `INPUT_INVALID`. Neither the credential nor a header input may be placed in a hop-by-hop, framing or transport header (`Connection`, `Content-Length`, `Host`, `Transfer-Encoding`, `Cookie`, ...: `DENIED_HEADER_NAMES` in `manifest.ts`, matched in any case); that fails validation at compile and install, not at execute. A secret value is at most 4096 bytes (`MAX_SECRET_BYTES`) where it enters the session slot.
+- HTTP method is an effect floor. `x-omni-effect` may raise that floor. It cannot turn POST into auto-running compute.
 - Capability ids are a hash of canonical origin and operation. Speech handlers keep pinned ids. A different origin cannot reuse an existing id.
 - Wires enter through `admitConnection`. Typed mismatches are refused. A string sink may record `text` or `join_titles` instead of pretending the source was already that string.
-- Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and the same request replays; a different request under that key conflicts. The request is compared by its digest (the one a write confirms), and the broker's server ledger compares the method and URL it sends, taken before the credential is added. A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable. Inference runs use the same words in Postgres, including `uncertain` after a stream breaks.
+- Execution is one runtime: `executeCapability`. Each run is a vault record with an idempotency key. The same key and the same request replays; a different request under that key conflicts. The request is compared by its digest (the one a write confirms). A write that leaves the process and then throws, or is still `running` after its deadline, is `EFFECT_UNCERTAIN` and is not retryable.
 - Triggers are `manual`, `on_create` (once per block), `on_input_change`, and `interval`. Write and destructive stay manual. Mounting a view is not a trigger.
-- HTTP capabilities are `browser_direct` or `server_broker`. A provider cannot choose: admission sets `browser_direct` unless the host's `AdmissionPolicy.brokerOrigins` names the origin, and then only for read and compute. The broker rebuilds the URL from the manifest, refuses private and metadata addresses, and refuses write and destructive effects.
-- A base URL is https, carries no query or fragment, and an IP literal in it must be public. Loopback (http or https) is allowed only when the host itself built the manifest (`validateManifest(..., { hostCreated: true })`). Unsupported OpenAPI constructs fail compilation instead of becoming `any`, with one exception: a response field below the top level that declares no type is typed `any` (`ConvertOptions` in `jsonSchema.ts`), because the API does return it and an `any` source is never assignable to a typed input. A response that is untyped as a whole, or a result list of untyped items, still fails, and so does an untyped input. Admission applies the same line (`untypedResult` in `admission.ts`).
-- MCP tools compile from schemas and run through `mcpClient.ts`, a thin adapter over the official TypeScript SDK v2 (`@modelcontextprotocol/client`). The SDK negotiates the protocol era (`auto`: probe 2026-07-28, fall back to the 2025 handshake) and forwards cancellation. An MCP transport carries the server's URL `origin` beside its `serverId` label. Its id hashes `origin`, `serverId` and `toolName`, so two servers that share a label are two capabilities that coexist, and its credential slot is `credentialSlot(origin, auth)`, the http rule, so they never share a secret; execution resolves the slot and passes it as per-call headers, so revoking the slot stops the next call, and refuses a bound transport whose origin is not the manifest's (`TRANSPORT_NOT_BOUND`). `createMcpHttpTransport` applies the base URL rule above (`destinationUrlErrors` in `egress.ts`) to the server URL when it is created, before any session opens: https, no embedded credentials, query or fragment, no private or metadata address, loopback only with `hostCreated: true`. Every request is sent with `redirect: 'manual'`, so a 3xx fails the request and a credentialed request is never replayed to another host. A sync MCP call is bounded by the same 15 s request timeout as HTTP. The capability store is persist version 2: `migrateCapabilityStore` moves an MCP manifest persisted before `origin` existed (it names no server URL, so none can be derived) into `stale`, kept with its stored body and named in the install panel as needing re-install, instead of letting restore reject it and the next write drop it.
-- Long work uses the `async_poll` profile, never a longer request timeout. The transport is `{ kind: 'async', runtimeId, operation }`: the host binds the runtime (`asyncRuntime.ts`) and its endpoint, and a proposal cannot name one. `start` returns an external run id, which the vault ledger records before polling. Each start and each poll is still one request of at most 15 s, and the whole run is bounded by the profile's `maxDurationMs` (at most one hour): no sleep or poll request extends past that deadline, except the single observation recovery makes of a run that already outlived it. A run this session is still polling is not expired underneath it by another admission; it settles its own row. Omni never repeats a start. A write that was started and not observed to finish (deadline, repeated poll failures, or cancel) is `uncertain`. `reconcileAsyncExecution` and `recoverAsyncExecutions` read the ledger after a reload and poll the external run id; an uncertain run closes only when the destination reports a terminal status. Async capabilities run manually only. An untrusted async runtime lands at `write`, like an untrusted MCP server. The server ledger carries the same fields (`db/migrations/005_capability_async.sql`).
+- HTTP capabilities are `browser_direct`: the browser calls the API itself, and a key goes straight to that API. The preview has no broker.
+- A base URL is https, carries no query or fragment, and an IP literal in it must be public. Loopback (http or https) is allowed only when the host itself built the manifest (`validateManifest(..., { hostCreated: true })`). Unsupported OpenAPI constructs fail compilation instead of becoming `any`, with one exception: a response field below the top level that declares no type is typed `any` (`ConvertOptions` in `jsonSchema.ts`), because the API does return it and an `any` source is never assignable to a typed input. A response that is untyped as a whole, or a result list of untyped items, still fails, and so does an untyped input.
 - Speech has a session id, a source (`unknown` until a local adapter proves otherwise), and cancel. A denied microphone is `Permission denied`, not the browser error code.
 
 ## Effects
@@ -103,7 +68,7 @@ A manifest describes a capability. It does not grant itself authority.
 | Effect | Default methods | Runs when |
 | --- | --- | --- |
 | read | GET, HEAD | the user runs it |
-| compute | `x-omni-effect: compute` on a safe method, or an explicit bring/MCP declaration | the user runs it |
+| compute | `x-omni-effect: compute` on a safe method, or an explicit declaration on a host-built manifest | the user runs it |
 | write | POST, PUT, PATCH | approval is `approved`, and the user confirms the shown request for this run |
 | destructive | DELETE, or `destructiveHint`, or a tightened GET/HEAD | approval is `approved`, and the user confirms the shown request for this run |
 
@@ -122,8 +87,8 @@ strings, finite numbers, booleans, null, dense arrays and plain objects, with
 function, a symbol (as a value or a key), a non-plain object (a `Date`, `Map`,
 `Set`, class instance, or anything with `toJSON`), a sparse array, an accessor
 and a `__proto__` key are `INPUT_INVALID` before any preview exists. The
-digest hashes the exact JSON text of that copy, and the MCP tool, the async
-runtime and the local handler each receive that same object. An input
+digest hashes the exact JSON text of that copy, and the local handler
+receives that same object. An input
 left `undefined` at the top level is not supplied. An input or apiKey name may not be `__proto__`, `prototype`, or a
 name `Object.prototype` defines. A path argument
 fills one path segment: `.` and `..` are refused, and the resolved pathname

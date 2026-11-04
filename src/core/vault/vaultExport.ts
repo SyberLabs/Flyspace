@@ -69,14 +69,14 @@ export function isVaultExport(obj: unknown): obj is OmniVaultExport {
             .every(([k, v]) => k.startsWith(OMNI_KEY_PREFIX) && typeof v === 'string');
 }
 
-export interface VaultImportPlan {
+interface VaultImportPlan {
     /** What the import will write, keyed like `OmniVaultExport.data`. */
     data: Record<string, string>;
     /** Write and destructive capabilities in the file; each lands `pending`. */
     needsApproval: ImportedCapability[];
 }
 
-export interface VaultImportReport {
+interface VaultImportReport {
     /** Number of restored keys. */
     restored: number;
     needsApproval: ImportedCapability[];

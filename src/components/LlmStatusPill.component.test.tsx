@@ -2,7 +2,8 @@
 // ============================================
 // The pill showed the provider on a hover-styled button whose click only
 // re-pinged. It read as a selector and behaved as a refresh, so the provider
-// looked stuck on whatever it was. These lock the fix.
+// looked stuck on whatever it was. These lock the fix. The preview has no LLM,
+// so the dot is always red and nothing is ever pinged.
 // ============================================
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -11,16 +12,9 @@ import { LlmStatusPill } from './LlmStatusPill';
 import { useMindStore } from '@/core/stores/mindStore';
 import { LLM_DEFAULTS } from '@/core/schemas/mind.schema';
 
-function mockPing(available: boolean) {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ available })
-    } as unknown as Response)));
-}
-
 beforeEach(() => {
     useMindStore.setState({ llmConfig: { ...LLM_DEFAULTS.local } });
-    mockPing(true);
+    vi.stubGlobal('fetch', vi.fn());
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -31,7 +25,7 @@ describe('LlmStatusPill', () => {
         expect(await screen.findByText('local')).toBeTruthy();
     });
 
-    it('opens a provider menu on click, rather than silently re-pinging', async () => {
+    it('opens a provider menu on click', async () => {
         render(<LlmStatusPill />);
         fireEvent.click(await screen.findByTestId('llm-status-pill'));
 
@@ -58,31 +52,24 @@ describe('LlmStatusPill', () => {
         await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     });
 
-    it('re-pings when the provider changes, so the dot reflects the new choice', async () => {
+    it('pings nothing, on mount or when the provider changes', async () => {
         render(<LlmStatusPill />);
-        await screen.findByText('local');
-        const before = vi.mocked(fetch).mock.calls.length;
-
-        fireEvent.click(screen.getByTestId('llm-status-pill'));
+        fireEvent.click(await screen.findByTestId('llm-status-pill'));
         fireEvent.click(screen.getByText('Google'));
 
-        await waitFor(() =>
-            expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(before)
-        );
-        const body = JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body));
-        expect(body.provider).toBe('google');
-        expect(body.mode).toBe('ping');
+        await screen.findByText('google');
+        expect(vi.mocked(fetch)).not.toHaveBeenCalled();
     });
 
-    it('reports an unreachable provider with an actionable hint', async () => {
-        mockPing(false);
-        useMindStore.setState({ llmConfig: { ...LLM_DEFAULTS.google } });
+    it('stays red, and names what would make the selected provider work', async () => {
         render(<LlmStatusPill />);
-
         const pill = await screen.findByTestId('llm-status-pill');
-        await waitFor(() =>
-            expect(pill.getAttribute('title')).toMatch(/set the google API key in \.env/i)
-        );
+        expect(pill.querySelector('.bg-\\[var\\(--truth-red\\)\\]')).toBeTruthy();
+        expect(pill.getAttribute('title')).toMatch(/start Ollama/i);
+
+        fireEvent.click(pill);
+        fireEvent.click(screen.getByText('Google'));
+        expect((await screen.findByTestId('llm-status-pill')).getAttribute('title')).toMatch(/set the google API key in \.env/i);
     });
 
     it('closes on Escape', async () => {

@@ -32,7 +32,7 @@ export type AestheticTheme =
 /**
  * Shell types for universal shell architecture
  */
-export type ShellType =
+type ShellType =
     | 'root'        // Default home shell
     | 'system'      // One of the 7 life system shells
     | 'custom'      // User-created shell
@@ -74,9 +74,6 @@ export interface ShellConfig {
 
     /** Visual aesthetic */
     aesthetic: AestheticTheme;
-
-    /** Custom CSS overrides (from SKIN) */
-    customCss?: string;
 
     /** Hotkey slot (1-9) for quick access */
     hotkeySlot?: number;

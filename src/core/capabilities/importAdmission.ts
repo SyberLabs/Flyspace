@@ -18,7 +18,7 @@ export interface ImportedCapability {
     effect: 'write' | 'destructive';
 }
 
-export interface ImportedApprovalReport {
+interface ImportedApprovalReport {
     /** The blob to write: identical to the input unless an entry was reset. */
     blob: string;
     /** Every write or destructive entry in the file, all now `pending`. */

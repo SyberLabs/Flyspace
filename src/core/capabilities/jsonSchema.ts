@@ -10,11 +10,11 @@ import { isRecord, type ValueType } from './valueType';
 
 const MAX_DEPTH = 24;
 
-export type SchemaConversion =
+type SchemaConversion =
     | { ok: true; schema: ValueType }
     | { ok: false; error: string };
 
-export interface ConvertOptions {
+interface ConvertOptions {
     /** 'any': an untyped schema below the top level is `any` (responses). Default: refused. */
     untypedBelowTop?: 'any';
     /** Internal: whether this schema is a property, item, or map value of another. */

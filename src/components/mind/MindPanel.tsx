@@ -5,12 +5,10 @@
 // Unified Mind Interface - Shell | Systems | Projects
 // ============================================
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMindStore } from '@/core/stores';
-import { getMindEngine } from '@/core/services/mind.engine';
 import { LLMProvider, PersonaConfig, ContextPool, ContextEntry } from '@/core/schemas/mind.schema';
 import { MemoryConfirmModal } from './MemoryConfirmModal';
-import { ThinkResultModal } from './ThinkResultModal';
 import { ContextCaptureModal } from './ContextCaptureModal';
 import './MindPanel.css';
 interface MindPanelProps {
@@ -21,8 +19,6 @@ interface MindPanelProps {
 export function MindPanel({ isOpen, onClose }: MindPanelProps) {
     // Shell-specific state
     const [activeTab, setActiveTab] = useState<'personas' | 'context' | 'graph' | 'settings'>('personas');
-    const [thinkResult, setThinkResult] = useState<{ text: string; ok: boolean } | null>(null);
-    const [isThinking, setIsThinking] = useState(false);
 
     // Tool state
     const [activeTool, setActiveTool] = useState<'cursor' | 'highlighter'>('cursor');
@@ -44,29 +40,6 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
 
     const activePersona = personas.find(p => p.id === activePersonaId);
 
-        // Trigger Shell Mind to think
-    const handleThink = useCallback(async () => {
-        if (isThinking) return;
-
-        setIsThinking(true);
-        setThinkResult(null);
-
-        try {
-            const engine = getMindEngine();
-            const result = await engine.think();
-
-            if (result.success) {
-                setThinkResult({ text: result.response || 'Analysis complete.', ok: true });
-            } else {
-                setThinkResult({ text: `Error: ${result.error}`, ok: false });
-            }
-        } catch (error) {
-            setThinkResult({ text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`, ok: false });
-        } finally {
-            setIsThinking(false);
-        }
-    }, [isThinking]);
-
     // Highlighter Listener
     const handleMouseUp = () => {
         if (activeTool !== 'highlighter') return;
@@ -77,7 +50,6 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
         if (text && text.length > 0) {
             setSelectedText(text);
             setSelectionModalOpen(true);
-            // selection?.removeAllRanges(); // Optional: clear selection
         }
     };
 
@@ -87,11 +59,11 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
         if (isOpen) panelRef.current?.focus();
     }, [isOpen]);
 
-    // Escape closes the panel unless a nested modal (Think result, context
-    // capture) is open; those own the key while they are up.
+    // Escape closes the panel unless the context capture modal is open; it owns
+    // the key while it is up.
     const handlePanelKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key !== 'Escape') return;
-        if (thinkResult || selectionModalOpen) return;
+        if (selectionModalOpen) return;
         onClose();
     };
 
@@ -209,16 +181,6 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                             )}
                         </main>
 
-                        {/* Think Result Modal - appears as centered glassmorphic popup */}
-                        <ThinkResultModal
-                            isOpen={!!thinkResult}
-                            onClose={() => setThinkResult(null)}
-                            response={thinkResult?.text || ''}
-                            ok={thinkResult?.ok ?? false}
-                            personaName={activePersona?.name || 'The Mind'}
-                            personaEmoji={activePersona?.avatar || '🧠'}
-                        />
-
                         {/* Footer with Think Button */}
                         <footer className="mind-footer">
                             {activePersona && (
@@ -229,22 +191,9 @@ export function MindPanel({ isOpen, onClose }: MindPanelProps) {
                                 </div>
                             )}
 
-                            <button
-                                className={`think-button ${isThinking ? 'thinking' : ''}`}
-                                onClick={handleThink}
-                                disabled={isThinking || process.env.NEXT_PUBLIC_OMNI_PUBLIC_DEMO === '1'}
-                            >
-                                {isThinking ? (
-                                    <>
-                                        <span className="think-spinner">⏳</span>
-                                        <span>Thinking...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="think-icon">✨</span>
-                                        <span>Think</span>
-                                    </>
-                                )}
+                            <button className="think-button" disabled>
+                                <span className="think-icon">✨</span>
+                                <span>Think</span>
                             </button>
                         </footer>
                 </>
@@ -271,65 +220,8 @@ interface PersonasViewProps {
 }
 
 function PersonasView({ personas, activePersonaId, onSelect }: PersonasViewProps) {
-    const decisionName = process.env.NEXT_PUBLIC_DECISION_PROVIDER === 'jev' ? 'Jev' : 'Kev';
-    const suggestionsEnabled = decisionName === 'Kev'
-        ? process.env.NEXT_PUBLIC_OMNI_KEV_ENABLED === '1'
-        : process.env.NEXT_PUBLIC_OMNI_JEV_ENABLED === '1';
-    const [question, setQuestion] = useState('');
-    const [suggestion, setSuggestion] = useState<string | null>(null);
-    const [suggestError, setSuggestError] = useState<string | null>(null);
-    const [isSuggesting, setIsSuggesting] = useState(false);
-
-    const suggestPersona = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        if (!question.trim() || isSuggesting) return;
-        setIsSuggesting(true);
-        setSuggestion(null);
-        setSuggestError(null);
-        try {
-            const response = await fetch('/api/jev-persona', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: question.trim() })
-            });
-            const result: unknown = await response.json();
-            const persona = result && typeof result === 'object'
-                ? (result as Record<string, unknown>).persona : null;
-            if (!response.ok || typeof persona !== 'string' || !personas.some(p => p.id === persona)) {
-                throw new Error('Persona suggestion is unavailable.');
-            }
-            setSuggestion(persona);
-        } catch {
-            setSuggestError('Persona suggestion is unavailable.');
-        } finally {
-            setIsSuggesting(false);
-        }
-    };
-
     return (
         <div>
-            {suggestionsEnabled && <form className="persona-suggest" onSubmit={suggestPersona}>
-                <label htmlFor="persona-question">Find a perspective for your question</label>
-                <div className="persona-suggest-controls">
-                    <input
-                        id="persona-question"
-                        value={question}
-                        onChange={event => { setQuestion(event.target.value); setSuggestion(null); }}
-                        maxLength={500}
-                        placeholder="What are you trying to understand?"
-                    />
-                    <button type="submit" disabled={isSuggesting || !question.trim()}>
-                        {isSuggesting ? `Asking ${decisionName}…` : `Ask ${decisionName}`}
-                    </button>
-                </div>
-                <p>Only this question is sent to {decisionName === 'Kev' ? 'the configured Kev endpoint' : 'OpenRouter'}. Your canvas and saved data stay in this browser.</p>
-                {suggestion && (
-                    <p role="status">
-                        {decisionName} suggests {personas.find(p => p.id === suggestion)?.name}. Select its card below if you agree.
-                    </p>
-                )}
-                {suggestError && <p role="alert">{suggestError}</p>}
-            </form>}
             <div className="personas-grid">
                 {personas.map(persona => (
                 <button
@@ -386,29 +278,14 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
     // Modal state for memory confirmation
     const [memoryModalOpen, setMemoryModalOpen] = useState(false);
     const [pendingSuggestion, setPendingSuggestion] = useState<ContextEntry | null>(null);
-    const [isCrystallizing, setIsCrystallizing] = useState(false);
 
-    const handleCrystallizeAndSave = async (entry: ContextEntry) => {
-        setIsCrystallizing(true);
-        try {
-            const engine = getMindEngine();
-            // Summarize the content to avoid "slop"
-            const summary = await engine.summarizeContext(entry.content);
-
-            setPendingSuggestion({
-                ...entry,
-                content: summary,
-                metadata: { ...entry.metadata, source: 'manual_crystallization' }
-            });
-            setMemoryModalOpen(true);
-        } catch (error) {
-            console.error("Crystallization failed:", error);
-            // Fallback to raw content if summarization fails
-            setPendingSuggestion(entry);
-            setMemoryModalOpen(true);
-        } finally {
-            setIsCrystallizing(false);
-        }
+    const handleCrystallizeAndSave = (entry: ContextEntry) => {
+        setPendingSuggestion({
+            ...entry,
+            content: 'Unable to crystallize: LLM unavailable.',
+            metadata: { ...entry.metadata, source: 'manual_crystallization' }
+        });
+        setMemoryModalOpen(true);
     };
 
     const handleConfirmMemory = (content: string) => {
@@ -479,11 +356,10 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                                             <button
                                                 className="focus-action-btn"
                                                 onClick={() => handleCrystallizeAndSave(entry)}
-                                                disabled={isCrystallizing}
                                                 title="Crystallize to Memory"
                                                 aria-label="Crystallize to Memory"
                                             >
-                                                {isCrystallizing ? '⏳' : '🧠'}
+                                                🧠
                                             </button>
                                             <button
                                                 className="focus-unpin-btn"
@@ -569,12 +445,11 @@ function ContextPoolsView({ pools, onClear, onClearAll }: ContextPoolsViewProps)
                                                 <button
                                                     className="p-1 hover:bg-[var(--truth-amber)]/20 text-[var(--truth-amber)] rounded"
                                                     onClick={() => handleCrystallizeAndSave(entry)}
-                                                    disabled={isCrystallizing}
                                                     title="Save to Memory"
                                                     aria-label="Save to Memory"
                                                 >
                                                     <span className="sr-only">Save</span>
-                                                    {isCrystallizing ? '⏳' : '🧠'}
+                                                    🧠
                                                 </button>
                                             )}
                                         </div>
@@ -738,5 +613,3 @@ function SettingsView({ llmConfig, onProviderChange }: SettingsViewProps) {
         </div>
     );
 }
-
-export default MindPanel;

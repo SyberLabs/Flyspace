@@ -11,7 +11,6 @@ import { resolveReferents, type ResolveResult } from './referent';
 import { point } from './coordinates';
 import { isSpeechObservationV1, type SpeechObservationV1 } from './speechObservation';
 import { compileDeterministic, outOfScopeReason, type IntentCompilerResult, type IntentContext } from './intentCompiler';
-import { validateProposal, type SpatialCommandProposalV1 } from './proposal';
 import type {
     CanvasBlockView,
     CommandLifecycle,
@@ -53,7 +52,7 @@ interface UndoEntry {
     apply: () => void;
 }
 
-export interface EngineSnapshot {
+interface EngineSnapshot {
     commands: SpatialCommand[];
     traces: InteractionTrace[];
     preview: SpatialCommand | null;
@@ -347,98 +346,11 @@ export class InteractionEngine {
         const evidence = [...this.transcriptEvidence(transcript), `speech-compiler:${result.via}`];
         const bare = () => this.proposal('select', [], { modalities: ['speech'], confidence: 0, timestampMs, evidence });
         if (result.kind === 'refuse') return this.refuse(bare(), result.reason);
-        const catalog = this.catalog();
-        if (result.via === 'grammar') {
-            // A grammar label is a claim. The engine re-derives it and interprets its own parse.
-            const host = compileDeterministic(observation, this.describeSpeechContext());
-            const intent = parseSpeech(transcript, catalog);
-            if (!host || host.kind === 'refuse' || !intent || !sameResult(host, result)) return this.refuse(bare(), 'grammar-mismatch');
-            return this.interpretIntent(intent, timestampMs, evidence);
-        }
-        if (result.kind === 'needs-input') {
-            if (this.preview || this.held) this.cancel();
-            return this.hold(bare(), result.reason);
-        }
-        const checked = validateProposal(result.proposal, {
-            observationId: observation.observationId,
-            vocabulary: catalog,
-            allowReserved: false
-        });
-        if (!checked.ok) return this.refuse(bare(), `invalid-proposal:${checked.reason}`);
-        const proposal = checked.proposal;
-        if (proposal.operation === 'RESOLVE_CAPABILITY') return this.refuse(bare(), 'capability-bridge-unavailable');
-        const mapped = this.proposalIntent(proposal, catalog);
-        if ('hold' in mapped) {
-            if (this.preview || this.held) this.cancel();
-            return this.hold(bare(), mapped.hold);
-        }
-        return this.interpretIntent(mapped.intent, timestampMs, evidence);
-    }
-
-    private proposalIntent(proposal: SpatialCommandProposalV1, catalog: SpeechCatalog): { intent: EngineIntent } | { hold: string } {
-        const shellId = this.canvas.activeShell();
-        const live = new Set(this.canvas.listBlocks().filter(block => block.shellId === shellId).map(block => block.id));
-        const intent: EngineIntent = { action: 'select', deixis: 'none', destructive: false };
-        const subject = proposal.subject;
-        const target = proposal.target;
-        if (subject?.kind === 'candidate') {
-            if (!live.has(subject.id)) return { hold: 'stale-referent' };
-            intent.subjectIds = [subject.id];
-        } else if (subject?.kind === 'deictic') {
-            intent.deixis = subject.word;
-        }
-        if (target?.kind === 'candidate') {
-            if (!live.has(target.id)) return { hold: 'stale-referent' };
-            intent.targetId = target.id;
-        } else if (target?.kind === 'named') {
-            intent.targetName = target.name;
-        }
-        switch (proposal.operation) {
-            case 'CREATE': {
-                const kind = subject?.kind === 'block-type' ? catalog.blocks.find(block => block.blockId === subject.blockId) : undefined;
-                if (!kind) return { hold: 'unknown-block-type' };
-                return { intent: {
-                    action: 'create',
-                    personaBlockId: kind.blockId,
-                    displayName: kind.displayName,
-                    deixis: proposal.placement?.kind === 'pointed' ? 'here' : 'none',
-                    destructive: false
-                } };
-            }
-            case 'MOVE':
-                intent.action = 'move';
-                intent.deixis = 'here';
-                if (subject?.kind === 'named') intent.targetName = subject.name;
-                return { intent };
-            case 'CONNECT':
-                intent.action = 'connect';
-                if (subject?.kind === 'named') intent.sourceName = subject.name;
-                return { intent };
-            case 'DELETE':
-                intent.action = 'delete';
-                intent.destructive = true;
-                if (subject?.kind === 'named') intent.targetName = subject.name;
-                return { intent };
-            case 'OPEN_SHELL': {
-                const shell = target?.kind === 'shell' ? catalog.shells.find(item => item.id === target.shellId) : undefined;
-                if (!shell) return { hold: 'missing-shell' };
-                return { intent: { action: 'open-shell', shell, deixis: 'none', destructive: false } };
-            }
-            case 'BRANCH':
-                intent.action = 'branch';
-                return { intent };
-            case 'CRYSTALLIZE':
-                intent.action = 'crystallize';
-                return { intent };
-            case 'UNDO':
-                return { intent: { action: 'undo', deixis: 'none', destructive: false } };
-            case 'CANCEL':
-                return { intent: { action: 'cancel', deixis: 'none', destructive: false } };
-            case 'CONFIRM':
-                return { intent: { action: 'confirm', deixis: 'none', destructive: false } };
-            default:
-                return { hold: 'unsupported' };
-        }
+        // A grammar label is a claim. The engine re-derives it and interprets its own parse.
+        const host = compileDeterministic(observation, this.describeSpeechContext());
+        const intent = parseSpeech(transcript, this.catalog());
+        if (!host || host.kind === 'refuse' || !intent || !sameResult(host, result)) return this.refuse(bare(), 'grammar-mismatch');
+        return this.interpretIntent(intent, timestampMs, evidence);
     }
 
     private admitObservation(observation: SpeechObservationV1, timestampMs: number): SpatialCommand | null {
@@ -646,7 +558,6 @@ export class InteractionEngine {
             };
             proposal.geometry = { point: at };
             proposal.subjects = [];
-            if (intent.destructive) return this.previewDestructive(proposal);
             return this.execute(proposal, timestampMs, false);
         }
 

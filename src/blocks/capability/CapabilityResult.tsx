@@ -196,7 +196,7 @@ function rowsOf(value: unknown): unknown[] | null {
 
 /**
  * The one list a response carries, found through wrappers: a record holding
- * exactly one list (FRED's `observations`, a search's `results`), a
+ * exactly one list (a search's `results`), a
  * one-element array around a record (BLS's `series`), or a map of rows.
  * Plain values and flat records beside it are kept as details.
  */

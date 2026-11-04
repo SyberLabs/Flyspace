@@ -63,7 +63,6 @@ describe('push to talk', () => {
         const heard = await talk.release();
         expect(partials.map(item => [item.transcript, item.final])).toEqual([['add', false], ['add hacker', false]]);
         expect(heard.observation?.transcript).toBe('add hacker news');
-        expect(heard.timings?.firstDeltaAtMs).toBeTypeOf('number');
     });
 
     it('cancel aborts the signal, cancels the capture, and returns nothing', async () => {
