@@ -77,10 +77,12 @@ describe('fetchPublicProvider', () => {
     });
 
     it('an upstream throw becomes a 502 without echoing the error text', async () => {
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('secret-in-url'); }));
         const { status, body } = await fetchPublicProvider('wikipedia', {});
         expect(status).toBe(502);
         expect(JSON.stringify(body)).not.toContain('secret-in-url');
+        expect(log).toHaveBeenCalledWith('{"event":"flyspace.source.failed","provider":"wikipedia","reason":"network","kind":"Error"}');
+        expect(JSON.stringify(log.mock.calls)).not.toContain('secret-in-url');
     });
 });
